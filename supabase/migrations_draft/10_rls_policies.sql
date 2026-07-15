@@ -38,19 +38,25 @@ create policy up_self_read on public.user_profiles for select
 create policy up_self_update on public.user_profiles for update
   using (id = auth.uid()) with check (id = auth.uid());
 
+-- NOTE: this policy must NOT sub-query organization_memberships (that would make
+-- the table's own RLS policy recurse). Own rows via user_id; admin/oversight via
+-- SECURITY DEFINER helpers (which bypass RLS as the function owner).
 create policy mem_self_read on public.organization_memberships for select
-  using (user_id = auth.uid()
-         or exists (select 1 from public.organization_memberships m2
-                    where m2.user_id = auth.uid() and m2.organization_id = organization_memberships.organization_id
-                      and m2.status='active'));
+  using (
+    user_id = auth.uid()
+    or private.has_permission('team.manage', organization_id)
+    or private.is_super_admin()
+  );
 create policy mem_admin_write on public.organization_memberships for all
   using (private.has_permission('team.manage', organization_id))
   with check (private.has_permission('team.manage', organization_id));
 
 create policy mr_read on public.membership_roles for select
-  using (exists (select 1 from public.organization_memberships m
-                 where m.id = membership_roles.membership_id and m.user_id = auth.uid()))
-      or private.is_super_admin();
+  using (
+    private.is_super_admin()
+    or exists (select 1 from public.organization_memberships m
+               where m.id = membership_roles.membership_id and m.user_id = auth.uid())
+  );
 
 -- ---- Candidate global (Ring 1) --------------------------------------------
 create policy cand_self on public.candidates for all

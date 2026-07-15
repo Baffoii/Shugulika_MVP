@@ -28,27 +28,29 @@ begin
   return new;
 end $$;
 
--- ---- Helper skeletons (bodies finalized in 09_functions_triggers.sql) -------
--- Declared here so early tables/policies can reference them; redefined later.
+-- ---- Helper skeletons (real bodies defined in 08_functions_triggers.sql) ----
+-- IMPORTANT: these stubs MUST NOT reference application tables, because Postgres
+-- validates LANGUAGE sql function bodies at CREATE time and those tables do not
+-- exist yet (they are created in files 02/03). File 08 CREATE OR REPLACEs each
+-- of these with its real, table-backed body AFTER all tables exist.
 create or replace function private.authorized_org_ids()
 returns setof uuid language sql stable security definer set search_path = private, public as $$
-  select m.organization_id from public.organization_memberships m
-  where m.user_id = auth.uid() and m.status = 'active'
+  select null::uuid where false  -- stub; real body in 08_functions_triggers.sql
 $$;
 
 create or replace function private.has_permission(p_key text, p_org uuid default null)
 returns boolean language sql stable security definer set search_path = private, public as $$
-  select false  -- redefined in 09
+  select false  -- stub; real body in 08_functions_triggers.sql
 $$;
 
 create or replace function private.is_super_admin()
 returns boolean language sql stable security definer set search_path = private, public as $$
-  select false  -- redefined in 09
+  select false  -- stub; real body in 08_functions_triggers.sql
 $$;
 
 create or replace function private.current_candidate_id()
 returns uuid language sql stable security definer set search_path = private, public as $$
-  select id from public.candidates where user_id = auth.uid()
+  select null::uuid  -- stub; real body in 08_functions_triggers.sql
 $$;
 
 -- Convention reminder: all PKs uuid (gen_random_uuid()); all timestamps timestamptz;
