@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 68" fill="none" role="img" aria-label="shugulika recruitment">
+  <text x="0" y="40" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="38" font-weight="700" fill="#FFFFFF">shugul</text>
+  <g transform="translate(134, 2)">
+    <ellipse cx="5.5" cy="5.5" rx="5" ry="4.5" fill="#E66124"/>
+    <path d="M1.5 11.5h8l3.5 38.5-7.5 5.5-7.5-5.5L1.5 11.5z" fill="#E66124"/>
+    <clipPath id="tie-clip-light">
+      <path d="M1.5 11.5h8l3.5 38.5-7.5 5.5-7.5-5.5L1.5 11.5z"/>
+    </clipPath>
+    <g clip-path="url(#tie-clip-light)" stroke="#FFFFFF" stroke-width="2.2" opacity="0.95">
+      <line x1="-4" y1="18" x2="18" y2="40"/>
+      <line x1="-4" y1="26" x2="18" y2="48"/>
+      <line x1="-4" y1="34" x2="18" y2="56"/>
+      <line x1="-4" y1="10" x2="18" y2="32"/>
+      <line x1="-4" y1="42" x2="12" y2="64"/>
+    </g>
+  </g>
+  <text x="154" y="40" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="38" font-weight="700" fill="#FFFFFF">ka</text>
+  <text x="38" y="62" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#9CA3AF" letter-spacing="3.2">recruitment</text>
+</svg>

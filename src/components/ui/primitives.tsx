@@ -75,7 +75,7 @@ export function CardBody({ className, ...props }: React.HTMLAttributes<HTMLDivEl
 // ---------------------------------------------------------------------------
 export type BadgeTone = "success" | "info" | "warn" | "danger" | "neutral" | "brand";
 const badgeTones: Record<BadgeTone, string> = {
-  success: "bg-brand-50 text-brand-700 border-brand-100",
+  success: "bg-emerald-50 text-emerald-700 border-emerald-100",
   info: "bg-blue-50 text-blue-700 border-blue-100",
   warn: "bg-amber-50 text-amber-700 border-amber-100",
   danger: "bg-red-50 text-red-700 border-red-100",
@@ -128,7 +128,7 @@ export function StatCard({
   tone?: BadgeTone;
 }) {
   const accent: Record<BadgeTone, string> = {
-    success: "text-brand-700",
+    success: "text-emerald-700",
     info: "text-blue-700",
     warn: "text-amber-700",
     danger: "text-red-700",
@@ -178,7 +178,7 @@ export function Alert({
   children?: React.ReactNode;
 }) {
   const tones: Record<BadgeTone, string> = {
-    success: "border-brand-100 bg-brand-50 text-brand-800",
+    success: "border-emerald-100 bg-emerald-50 text-emerald-800",
     info: "border-blue-100 bg-blue-50 text-blue-800",
     warn: "border-amber-100 bg-amber-50 text-amber-800",
     danger: "border-red-100 bg-red-50 text-red-800",

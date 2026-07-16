@@ -99,6 +99,48 @@ Seeded org ids: HQ `1111…`, Tanzania franchise `2222…`, employers `3333…`/
 To see the full flow end-to-end: sign up a candidate, apply to a seeded job, then sign in as a recruiter
 (provisioned above) to review the application, add a screening note, and create a consent-gated employer submission.
 
+### Automated provisioning (recommended for demos)
+
+Instead of doing the above by hand, a script creates all six demo accounts (email pre-confirmed) and
+assigns their roles:
+
+```bash
+# 1) Apply the DB migrations first (§3) so the seeded orgs exist.
+# 2) Add your service-role key to .env.local (server-only, never committed):
+#    SUPABASE_SERVICE_ROLE_KEY=<from Supabase dashboard → Settings → API → service_role>
+#    (the SEED_*_PASSWORD vars are already in .env.example / .env.local)
+npm run seed:users
+```
+
+It reads the passwords and the service-role key **from the environment** (never hardcoded) and calls the
+Supabase Admin API `auth.admin.createUser({ email, password, email_confirm: true })`, then sets each
+account's profile + role membership. It prints a summary (account type · email · landing page · auth
+created? · profile+role assigned?). The script is idempotent — safe to re-run.
+
+> The service-role key is used **only** by this local script, server-side. It is never printed, never sent
+> to the browser, and never committed. It is not required to run the app itself.
+
+---
+
+## 6b. MVP Test Credentials
+
+> ⚠️ **`12345678` is a deliberately weak, shared testing password for this controlled MVP only.**
+> Change every test-account password, or delete these accounts, **before any production deployment.**
+
+Shared password for all accounts below: **`12345678`**
+
+| Account type            | Email                              | Password   | Expected landing page   |
+|-------------------------|------------------------------------|------------|-------------------------|
+| HQ Administrator        | `hq.admin@shugulika.test`          | `12345678` | `/hq/dashboard`         |
+| Franchise Administrator | `franchise.admin@shugulika.test`   | `12345678` | `/franchise/dashboard`  |
+| Operations Administrator| `operations.admin@shugulika.test`  | `12345678` | `/franchise/dashboard`  |
+| Recruiter               | `recruiter@shugulika.test`         | `12345678` | `/recruiter/dashboard`  |
+| Employer User           | `employer@shugulika.test`          | `12345678` | `/employer/dashboard`   |
+| Candidate               | `candidate@shugulika.test`         | `12345678` | `/candidate/dashboard`  |
+
+Create them with `npm run seed:users` (see above). Then sign in at `/auth/sign-in` — each account lands on
+its portal. Do **not** use this password anywhere real.
+
 ---
 
 ## 7. What's implemented (working, Supabase-backed)

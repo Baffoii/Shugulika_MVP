@@ -1,9 +1,9 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Shugulika design tokens. Green brand palette on a clean white B2B dashboard.
- * Derived from the dashboard prototypes: predominantly white surfaces, a deep
- * green primary, subtle borders, moderate density.
+ * Shugulika design tokens. Orange brand palette on clean white/grey surfaces.
+ * Derived from the Shugulika recruitment identity: orange tie accent, grey
+ * secondary text, dark charcoal portal sidebar.
  */
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
@@ -11,17 +11,17 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          50: "#effaf3",
-          100: "#d8f2e1",
-          200: "#b3e5c6",
-          300: "#82d1a4",
-          400: "#4fb77e",
-          500: "#2e9d63", // primary green
-          600: "#1f7f4e", // primary hover / emphasis
-          700: "#1a6641",
-          800: "#175236",
-          900: "#13432d",
-          950: "#082518",
+          50: "#fef4ef",
+          100: "#fde4d6",
+          200: "#fbc9ad",
+          300: "#f7a275",
+          400: "#f07840",
+          500: "#e66124", // primary orange (logo tie)
+          600: "#d9531e", // primary buttons / emphasis
+          700: "#b54318",
+          800: "#91361a",
+          900: "#752f18",
+          950: "#3f150a",
         },
         ink: {
           DEFAULT: "#0f172a",
@@ -30,8 +30,15 @@ const config: Config = {
         },
         surface: {
           DEFAULT: "#ffffff",
-          muted: "#f8fafc",
+          muted: "#f5f5f5",
           border: "#e2e8f0",
+        },
+        sidebar: {
+          DEFAULT: "#1c1c1c",
+          border: "#2a2a2a",
+          active: "#3d2c28",
+          muted: "#9ca3af",
+          hover: "rgba(255,255,255,0.06)",
         },
         status: {
           success: "#1f7f4e",

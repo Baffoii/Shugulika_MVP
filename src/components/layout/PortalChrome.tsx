@@ -34,7 +34,7 @@ export function PortalChrome({
   return (
     <div className="min-h-screen bg-surface-muted">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-surface-border bg-white lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-sidebar-border bg-sidebar lg:block">
         <Sidebar portal={portal} />
       </aside>
 
@@ -42,9 +42,9 @@ export function PortalChrome({
       {mobileOpen ? (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-ink/30" onClick={() => setMobileOpen(false)} aria-hidden />
-          <div className="absolute inset-y-0 left-0 w-72 bg-white shadow-drawer">
+          <div className="absolute inset-y-0 left-0 w-72 bg-sidebar shadow-drawer">
             <button
-              className="absolute right-3 top-4 rounded-md p-1 text-ink-subtle hover:bg-surface-muted"
+              className="absolute right-3 top-4 rounded-md p-1 text-sidebar-muted hover:bg-sidebar-hover hover:text-white"
               onClick={() => setMobileOpen(false)}
               aria-label="Close menu"
             >
