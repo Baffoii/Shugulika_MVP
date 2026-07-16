@@ -1,20 +1,23 @@
 import type { Metadata } from "next";
 import { PageHeader, Card, CardHeader, CardTitle, CardBody, Alert } from "@/components/ui/primitives";
-import { getMyCandidate, getMyExperiences, getMyEducation, getMySkills } from "@/lib/data/candidate";
+import { getMyCandidate, getMyExperiences, getMyEducation, getMySkills, getMyDocuments } from "@/lib/data/candidate";
+import { getSessionContext } from "@/lib/auth";
+import { DocumentManager } from "@/app/candidate/documents/DocumentManager";
 import { ProfileForm } from "./ProfileForm";
-import { ExperienceAddForm, EducationAddForm, SkillAdder, DeleteButton } from "./ProfileSections";
-import { formatDate } from "@/lib/format";
+import { ExperienceAddForm, EducationAddForm, ExperienceItem, EducationItem, SkillAdder } from "./ProfileSections";
 
 export const metadata: Metadata = { title: "Profile" };
 
 export default async function CandidateProfilePage() {
-  const candidate = await getMyCandidate();
-  if (!candidate) return <Alert tone="warn">Your candidate profile is still being set up. Refresh in a moment.</Alert>;
-  const [experiences, education, skills] = await Promise.all([
+  const [candidate, session] = await Promise.all([getMyCandidate(), getSessionContext()]);
+  if (!candidate || !session) return <Alert tone="warn">Your candidate profile is still being set up. Refresh in a moment.</Alert>;
+  const [experiences, education, skills, documents] = await Promise.all([
     getMyExperiences(candidate.id),
     getMyEducation(candidate.id),
     getMySkills(candidate.id),
+    getMyDocuments(candidate.id),
   ]);
+  const cvs = documents.filter((document) => document.doc_type === "cv");
 
   return (
     <div>
@@ -39,14 +42,7 @@ export default async function CandidateProfilePage() {
             {experiences.length === 0 ? <p className="text-sm text-ink-subtle">No experience added yet.</p> : null}
             <ul className="space-y-2">
               {experiences.map((e) => (
-                <li key={e.id} className="flex items-start justify-between gap-3 rounded-lg border border-surface-border p-3">
-                  <div>
-                    <p className="text-sm font-medium text-ink">{e.title}{e.employer_name ? ` · ${e.employer_name}` : ""}</p>
-                    <p className="text-xs text-ink-subtle">{formatDate(e.start_date)} – {e.is_current ? "Present" : formatDate(e.end_date)}</p>
-                    {e.description ? <p className="mt-1 text-sm text-ink-muted">{e.description}</p> : null}
-                  </div>
-                  <DeleteButton table="candidate_experiences" id={e.id} />
-                </li>
+                <ExperienceItem key={e.id} experience={e} />
               ))}
             </ul>
             <ExperienceAddForm />
@@ -59,13 +55,7 @@ export default async function CandidateProfilePage() {
             {education.length === 0 ? <p className="text-sm text-ink-subtle">No education added yet. Non-university and vocational training are welcome.</p> : null}
             <ul className="space-y-2">
               {education.map((e) => (
-                <li key={e.id} className="flex items-start justify-between gap-3 rounded-lg border border-surface-border p-3">
-                  <div>
-                    <p className="text-sm font-medium text-ink">{e.institution}</p>
-                    <p className="text-xs text-ink-subtle">{[e.qualification, e.field_of_study].filter(Boolean).join(" · ")}</p>
-                  </div>
-                  <DeleteButton table="candidate_education" id={e.id} />
-                </li>
+                <EducationItem key={e.id} education={e} />
               ))}
             </ul>
             <EducationAddForm />
@@ -76,6 +66,19 @@ export default async function CandidateProfilePage() {
           <CardHeader><CardTitle>Skills</CardTitle></CardHeader>
           <CardBody>
             <SkillAdder skills={skills.map((s) => ({ id: s.id, name: s.name }))} />
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>CV / Resume</CardTitle></CardHeader>
+          <CardBody>
+            <DocumentManager
+              candidateId={candidate.id}
+              userId={session.userId}
+              documents={cvs}
+              fixedDocType="cv"
+              embedded
+            />
           </CardBody>
         </Card>
       </div>

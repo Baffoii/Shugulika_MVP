@@ -1,6 +1,6 @@
 import type { Portal } from "@/lib/constants";
 import {
-  LayoutDashboard, User, FileText, Briefcase, Bookmark, CalendarClock, ClipboardList,
+  LayoutDashboard, User, Briefcase, Bookmark, CalendarClock, ClipboardList,
   Bell, Settings, Users, GitBranch, Building2, Send, BadgeDollarSign, BarChart3,
   Globe2, Store, ShieldCheck, Plug, ScrollText, type LucideIcon,
 } from "lucide-react";
@@ -25,7 +25,6 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
   candidate: [
     { href: "/candidate/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/candidate/profile", label: "Profile", icon: User },
-    { href: "/candidate/documents", label: "Documents", icon: FileText },
     { href: "/candidate/jobs", label: "Browse jobs", icon: Briefcase },
     { href: "/candidate/saved-jobs", label: "Saved jobs", icon: Bookmark },
     { href: "/candidate/applications", label: "Applications", icon: ClipboardList },

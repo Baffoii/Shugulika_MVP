@@ -112,6 +112,94 @@ export async function addEducationAction(_prev: ActionResult, formData: FormData
   return { ok: true };
 }
 
+export async function updateExperienceAction(id: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const supabase = createClient();
+  const values = {
+    title: String(formData.get("title") ?? ""),
+    employer_name: String(formData.get("employer_name") ?? ""),
+    location: String(formData.get("location") ?? ""),
+    start_date: String(formData.get("start_date") ?? ""),
+    end_date: String(formData.get("end_date") ?? ""),
+    is_current: formData.get("is_current") === "on",
+    description: String(formData.get("description") ?? ""),
+  };
+  const parsed = experienceSchema.safeParse(values);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: parsed.error.issues.reduce<Record<string, string>>(
+        (errors, issue) => ({ ...errors, [issue.path.join(".")]: issue.message }),
+        {},
+      ),
+    };
+  }
+  const cid = await myCandidateId();
+  if (!cid) return { ok: false, error: "No candidate profile" };
+  const { data, error } = await supabase
+    .from("candidate_experiences")
+    .update({
+      title: values.title,
+      employer_name: values.employer_name || null,
+      location: values.location || null,
+      start_date: values.start_date || null,
+      end_date: values.is_current ? null : values.end_date || null,
+      is_current: values.is_current,
+      description: values.description || null,
+    })
+    .eq("id", id)
+    .eq("candidate_id", cid)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Work experience not found." };
+  revalidatePath("/candidate/profile");
+  revalidatePath("/candidate/dashboard");
+  return { ok: true };
+}
+
+export async function updateEducationAction(id: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const supabase = createClient();
+  const values = {
+    institution: String(formData.get("institution") ?? ""),
+    qualification: String(formData.get("qualification") ?? ""),
+    field_of_study: String(formData.get("field_of_study") ?? ""),
+    start_date: String(formData.get("start_date") ?? ""),
+    end_date: String(formData.get("end_date") ?? ""),
+    is_current: formData.get("is_current") === "on",
+  };
+  const parsed = educationSchema.safeParse(values);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      fieldErrors: parsed.error.issues.reduce<Record<string, string>>(
+        (errors, issue) => ({ ...errors, [issue.path.join(".")]: issue.message }),
+        {},
+      ),
+    };
+  }
+  const cid = await myCandidateId();
+  if (!cid) return { ok: false, error: "No candidate profile" };
+  const { data, error } = await supabase
+    .from("candidate_education")
+    .update({
+      institution: values.institution,
+      qualification: values.qualification || null,
+      field_of_study: values.field_of_study || null,
+      start_date: values.start_date || null,
+      end_date: values.is_current ? null : values.end_date || null,
+      is_current: values.is_current,
+    })
+    .eq("id", id)
+    .eq("candidate_id", cid)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Education record not found." };
+  revalidatePath("/candidate/profile");
+  revalidatePath("/candidate/dashboard");
+  return { ok: true };
+}
+
 export async function addSkillAction(name: string): Promise<ActionResult> {
   const supabase = createClient();
   const cid = await myCandidateId();
