@@ -18,7 +18,7 @@ export default async function CandidateApplicationsPage() {
     <div>
       <PageHeader title="My applications" description="Every role you've applied to, with a clear status. Your full history stays permanently visible to you." />
       {apps.length === 0 ? (
-        <EmptyState title="No applications yet" description="Browse open roles and apply." action={<ButtonLink href="/jobs" size="sm">Browse jobs</ButtonLink>} />
+        <EmptyState title="No applications yet" description="Browse open roles and apply." action={<ButtonLink href="/candidate/jobs" size="sm">Browse jobs</ButtonLink>} />
       ) : (
         <DataTable>
           <THead>

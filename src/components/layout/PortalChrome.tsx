@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Menu, X, LogOut, ChevronDown } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Menu, X, LogOut, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { Logo } from "@/components/brand/Logo";
 import { PORTAL_META } from "@/components/layout/nav-config";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -13,6 +15,41 @@ export interface PortalSwitch {
   portal: Portal;
   href: string;
   label: string;
+}
+
+const SIDEBAR_STORAGE_KEY = "shugulika-sidebar-collapsed";
+
+function useSidebarCollapsed() {
+  const [collapsed, setCollapsed] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true");
+    setReady(true);
+  }, []);
+
+  function toggle() {
+    setCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      return next;
+    });
+  }
+
+  return { collapsed, toggle, ready };
+}
+
+function BarePortalChrome({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-surface-muted">
+      <div className="border-b border-surface-border bg-white">
+        <div className="mx-auto flex h-16 max-w-6xl items-center px-4 sm:px-6">
+          <Logo />
+        </div>
+      </div>
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+    </div>
+  );
 }
 
 export function PortalChrome({
@@ -28,14 +65,38 @@ export function PortalChrome({
   switches: PortalSwitch[];
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const hideSidebar = /^\/candidate\/apply(\/|$)/.test(pathname);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { collapsed, toggle, ready } = useSidebarCollapsed();
+
+  if (hideSidebar) {
+    return <BarePortalChrome>{children}</BarePortalChrome>;
+  }
+
+  const sidebarWidth = collapsed ? "w-16" : "w-64";
+  const mainOffset = collapsed ? "lg:pl-16" : "lg:pl-64";
 
   return (
     <div className="min-h-screen bg-surface-muted">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-sidebar-border bg-sidebar lg:block">
-        <Sidebar portal={portal} />
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-30 hidden border-r border-sidebar-border bg-sidebar transition-[width] duration-200 lg:block",
+          sidebarWidth,
+          !ready && "w-64",
+        )}
+      >
+        <Sidebar portal={portal} collapsed={ready ? collapsed : false} />
+        <button
+          type="button"
+          onClick={toggle}
+          className="absolute -right-3 top-[4.25rem] z-40 hidden h-6 w-6 items-center justify-center rounded-full border border-surface-border bg-white text-ink-subtle shadow-sm hover:bg-surface-muted hover:text-ink lg:flex"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+        </button>
       </aside>
 
       {/* Mobile drawer */}
@@ -55,7 +116,7 @@ export function PortalChrome({
         </div>
       ) : null}
 
-      <div className="lg:pl-64">
+      <div className={cn("transition-[padding] duration-200", mainOffset, !ready && "lg:pl-64")}>
         {/* Topbar */}
         <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-surface-border bg-white/95 px-4 backdrop-blur sm:px-6">
           <button
@@ -64,6 +125,14 @@ export function PortalChrome({
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            className="hidden rounded-md p-2 text-ink-muted hover:bg-surface-muted lg:inline-flex"
+            onClick={toggle}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
           <div className="hidden text-sm font-medium text-ink-muted sm:block">{PORTAL_META[portal].label} portal</div>
           <div className="ml-auto flex items-center gap-2">

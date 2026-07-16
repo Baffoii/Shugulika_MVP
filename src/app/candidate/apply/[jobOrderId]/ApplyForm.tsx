@@ -40,7 +40,7 @@ export function ApplyForm({
         <p className="mt-1 text-sm text-ink-muted">{jobTitle} · {employerName}</p>
         <div className="mt-5 flex justify-center gap-2">
           <ButtonLink href="/candidate/applications" size="sm">View my applications</ButtonLink>
-          <ButtonLink href="/jobs" variant="outline" size="sm">Keep browsing</ButtonLink>
+          <ButtonLink href="/candidate/jobs" variant="outline" size="sm">Keep browsing</ButtonLink>
         </div>
       </Card>
     );
@@ -100,7 +100,7 @@ export function ApplyForm({
 
       <div className="flex items-center gap-3">
         <SubmitButton />
-        <ButtonLink href={`/jobs`} variant="ghost" size="sm">Cancel</ButtonLink>
+        <ButtonLink href="/candidate/jobs" variant="ghost" size="sm">Cancel</ButtonLink>
       </div>
     </form>
   );

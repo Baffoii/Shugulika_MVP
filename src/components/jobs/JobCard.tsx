@@ -4,12 +4,12 @@ import { Badge } from "@/components/ui/primitives";
 import { salaryRange, formatDate, relativeDays, titleCase } from "@/lib/format";
 import type { PublicJobRow } from "@/lib/database.types";
 
-export function JobCard({ job }: { job: PublicJobRow }) {
+export function JobCard({ job, detailBasePath = "/jobs" }: { job: PublicJobRow; detailBasePath?: string }) {
   const closing = job.application_deadline;
   const closingSoon = closing ? new Date(closing).getTime() - Date.now() < 5 * 86_400_000 : false;
   return (
     <Link
-      href={`/jobs/${job.public_slug ?? job.job_id}`}
+      href={`${detailBasePath}/${job.public_slug ?? job.job_id}`}
       className="card block p-5 transition-shadow hover:shadow-pop focus-visible:shadow-pop"
     >
       <div className="flex items-start justify-between gap-3">

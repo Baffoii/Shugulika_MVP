@@ -44,7 +44,7 @@ export default async function CandidateDashboard() {
       <PageHeader
         title={`Welcome, ${candidate.given_name ?? "there"}`}
         description="Track your applications, keep your profile fresh, and discover new roles."
-        actions={<ButtonLink href="/jobs" size="sm">Browse jobs</ButtonLink>}
+        actions={<ButtonLink href="/candidate/jobs" size="sm">Browse jobs</ButtonLink>}
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -82,7 +82,7 @@ export default async function CandidateDashboard() {
           <CardBody className="p-0">
             {activeApps.length === 0 ? (
               <div className="p-5">
-                <EmptyState title="No applications yet" description="Find a role and apply — it takes just a few minutes." action={<ButtonLink href="/jobs" size="sm">Browse jobs</ButtonLink>} />
+                <EmptyState title="No applications yet" description="Find a role and apply — it takes just a few minutes." action={<ButtonLink href="/candidate/jobs" size="sm">Browse jobs</ButtonLink>} />
               </div>
             ) : (
               <ul className="divide-y divide-surface-border">
@@ -104,12 +104,12 @@ export default async function CandidateDashboard() {
       <div className="mt-6">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-ink">Recommended roles</h2>
-          <Link href="/jobs" className="text-sm text-brand-700 hover:underline">See all</Link>
+          <Link href="/candidate/jobs" className="text-sm text-brand-700 hover:underline">See all</Link>
         </div>
         {jobsRes.jobs.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {jobsRes.jobs.slice(0, 3).map((j) => (
-              <JobCard key={j.job_id} job={j} />
+              <JobCard key={j.job_id} job={j} detailBasePath="/candidate/jobs" />
             ))}
           </div>
         ) : (

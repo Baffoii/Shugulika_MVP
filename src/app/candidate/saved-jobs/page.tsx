@@ -13,10 +13,10 @@ export default async function SavedJobsPage() {
     <div>
       <PageHeader title="Saved jobs" description="Roles you've bookmarked to apply to later." />
       {jobs.length === 0 ? (
-        <EmptyState title="No saved jobs" description="Save roles from the job board to find them here." action={<ButtonLink href="/jobs" size="sm">Browse jobs</ButtonLink>} />
+        <EmptyState title="No saved jobs" description="Save roles from the job board to find them here." action={<ButtonLink href="/candidate/jobs" size="sm">Browse jobs</ButtonLink>} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {jobs.map((j) => (<JobCard key={j.job_id} job={j} />))}
+          {jobs.map((j) => (<JobCard key={j.job_id} job={j} detailBasePath="/candidate/jobs" />))}
         </div>
       )}
     </div>

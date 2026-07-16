@@ -26,7 +26,7 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
     { href: "/candidate/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/candidate/profile", label: "Profile", icon: User },
     { href: "/candidate/documents", label: "Documents", icon: FileText },
-    { href: "/jobs", label: "Browse jobs", icon: Briefcase },
+    { href: "/candidate/jobs", label: "Browse jobs", icon: Briefcase },
     { href: "/candidate/saved-jobs", label: "Saved jobs", icon: Bookmark },
     { href: "/candidate/applications", label: "Applications", icon: ClipboardList },
     { href: "/candidate/interviews", label: "Interviews", icon: CalendarClock },

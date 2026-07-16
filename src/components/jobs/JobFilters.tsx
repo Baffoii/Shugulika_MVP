@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/primitives";
 import { COUNTRIES, EMPLOYMENT_TYPES, WORK_ARRANGEMENTS, EXPERIENCE_LEVELS } from "@/lib/constants";
 
 /** Public job board filter bar. Pushes filters into the URL query string. */
-export function JobFilters() {
+export function JobFilters({ basePath = "/jobs" }: { basePath?: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const [q, setQ] = useState(params.get("q") ?? "");
@@ -19,7 +19,7 @@ export function JobFilters() {
       if (v) sp.set(k, v);
       else sp.delete(k);
     }
-    router.push(`/jobs?${sp.toString()}`);
+    router.push(`${basePath}?${sp.toString()}`);
   }
 
   return (
