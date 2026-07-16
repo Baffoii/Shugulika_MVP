@@ -26,14 +26,29 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 > Never put a Supabase service-role/secret key in this app. Nothing here needs it.
 
 ## 3. Apply the database (Supabase SQL editor)
-Run these in order in the Supabase **SQL Editor** (or via the Supabase CLI):
+
+> **The app schema (`supabase/migrations/`) is a different, app-owned schema from the reference
+> architecture in `docs/database/` (`supabase/migrations_draft/`). Do NOT apply both to the same
+> project.** If you already ran the `docs/database` draft (or hit
+> `ERROR: 42703: column "org_type" does not exist`), run the reset in step 0 first.
+
+**Step 0 (only if needed):** `supabase/migrations/0000_reset_public_schema.sql` — ⚠️ **destructive**;
+wipes the `public` schema so the MVP migrations apply on a clean slate. Auth/Storage are untouched.
+Run this only on a project with no data you want to keep (e.g. one that only has the reference draft).
+
+Then run these in order in the Supabase **SQL Editor** (or via the Supabase CLI):
 1. `supabase/migrations/0001_mvp_schema.sql` — tables, indexes, constraints
 2. `supabase/migrations/0002_mvp_rls.sql` — helper functions, RLS policies, grants, `public_jobs`/`apply_targets` views, signup trigger
 3. `supabase/migrations/0003_mvp_storage.sql` — `candidate-documents` private bucket + storage policies
 4. `supabase/migrations/0004_mvp_seed.sql` — reference data + demo orgs and **3 advertised jobs** (so the public board works immediately)
 
-These were validated end-to-end on a fresh PostgreSQL 15 with a Supabase-compatible shim (auth/storage/roles):
-all four apply cleanly, and RLS isolation, the signup trigger, and confidential-employer masking were runtime-tested.
+These were validated end-to-end on PostgreSQL 15 with a Supabase-compatible shim (auth/storage/roles):
+the reset + all four apply cleanly (including on top of the conflicting draft), and RLS isolation, the
+signup trigger, and confidential-employer masking were runtime-tested.
+
+If the app still shows *"Could not find the table 'public.public_jobs' in the schema cache"* after
+applying the SQL, the API's schema cache is stale — run `notify pgrst, 'reload schema';` (0004 does this
+automatically) or toggle any table in the Supabase dashboard, then refresh.
 
 **Auth settings:** in Supabase → Authentication, set the Site URL to `http://localhost:3000` and add
 `http://localhost:3000/auth/callback` as a redirect URL. For fast local testing you may disable "Confirm email".

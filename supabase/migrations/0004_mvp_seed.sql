@@ -128,3 +128,8 @@ insert into public.job_screening_questions (job_order_id, prompt, qtype, is_requ
   ('a0000001-0000-0000-0000-000000000001','How many years of financial analysis experience do you have?','numeric', true, 2),
   ('a0000001-0000-0000-0000-000000000001','What is your notice period?','short_text', false, 3)
 on conflict do nothing;
+
+-- Refresh PostgREST's schema cache so the API immediately sees the new tables
+-- and views (fixes "Could not find the table 'public.public_jobs' in the schema
+-- cache"). Supabase usually reloads automatically; this makes it deterministic.
+notify pgrst, 'reload schema';
