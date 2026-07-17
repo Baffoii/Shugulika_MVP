@@ -143,6 +143,58 @@ its portal. Do **not** use this password anywhere real.
 
 ---
 
+## 6c. Expanded demo dataset (migration `0015`)
+
+`supabase/migrations/0015_demo_expansion.sql` adds a larger, more realistic demo set on top of the six
+accounts above: **2 more recruiters, 4 more employers, 10 more advertised jobs, and 10 candidate accounts**
+with populated profiles (skills, experience, education, languages, preferences, search-visibility).
+
+**Apply it** in the Supabase **SQL editor** after `0001`–`0014` (it creates its own Auth users, so
+`npm run seed:users` is not needed for these). Every account uses the same shared password **`12345678`**.
+
+### Recruiter accounts (Dar es Salaam franchise → `/recruiter/dashboard`)
+
+| Name        | Email                       | Password   |
+|-------------|-----------------------------|------------|
+| Peter Jones | `recruiter2@shugulika.test` | `12345678` |
+| Susan Clark | `recruiter3@shugulika.test` | `12345678` |
+
+### Candidate accounts (→ `/candidate/dashboard`)
+
+| Name            | Email                             | Password   | Profile focus / city              |
+|-----------------|-----------------------------------|------------|-----------------------------------|
+| John Smith      | `john.smith@shugulika.test`       | `12345678` | Software Developer · Dar es Salaam|
+| Jane Doe        | `jane.doe@shugulika.test`         | `12345678` | IT Support · Dar es Salaam        |
+| Michael Johnson | `michael.johnson@shugulika.test`  | `12345678` | Registered Nurse · Arusha         |
+| Emily Davis     | `emily.davis@shugulika.test`      | `12345678` | Front Office / Admin · Arusha     |
+| David Brown     | `david.brown@shugulika.test`      | `12345678` | Hotel Front Desk · Zanzibar       |
+| Sarah Wilson    | `sarah.wilson@shugulika.test`     | `12345678` | Chef · Zanzibar                   |
+| James Miller    | `james.miller@shugulika.test`     | `12345678` | Production Supervisor · Mwanza    |
+| Mary Taylor     | `mary.taylor@shugulika.test`      | `12345678` | Warehouse / Inventory · Mwanza    |
+| Robert Anderson | `robert.anderson@shugulika.test`  | `12345678` | Accountant · Dar es Salaam        |
+| Linda Thomas    | `linda.thomas@shugulika.test`     | `12345678` | Logistics / Dispatch · Dar es Salaam |
+
+### Jobs & employers
+
+10 advertised jobs across 6 employers — Kilimanjaro Tech Labs (Software Developer, IT Support Technician),
+Uhuru Health Clinic (Registered Nurse, Clinic Receptionist), Zanzibar Coastal Resorts (Hotel Front Desk
+Agent, Executive Chef), Tembo Manufacturing (Production Supervisor, Warehouse Assistant), Bahari Financial
+Group (Accountant), and Serengeti Logistics (Fleet Dispatch Officer). They appear on the **public job board**
+immediately, and (assigned via `job_assignments`) in each recruiter's **Jobs & orders** list.
+
+### How to test each portal
+
+- **Public board** (no login): browse the 10 new jobs at `/jobs`.
+- **Recruiter** (`recruiter2` / `recruiter3`): sign in → `/recruiter/dashboard`; their assigned jobs show under
+  **Jobs & orders**. Candidates opted into recruiter discovery (search-visibility on).
+- **Candidate** (any of the 10 above): sign in → `/candidate/dashboard` to see a populated profile, then
+  browse/apply to jobs.
+- **Employer** (`employer@shugulika.test`): the Bahari Financial Group jobs are visible under its org scope.
+
+> ⚠️ Same weak MVP password (`12345678`). Change or delete these accounts before any production deployment.
+
+---
+
 ## 7. What's implemented (working, Supabase-backed)
 - **Auth**: email/password sign-up, sign-in, sign-out, password reset, email callback, session persistence
   (`@supabase/ssr`), middleware auth gate, role-aware redirects, `/unauthorized` and `/onboarding` states.
