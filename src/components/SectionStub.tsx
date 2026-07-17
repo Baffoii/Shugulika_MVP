@@ -18,7 +18,10 @@ export function SectionStub({
       <EmptyState
         icon={<LayoutGrid className="h-8 w-8" />}
         title="Section scaffolded for the MVP"
-        description={note ?? "This area is part of the platform structure. Its data model and navigation are in place; the detailed screen is planned for a later iteration."}
+        description={
+          note ??
+          "This area is part of the platform structure. Its data model and navigation are in place; the detailed screen is planned for a later iteration."
+        }
       />
     </div>
   );

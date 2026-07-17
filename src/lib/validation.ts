@@ -20,6 +20,7 @@ export const forgotPasswordSchema = z.object({
 
 export const candidateProfileSchema = z.object({
   given_name: z.string().min(1, "Required").max(80),
+  middle_name: z.string().max(80).optional().or(z.literal("")),
   family_name: z.string().max(80).optional().or(z.literal("")),
   headline: z.string().max(140).optional().or(z.literal("")),
   summary: z.string().max(2000).optional().or(z.literal("")),
@@ -27,6 +28,10 @@ export const candidateProfileSchema = z.object({
   city: z.string().max(120).optional().or(z.literal("")),
   availability: z.string().max(120).optional().or(z.literal("")),
   open_to_work: z.boolean().optional(),
+  phone: z.string().max(40).optional().or(z.literal("")),
+  // Professional contact email on the candidate profile — independent of the
+  // Auth sign-in address. Optional; when present must be a valid email.
+  email: z.string().email("Enter a valid email").max(160).optional().or(z.literal("")),
 });
 export type CandidateProfileInput = z.infer<typeof candidateProfileSchema>;
 
@@ -47,6 +52,17 @@ export const educationSchema = z.object({
   start_date: z.string().optional().or(z.literal("")),
   end_date: z.string().optional().or(z.literal("")),
   is_current: z.boolean().optional(),
+});
+
+export const certificationSchema = z.object({
+  name: z.string().min(1, "Required").max(160),
+  issuer: z.string().max(160).optional().or(z.literal("")),
+  issued_on: z.string().optional().or(z.literal("")),
+});
+
+export const languageSchema = z.object({
+  language: z.string().min(1, "Required").max(80),
+  proficiency: z.string().max(80).optional().or(z.literal("")),
 });
 
 export const jobOrderSchema = z.object({
@@ -74,10 +90,13 @@ export const stageChangeSchema = z
     rejection_reason: z.string().optional(),
     note: z.string().max(1000).optional(),
   })
-  .refine((v) => v.to_stage !== "rejected" || (v.rejection_reason && v.rejection_reason.length > 0), {
-    message: "A rejection reason is required",
-    path: ["rejection_reason"],
-  });
+  .refine(
+    (v) => v.to_stage !== "rejected" || (v.rejection_reason && v.rejection_reason.length > 0),
+    {
+      message: "A rejection reason is required",
+      path: ["rejection_reason"],
+    },
+  );
 
 export const consentSchema = z.object({
   candidate_id: z.string().uuid(),

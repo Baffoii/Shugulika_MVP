@@ -22,7 +22,11 @@ export function Logo({
 
   if (compact) {
     return (
-      <Link href={href} className={cn("flex items-center justify-center", className)} aria-label="Shugulika home">
+      <Link
+        href={href}
+        className={cn("flex items-center justify-center", className)}
+        aria-label="Shugulika home"
+      >
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-sm font-bold text-white shadow-sm">
           S
         </span>

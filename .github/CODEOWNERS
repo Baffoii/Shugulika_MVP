@@ -1,0 +1,12 @@
+# Require review from the repo owner on high-risk areas.
+# Protects CI, security policy, DB migrations, RLS, and auth from unreviewed changes.
+# (Enable "Require review from Code Owners" in branch protection for this to bind.)
+
+/.github/                         @Baffoii
+/.github/workflows/               @Baffoii
+/supabase/migrations/             @Baffoii
+/src/lib/supabase/                @Baffoii
+/src/lib/auth.ts                  @Baffoii
+/src/lib/rbac.ts                  @Baffoii
+/src/middleware.ts                @Baffoii
+/scripts/                         @Baffoii

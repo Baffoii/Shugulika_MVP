@@ -109,18 +109,81 @@ export const APPLICATION_PHASES: { key: ApplicationPhase; label: string }[] = [
 
 export const PIPELINE_STAGES: PipelineStage[] = [
   { key: "advertised", label: "Advertised", ordinal: 1, stageClass: "job", phase: "new" },
-  { key: "applied_sourced", label: "Applied / Sourced", ordinal: 2, stageClass: "candidate", phase: "new" },
-  { key: "cv_screening", label: "CV Screening", ordinal: 3, stageClass: "candidate", phase: "initial_review" },
-  { key: "longlisted", label: "Longlisted", ordinal: 4, stageClass: "candidate", phase: "initial_review" },
-  { key: "ai_interview_screening", label: "AI Interview Screening", ordinal: 5, stageClass: "candidate", phase: "screening" },
-  { key: "shortlisted", label: "Shortlisted", ordinal: 6, stageClass: "candidate", phase: "shortlisting", gated: "screening_scorecard" },
-  { key: "screening_interview", label: "Screening Interview", ordinal: 7, stageClass: "candidate", phase: "screening" },
+  {
+    key: "applied_sourced",
+    label: "Applied / Sourced",
+    ordinal: 2,
+    stageClass: "candidate",
+    phase: "new",
+  },
+  {
+    key: "cv_screening",
+    label: "CV Screening",
+    ordinal: 3,
+    stageClass: "candidate",
+    phase: "initial_review",
+  },
+  {
+    key: "longlisted",
+    label: "Longlisted",
+    ordinal: 4,
+    stageClass: "candidate",
+    phase: "initial_review",
+  },
+  {
+    key: "ai_interview_screening",
+    label: "AI Interview Screening",
+    ordinal: 5,
+    stageClass: "candidate",
+    phase: "screening",
+  },
+  {
+    key: "shortlisted",
+    label: "Shortlisted",
+    ordinal: 6,
+    stageClass: "candidate",
+    phase: "shortlisting",
+    gated: "screening_scorecard",
+  },
+  {
+    key: "screening_interview",
+    label: "Screening Interview",
+    ordinal: 7,
+    stageClass: "candidate",
+    phase: "screening",
+  },
   { key: "testing", label: "Testing", ordinal: 8, stageClass: "candidate", phase: "screening" },
-  { key: "reference_checks", label: "Reference Checks", ordinal: 9, stageClass: "candidate", phase: "shortlisting" },
-  { key: "client_submission", label: "Client Submission", ordinal: 10, stageClass: "candidate", phase: "submitted", gated: "employer_consent" },
-  { key: "client_interview", label: "Client Interview", ordinal: 11, stageClass: "candidate", phase: "interviewing" },
+  {
+    key: "reference_checks",
+    label: "Reference Checks",
+    ordinal: 9,
+    stageClass: "candidate",
+    phase: "shortlisting",
+  },
+  {
+    key: "client_submission",
+    label: "Client Submission",
+    ordinal: 10,
+    stageClass: "candidate",
+    phase: "submitted",
+    gated: "employer_consent",
+  },
+  {
+    key: "client_interview",
+    label: "Client Interview",
+    ordinal: 11,
+    stageClass: "candidate",
+    phase: "interviewing",
+  },
   { key: "offer", label: "Offer", ordinal: 12, stageClass: "candidate", phase: "offer" },
-  { key: "hired", label: "Hired", ordinal: 13, stageClass: "candidate", phase: "placement", gated: "accepted_offer" },
+  {
+    key: "hired",
+    label: "Hired",
+    ordinal: 13,
+    stageClass: "candidate",
+    phase: "placement",
+    gated: "accepted_offer",
+  },
   { key: "invoiced", label: "Invoiced", ordinal: 14, stageClass: "accounts", phase: "placement" },
   { key: "closed", label: "Closed", ordinal: 15, stageClass: "job", phase: "closed" },
 ];
@@ -154,17 +217,39 @@ export const CANDIDATE_FACING_STATUS: Record<string, string> = {
 // Job order / posting statuses
 // ---------------------------------------------------------------------------
 export const JOB_ORDER_STATUSES = [
-  "draft", "submitted", "approved", "active", "on_hold",
-  "filled", "partially_filled", "cancelled", "closed",
+  "draft",
+  "submitted",
+  "approved",
+  "active",
+  "on_hold",
+  "filled",
+  "partially_filled",
+  "cancelled",
+  "closed",
 ] as const;
 export type JobOrderStatus = (typeof JOB_ORDER_STATUSES)[number];
 
-export const JOB_POSTING_STATUSES = ["draft", "pending_approval", "advertised", "paused", "expired", "unpublished"] as const;
+export const JOB_POSTING_STATUSES = [
+  "draft",
+  "pending_approval",
+  "advertised",
+  "paused",
+  "expired",
+  "unpublished",
+] as const;
 export type JobPostingStatus = (typeof JOB_POSTING_STATUSES)[number];
 
 export const RECRUITMENT_PATHS = [
-  { key: "A", label: "Direct employer", description: "Applications go straight to the employer's hiring team." },
-  { key: "B", label: "Shugulika-managed", description: "A recruiter screens candidates and submits a shortlist." },
+  {
+    key: "A",
+    label: "Direct employer",
+    description: "Applications go straight to the employer's hiring team.",
+  },
+  {
+    key: "B",
+    label: "Shugulika-managed",
+    description: "A recruiter screens candidates and submits a shortlist.",
+  },
 ] as const;
 export type RecruitmentPath = (typeof RECRUITMENT_PATHS)[number]["key"];
 
@@ -193,15 +278,37 @@ export const EXPERIENCE_LEVELS = [
 // Submission / offer / interview / invoice statuses
 // ---------------------------------------------------------------------------
 export const SUBMISSION_STATUSES = [
-  "consent_pending", "submitted", "viewed", "shortlisted",
-  "interview_requested", "offered", "rejected", "withdrawn", "access_revoked",
+  "consent_pending",
+  "submitted",
+  "viewed",
+  "shortlisted",
+  "interview_requested",
+  "offered",
+  "rejected",
+  "withdrawn",
+  "access_revoked",
 ] as const;
 export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 
-export const OFFER_STATUSES = ["preparing", "sent", "negotiating", "accepted", "declined", "expired", "withdrawn"] as const;
+export const OFFER_STATUSES = [
+  "preparing",
+  "sent",
+  "negotiating",
+  "accepted",
+  "declined",
+  "expired",
+  "withdrawn",
+] as const;
 export type OfferStatus = (typeof OFFER_STATUSES)[number];
 
-export const INTERVIEW_STATUSES = ["requested", "scheduled", "confirmed", "completed", "cancelled", "no_show"] as const;
+export const INTERVIEW_STATUSES = [
+  "requested",
+  "scheduled",
+  "confirmed",
+  "completed",
+  "cancelled",
+  "no_show",
+] as const;
 export type InterviewStatus = (typeof INTERVIEW_STATUSES)[number];
 
 export const INTERVIEW_TYPES = [
@@ -213,7 +320,14 @@ export const INTERVIEW_TYPES = [
   { key: "ai_async", label: "AI asynchronous video" },
 ] as const;
 
-export const INVOICE_STATUSES = ["draft", "issued", "partially_paid", "paid", "overdue", "voided"] as const;
+export const INVOICE_STATUSES = [
+  "draft",
+  "issued",
+  "partially_paid",
+  "paid",
+  "overdue",
+  "voided",
+] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
 // ---------------------------------------------------------------------------
@@ -256,10 +370,27 @@ export const CANDIDATE_DOC_BUCKET = "candidate-documents";
 // ---------------------------------------------------------------------------
 export const CONSENT_PURPOSES = [
   { key: "profile_processing", label: "Allow Shugulika to process my profile", special: false },
-  { key: "searchable_fields", label: "Allow authorized recruiters to discover my approved profile fields", special: false },
-  { key: "employer_submission", label: "Allow submission of my profile to a specific employer", special: false, requiresRecipient: true },
-  { key: "share_document", label: "Share my selected CV / documents for this application", special: false },
-  { key: "whatsapp", label: "Send me WhatsApp recruitment updates (not enabled yet)", special: false },
+  {
+    key: "searchable_fields",
+    label: "Allow authorized recruiters to discover my approved profile fields",
+    special: false,
+  },
+  {
+    key: "employer_submission",
+    label: "Allow submission of my profile to a specific employer",
+    special: false,
+    requiresRecipient: true,
+  },
+  {
+    key: "share_document",
+    label: "Share my selected CV / documents for this application",
+    special: false,
+  },
+  {
+    key: "whatsapp",
+    label: "Send me WhatsApp recruitment updates (not enabled yet)",
+    special: false,
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -292,22 +423,113 @@ export interface PlaceholderFeature {
 }
 
 export const PLACEHOLDER_FEATURES: PlaceholderFeature[] = [
-  { key: "ai_video_interview", title: "AI video interviews", description: "Asynchronous video interviews with structured questions and human-reviewed scoring.", status: "integration_pending", portals: ["recruiter", "candidate", "employer"] },
-  { key: "ai_questions", title: "AI-generated interview questions", description: "Job-specific question sets generated from the role and competencies.", status: "coming_soon", portals: ["recruiter"] },
-  { key: "ai_analysis", title: "Automated interview analysis", description: "Machine analysis of interview responses, always reviewed by a human before use.", status: "not_enabled", portals: ["recruiter"] },
-  { key: "assessments", title: "Assessments (TestGorilla / Central Test)", description: "Skills and psychometric assessments via an integrated provider.", status: "integration_pending", portals: ["recruiter", "candidate", "employer"] },
-  { key: "ai_cv_parsing", title: "AI CV parsing", description: "Automatic extraction of structured profile fields from an uploaded CV.", status: "coming_soon", portals: ["candidate", "recruiter"] },
-  { key: "ai_matching", title: "AI candidate matching", description: "Assistive ranking of candidates against a role. Never replaces recruiter judgement.", status: "coming_soon", portals: ["recruiter", "employer"] },
-  { key: "candidate_video", title: "Candidate introduction videos", description: "Short candidate intro clips attached to the profile.", status: "not_enabled", portals: ["candidate", "recruiter"] },
-  { key: "whatsapp", title: "WhatsApp channel", description: "WhatsApp applications, notifications, and recruiter conversations.", status: "integration_pending", portals: ["candidate", "recruiter", "employer"] },
-  { key: "sms_otp", title: "SMS OTP verification", description: "Phone verification by one-time SMS code. Email verification is used meanwhile.", status: "integration_pending", portals: ["candidate"] },
-  { key: "payments", title: "Live payment processing", description: "Card and mobile-money processing for package purchases and invoices.", status: "not_enabled", portals: ["employer", "franchise", "hq"] },
-  { key: "recurring_billing", title: "Recurring subscription billing", description: "Automatic renewal and trial-to-paid conversion.", status: "not_enabled", portals: ["employer", "franchise", "hq"] },
-  { key: "accounting_sync", title: "Accounting synchronization", description: "Sync invoices and payments to an external accounting system.", status: "not_enabled", portals: ["franchise", "hq"] },
-  { key: "social_publishing", title: "Social & external job publishing", description: "Automated posting to LinkedIn, Facebook, Instagram, X and external boards.", status: "coming_soon", portals: ["recruiter", "employer", "hq"] },
-  { key: "advanced_analytics", title: "Advanced analytics", description: "Cohort analysis, KPI targets, and placement-quality scoring.", status: "coming_soon", portals: ["franchise", "hq"] },
-  { key: "whistleblowing", title: "Whistleblowing case management", description: "Confidential, restricted-access case intake and management.", status: "coming_soon", portals: ["hq"] },
-  { key: "watermarking", title: "Automated document watermarking", description: "Server-side watermarked, view-only CV previews for employers.", status: "integration_pending", portals: ["recruiter", "employer"] },
+  {
+    key: "ai_video_interview",
+    title: "AI video interviews",
+    description:
+      "Asynchronous video interviews with structured questions and human-reviewed scoring.",
+    status: "integration_pending",
+    portals: ["recruiter", "candidate", "employer"],
+  },
+  {
+    key: "ai_questions",
+    title: "AI-generated interview questions",
+    description: "Job-specific question sets generated from the role and competencies.",
+    status: "coming_soon",
+    portals: ["recruiter"],
+  },
+  {
+    key: "ai_analysis",
+    title: "Automated interview analysis",
+    description: "Machine analysis of interview responses, always reviewed by a human before use.",
+    status: "not_enabled",
+    portals: ["recruiter"],
+  },
+  {
+    key: "assessments",
+    title: "Assessments (TestGorilla / Central Test)",
+    description: "Skills and psychometric assessments via an integrated provider.",
+    status: "integration_pending",
+    portals: ["recruiter", "candidate", "employer"],
+  },
+  {
+    key: "ai_matching",
+    title: "AI candidate matching",
+    description:
+      "Assistive ranking of candidates against a role. Never replaces recruiter judgement.",
+    status: "coming_soon",
+    portals: ["recruiter", "employer"],
+  },
+  {
+    key: "candidate_video",
+    title: "Candidate introduction videos",
+    description: "Short candidate intro clips attached to the profile.",
+    status: "not_enabled",
+    portals: ["candidate", "recruiter"],
+  },
+  {
+    key: "whatsapp",
+    title: "WhatsApp channel",
+    description: "WhatsApp applications, notifications, and recruiter conversations.",
+    status: "integration_pending",
+    portals: ["candidate", "recruiter", "employer"],
+  },
+  {
+    key: "sms_otp",
+    title: "SMS OTP verification",
+    description: "Phone verification by one-time SMS code. Email verification is used meanwhile.",
+    status: "integration_pending",
+    portals: ["candidate"],
+  },
+  {
+    key: "payments",
+    title: "Live payment processing",
+    description: "Card and mobile-money processing for package purchases and invoices.",
+    status: "not_enabled",
+    portals: ["employer", "franchise", "hq"],
+  },
+  {
+    key: "recurring_billing",
+    title: "Recurring subscription billing",
+    description: "Automatic renewal and trial-to-paid conversion.",
+    status: "not_enabled",
+    portals: ["employer", "franchise", "hq"],
+  },
+  {
+    key: "accounting_sync",
+    title: "Accounting synchronization",
+    description: "Sync invoices and payments to an external accounting system.",
+    status: "not_enabled",
+    portals: ["franchise", "hq"],
+  },
+  {
+    key: "social_publishing",
+    title: "Social & external job publishing",
+    description: "Automated posting to LinkedIn, Facebook, Instagram, X and external boards.",
+    status: "coming_soon",
+    portals: ["recruiter", "employer", "hq"],
+  },
+  {
+    key: "advanced_analytics",
+    title: "Advanced analytics",
+    description: "Cohort analysis, KPI targets, and placement-quality scoring.",
+    status: "coming_soon",
+    portals: ["franchise", "hq"],
+  },
+  {
+    key: "whistleblowing",
+    title: "Whistleblowing case management",
+    description: "Confidential, restricted-access case intake and management.",
+    status: "coming_soon",
+    portals: ["hq"],
+  },
+  {
+    key: "watermarking",
+    title: "Automated document watermarking",
+    description: "Server-side watermarked, view-only CV previews for employers.",
+    status: "integration_pending",
+    portals: ["recruiter", "employer"],
+  },
 ];
 
 export function placeholdersForPortal(portal: Portal): PlaceholderFeature[] {

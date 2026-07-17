@@ -18,6 +18,9 @@ next-env.d.ts
 
 # testing
 /coverage
+/playwright-report
+/test-results
+.cursor/
 
 # misc
 .DS_Store

@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { Card, Badge, ButtonLink } from "@/components/ui/primitives";
+import { Card, Badge, ButtonLink, Alert } from "@/components/ui/primitives";
 import { getPublicJob } from "@/lib/data/jobs";
 import { getSessionContext } from "@/lib/auth";
+import { getMyCandidate, getMyAppliedJobOrderIds } from "@/lib/data/candidate";
 import { salaryRange, formatDate, titleCase } from "@/lib/format";
 import { MapPin, Briefcase, CalendarClock, Users } from "lucide-react";
+import { ApplyAgainButton } from "@/components/jobs/ApplyAgainButton";
 
 export async function JobDetailView({
   jobId,
@@ -23,6 +25,15 @@ export async function JobDetailView({
       : "/candidate/dashboard"
     : `/auth/sign-in?redirectTo=/candidate/apply/${job.job_order_id}`;
 
+  let alreadyApplied = false;
+  if (isCandidate) {
+    const candidate = await getMyCandidate();
+    if (candidate) {
+      const applied = await getMyAppliedJobOrderIds(candidate.id);
+      alreadyApplied = applied.has(job.job_order_id);
+    }
+  }
+
   return (
     <div className={jobsBasePath.startsWith("/candidate") ? "" : "mx-auto max-w-4xl"}>
       <Link href={jobsBasePath} className="text-sm text-brand-700 hover:underline">
@@ -35,50 +46,80 @@ export async function JobDetailView({
             <h1 className="text-2xl font-semibold text-ink">{job.title}</h1>
             <p className="mt-1 text-ink-muted">{job.employer_name}</p>
           </div>
-          {job.recruitment_path === "A" ? (
-            <Badge tone="info">Direct employer</Badge>
-          ) : (
-            <Badge tone="success">Shugulika-managed</Badge>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {alreadyApplied ? <Badge tone="neutral">Applied</Badge> : null}
+            {job.recruitment_path === "A" ? (
+              <Badge tone="info">Direct employer</Badge>
+            ) : (
+              <Badge tone="success">Shugulika-managed</Badge>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-ink-muted sm:grid-cols-4">
           <span className="inline-flex items-center gap-1.5">
-            <MapPin className="h-4 w-4 text-ink-subtle" aria-hidden /> {job.city ?? "—"}, {job.country_code}
+            <MapPin className="h-4 w-4 text-ink-subtle" aria-hidden /> {job.city ?? "—"},{" "}
+            {job.country_code}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <Briefcase className="h-4 w-4 text-ink-subtle" aria-hidden /> {titleCase(job.employment_type)}
+            <Briefcase className="h-4 w-4 text-ink-subtle" aria-hidden />{" "}
+            {titleCase(job.employment_type)}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <Users className="h-4 w-4 text-ink-subtle" aria-hidden /> {job.vacancy_count} vacanc
             {job.vacancy_count === 1 ? "y" : "ies"}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <CalendarClock className="h-4 w-4 text-ink-subtle" aria-hidden /> Closes {formatDate(job.application_deadline)}
+            <CalendarClock className="h-4 w-4 text-ink-subtle" aria-hidden /> Closes{" "}
+            {formatDate(job.application_deadline)}
           </span>
         </div>
 
         <div className="mt-4 rounded-lg bg-brand-50/60 px-4 py-3 text-sm text-brand-800">
-          Compensation: <span className="font-medium">{salaryRange(job.salary_min, job.salary_max, job.salary_currency)}</span>
+          Compensation:{" "}
+          <span className="font-medium">
+            {salaryRange(job.salary_min, job.salary_max, job.salary_currency)}
+          </span>
           {job.salary_min == null && job.salary_max == null ? " (not disclosed by employer)" : null}
         </div>
 
+        {alreadyApplied ? (
+          <div className="mt-4">
+            <Alert tone="info" title="You've already applied">
+              You can submit again if you want to update your CV or answers — we&apos;ll ask you to
+              confirm first.
+            </Alert>
+          </div>
+        ) : null}
+
         <div className="mt-6 flex flex-wrap gap-3">
-          <ButtonLink href={applyHref} size="md">
-            Apply now
-          </ButtonLink>
+          {alreadyApplied ? (
+            <ApplyAgainButton
+              href={`${applyHref}?reapply=1`}
+              jobTitle={job.title}
+              employerName={job.employer_name}
+            />
+          ) : (
+            <ButtonLink href={applyHref} size="md">
+              Apply now
+            </ButtonLink>
+          )}
           {!session ? (
             <ButtonLink href="/auth/sign-up" variant="outline" size="md">
               Create profile first
             </ButtonLink>
           ) : null}
         </div>
-        <p className="mt-2 text-xs text-ink-subtle">Takes about 3–5 minutes with your saved profile and CV.</p>
+        <p className="mt-2 text-xs text-ink-subtle">
+          Takes about 3–5 minutes with your saved profile and CV.
+        </p>
       </Card>
 
       <div className="mt-4 grid gap-4">
         {job.description ? <JobSection title="About the role" body={job.description} /> : null}
-        {job.responsibilities ? <JobSection title="Responsibilities" body={job.responsibilities} /> : null}
+        {job.responsibilities ? (
+          <JobSection title="Responsibilities" body={job.responsibilities} />
+        ) : null}
         {job.requirements ? <JobSection title="Requirements" body={job.requirements} /> : null}
       </div>
     </div>

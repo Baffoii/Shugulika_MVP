@@ -31,7 +31,12 @@ export function DashboardShell({
 }) {
   const name = session.profile?.full_name ?? session.email;
   return (
-    <PortalChrome portal={portal} userName={name} email={session.email} switches={portalSwitches(session.roles)}>
+    <PortalChrome
+      portal={portal}
+      userName={name}
+      email={session.email}
+      switches={portalSwitches(session.roles)}
+    >
       {children}
     </PortalChrome>
   );

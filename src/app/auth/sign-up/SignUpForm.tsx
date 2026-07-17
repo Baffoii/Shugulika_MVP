@@ -60,8 +60,8 @@ export function SignUpForm() {
     return (
       <div className="mt-5">
         <Alert tone="success" title="Check your email">
-          We sent a confirmation link. Confirm your address, then sign in. (If email confirmation is disabled
-          in your Supabase project, you can sign in immediately.)
+          We sent a confirmation link. Confirm your address, then sign in. (If email confirmation is
+          disabled in your Supabase project, you can sign in immediately.)
         </Alert>
       </div>
     );
@@ -80,10 +80,28 @@ export function SignUpForm() {
         </Select>
       </Field>
       <Field label="Email" htmlFor="email" error={errors.email} required>
-        <Input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+        />
       </Field>
-      <Field label="Password" htmlFor="password" error={errors.password} hint="At least 8 characters." required>
-        <Input id="password" name="password" type="password" autoComplete="new-password" placeholder="••••••••" />
+      <Field
+        label="Password"
+        htmlFor="password"
+        error={errors.password}
+        hint="At least 8 characters."
+        required
+      >
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          placeholder="••••••••"
+        />
       </Field>
       <Button type="submit" disabled={loading} className="w-full">
         {loading ? "Creating account…" : "Create account"}

@@ -1,5 +1,13 @@
 import type { Metadata } from "next";
-import { PageHeader, StatCard, Card, CardHeader, CardTitle, EmptyState, Alert } from "@/components/ui/primitives";
+import {
+  PageHeader,
+  StatCard,
+  Card,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  Alert,
+} from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getStaffMetrics, getOrganizations } from "@/lib/data/staff";
@@ -15,8 +23,14 @@ export default async function HqDashboard() {
   ]);
   return (
     <div>
-      <PageHeader title="HQ overview" description="Continent-wide summary. Aggregates are shown by default; opening an individual private record is permission-checked and audited." />
-      <Alert tone="info">HQ visibility does not mean edit rights on every record — administrative actions are scoped by your HQ permissions.</Alert>
+      <PageHeader
+        title="HQ overview"
+        description="Continent-wide summary. Aggregates are shown by default; opening an individual private record is permission-checked and audited."
+      />
+      <Alert tone="info">
+        HQ visibility does not mean edit rights on every record — administrative actions are scoped
+        by your HQ permissions.
+      </Alert>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Franchises" value={franchises.length} tone="brand" />
@@ -31,18 +45,33 @@ export default async function HqDashboard() {
 
       <div className="mt-6">
         <Card>
-          <CardHeader><CardTitle>Franchises</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Franchises</CardTitle>
+          </CardHeader>
           {franchises.length === 0 ? (
-            <div className="p-5"><EmptyState title="No franchises yet" description="Country franchises will appear here." /></div>
+            <div className="p-5">
+              <EmptyState
+                title="No franchises yet"
+                description="Country franchises will appear here."
+              />
+            </div>
           ) : (
             <DataTable className="border-0 shadow-none">
-              <THead><TR><TH>Franchise</TH><TH>Country</TH><TH>Status</TH></TR></THead>
+              <THead>
+                <TR>
+                  <TH>Franchise</TH>
+                  <TH>Country</TH>
+                  <TH>Status</TH>
+                </TR>
+              </THead>
               <tbody>
                 {franchises.map((f) => (
                   <TR key={f.id}>
                     <TD className="font-medium text-ink">{f.name}</TD>
                     <TD className="text-ink-muted">{f.country_code ?? "—"}</TD>
-                    <TD><StatusBadge status={f.status} label={titleCase(f.status)} /></TD>
+                    <TD>
+                      <StatusBadge status={f.status} label={titleCase(f.status)} />
+                    </TD>
                   </TR>
                 ))}
               </tbody>

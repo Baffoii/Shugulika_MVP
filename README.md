@@ -204,6 +204,28 @@ whistleblowing case management · automated document watermarking. Each has a re
 model (Advertised/Invoiced/Closed are not candidate stages), gate metadata, and form validation
 (rejection-requires-reason, sign-up role restriction). Run `npm run test`.
 
+## Testing & CI/CD
+
+Automated checks run on every pull request via GitHub Actions
+(`.github/workflows/ci.yml`): formatting, lint, type-check, env validation, unit +
+component tests with coverage thresholds, **RLS/tenant-isolation tests** against an
+ephemeral Postgres, migration + schema/type verification, a production build,
+Playwright e2e smoke, and dependency/secret/CodeQL scanning. Make **`ci-required`**
+the required status check (see recommended branch protection in
+[`docs/testing/TESTING.md`](docs/testing/TESTING.md)).
+
+Common commands:
+
+```bash
+npm run ci            # fast local gate: format + lint + types + env + coverage + build
+npm run test          # unit + component
+npm run test:coverage # + coverage thresholds
+npm run test:db       # RLS/isolation tests (needs a throwaway DATABASE_URL — see docs)
+npm run test:e2e      # Playwright smoke (public pages + auth gate)
+```
+
+Full guide, required secrets, and coverage/gaps: **[`docs/testing/TESTING.md`](docs/testing/TESTING.md)**.
+
 ---
 
 ## Project layout

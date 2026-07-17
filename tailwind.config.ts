@@ -58,7 +58,17 @@ const config: Config = {
         pop: "0 8px 24px -8px rgba(15,23,42,0.20)",
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"],
+        sans: [
+          "var(--font-sans)",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "Helvetica",
+          "Arial",
+          "sans-serif",
+        ],
       },
       fontSize: {
         "2xs": ["0.6875rem", { lineHeight: "1rem" }],

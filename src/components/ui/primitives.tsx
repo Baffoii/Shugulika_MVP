@@ -22,7 +22,11 @@ const buttonSizes: Record<ButtonSize, string> = {
   md: "text-sm px-4 py-2",
 };
 
-export function buttonClass(variant: ButtonVariant = "primary", size: ButtonSize = "md", className?: string): string {
+export function buttonClass(
+  variant: ButtonVariant = "primary",
+  size: ButtonSize = "md",
+  className?: string,
+): string {
   return cn(buttonBase, buttonVariants[variant], buttonSizes[size], className);
 }
 
@@ -61,7 +65,15 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return <div className={cn("card", className)} {...props} />;
 }
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex items-center justify-between gap-3 border-b border-surface-border px-5 py-4", className)} {...props} />;
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 border-b border-surface-border px-5 py-4",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return <h2 className={cn("text-sm font-semibold text-ink", className)} {...props} />;
@@ -82,9 +94,23 @@ const badgeTones: Record<BadgeTone, string> = {
   neutral: "bg-slate-100 text-slate-600 border-slate-200",
   brand: "bg-brand-600 text-white border-brand-700",
 };
-export function Badge({ tone = "neutral", className, children }: { tone?: BadgeTone; className?: string; children: React.ReactNode }) {
+export function Badge({
+  tone = "neutral",
+  className,
+  children,
+}: {
+  tone?: BadgeTone;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-badge border px-2 py-0.5 text-xs font-medium", badgeTones[tone], className)}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-badge border px-2 py-0.5 text-xs font-medium",
+        badgeTones[tone],
+        className,
+      )}
+    >
       {children}
     </span>
   );
@@ -106,7 +132,9 @@ export function PageHeader({
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h1 className="text-xl font-semibold text-ink">{title}</h1>
-        {description ? <p className="mt-1 max-w-2xl text-sm text-ink-muted">{description}</p> : null}
+        {description ? (
+          <p className="mt-1 max-w-2xl text-sm text-ink-muted">{description}</p>
+        ) : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
@@ -194,5 +222,7 @@ export function Alert({
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-md bg-surface-border/70", className)} aria-hidden />;
+  return (
+    <div className={cn("animate-pulse rounded-md bg-surface-border/70", className)} aria-hidden />
+  );
 }

@@ -21,12 +21,18 @@ export default async function OnboardingPage() {
         <Card className="max-w-lg p-8">
           <h1 className="text-lg font-semibold text-ink">Finish setting up your account</h1>
           <p className="mt-2 text-sm text-ink-muted">
-            Your account doesn&apos;t have a role assigned yet. This normally happens automatically at sign-up.
-            If you registered as a candidate or employer, refresh — otherwise an administrator needs to invite you.
+            Your account doesn&apos;t have a role assigned yet. This normally happens automatically
+            at sign-up. If you registered as a candidate or employer, refresh — otherwise an
+            administrator needs to invite you.
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
-            <ButtonLink href="/auth/post-login" size="sm">Refresh my access</ButtonLink>
-            <Link href="/jobs" className="inline-flex items-center rounded-lg border border-surface-border bg-white px-3 py-1.5 text-sm text-ink-muted hover:bg-surface-muted">
+            <ButtonLink href="/auth/post-login" size="sm">
+              Refresh my access
+            </ButtonLink>
+            <Link
+              href="/jobs"
+              className="inline-flex items-center rounded-lg border border-surface-border bg-white px-3 py-1.5 text-sm text-ink-muted hover:bg-surface-muted"
+            >
               Browse jobs
             </Link>
           </div>

@@ -14,11 +14,19 @@ export default async function UnauthorizedPage() {
         </div>
         <h1 className="text-lg font-semibold text-ink">You don&apos;t have access to that area</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Your account roles don&apos;t include this portal. If you believe this is a mistake, contact your Shugulika administrator.
+          Your account roles don&apos;t include this portal. If you believe this is a mistake,
+          contact your Shugulika administrator.
         </p>
         <div className="mt-5 flex justify-center gap-2">
-          <ButtonLink href={home} size="sm">Go to my dashboard</ButtonLink>
-          <Link href="/jobs" className="inline-flex items-center rounded-lg px-3 py-1.5 text-sm text-ink-muted hover:bg-white">Browse jobs</Link>
+          <ButtonLink href={home} size="sm">
+            Go to my dashboard
+          </ButtonLink>
+          <Link
+            href="/jobs"
+            className="inline-flex items-center rounded-lg px-3 py-1.5 text-sm text-ink-muted hover:bg-white"
+          >
+            Browse jobs
+          </Link>
         </div>
       </div>
     </div>

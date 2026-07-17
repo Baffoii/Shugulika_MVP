@@ -40,9 +40,21 @@ export default async function LandingPage() {
       <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
         <div className="grid gap-4 sm:grid-cols-3">
           {[
-            { icon: Users, title: "For job seekers", body: "Build one reusable profile, apply in minutes, and track every application with clear status updates." },
-            { icon: Building2, title: "For employers", body: "Post roles, review masked candidate submissions, and hire directly or through a Shugulika recruiter." },
-            { icon: ShieldCheck, title: "For franchises & HQ", body: "One standardized pipeline across countries with consent, audit, and privacy built in." },
+            {
+              icon: Users,
+              title: "For job seekers",
+              body: "Build one reusable profile, apply in minutes, and track every application with clear status updates.",
+            },
+            {
+              icon: Building2,
+              title: "For employers",
+              body: "Post roles, review masked candidate submissions, and hire directly or through a Shugulika recruiter.",
+            },
+            {
+              icon: ShieldCheck,
+              title: "For franchises & HQ",
+              body: "One standardized pipeline across countries with consent, audit, and privacy built in.",
+            },
           ].map((a) => (
             <Card key={a.title} className="p-6">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
@@ -60,7 +72,9 @@ export default async function LandingPage() {
         <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
           <div className="mb-6 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-ink">Featured roles</h2>
-            <ButtonLink href="/jobs" variant="ghost" size="sm">View all jobs →</ButtonLink>
+            <ButtonLink href="/jobs" variant="ghost" size="sm">
+              View all jobs →
+            </ButtonLink>
           </div>
           {configured && featured.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

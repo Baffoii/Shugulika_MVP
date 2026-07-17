@@ -45,7 +45,13 @@ export default function ForgotPasswordPage() {
         <form onSubmit={onSubmit} className="mt-5 space-y-4" noValidate>
           {formError ? <Alert tone="danger">{formError}</Alert> : null}
           <Field label="Email" htmlFor="email" error={errors.email} required>
-            <Input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" />
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+            />
           </Field>
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Sending…" : "Send reset link"}
@@ -53,7 +59,9 @@ export default function ForgotPasswordPage() {
         </form>
       )}
       <p className="mt-4 text-sm">
-        <Link href="/auth/sign-in" className="text-brand-700 hover:underline">← Back to sign in</Link>
+        <Link href="/auth/sign-in" className="text-brand-700 hover:underline">
+          ← Back to sign in
+        </Link>
       </p>
     </Card>
   );

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, FileText, Star, Trash2, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { parseResumeAction } from "@/app/candidate/resume-actions";
 import { Badge, Button, Alert, EmptyState } from "@/components/ui/primitives";
 import { Field, Select } from "@/components/ui/form";
 import { DOCUMENT_TYPES, CANDIDATE_DOC_BUCKET } from "@/lib/constants";
@@ -51,19 +52,48 @@ export function DocumentManager({
     const supabase = createClient();
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${userId}/${docType}/${Date.now()}-${safeName}`;
-    const { error: upErr } = await supabase.storage.from(CANDIDATE_DOC_BUCKET).upload(path, file, { upsert: false });
+    const { error: upErr } = await supabase.storage
+      .from(CANDIDATE_DOC_BUCKET)
+      .upload(path, file, { upsert: false });
     if (upErr) {
-      setBusy(false); setProgress(false);
-      setError(upErr.message.includes("Bucket not found") ? "Storage bucket not set up yet — run supabase/migrations/0003_mvp_storage.sql." : upErr.message);
+      setBusy(false);
+      setProgress(false);
+      setError(
+        upErr.message.includes("Bucket not found")
+          ? "Storage bucket not set up yet — run supabase/migrations/0003_mvp_storage.sql."
+          : upErr.message,
+      );
       return;
     }
-    const isPrimaryCv = docType === "cv" && !documents.some((d) => d.doc_type === "cv" && d.is_primary);
-    const { error: insErr } = await supabase.from("candidate_documents").insert({
-      candidate_id: candidateId, doc_type: docType, title: file.name, bucket_id: CANDIDATE_DOC_BUCKET,
-      object_path: path, mime_type: file.type, size_bytes: file.size, is_primary: isPrimaryCv,
-    });
-    setBusy(false); setProgress(false);
-    if (insErr) { setError(insErr.message); return; }
+    const isPrimaryCv =
+      docType === "cv" && !documents.some((d) => d.doc_type === "cv" && d.is_primary);
+    const { data: inserted, error: insErr } = await supabase
+      .from("candidate_documents")
+      .insert({
+        candidate_id: candidateId,
+        doc_type: docType,
+        title: file.name,
+        bucket_id: CANDIDATE_DOC_BUCKET,
+        object_path: path,
+        mime_type: file.type,
+        size_bytes: file.size,
+        is_primary: isPrimaryCv,
+      })
+      .select("id")
+      .single();
+    setBusy(false);
+    setProgress(false);
+    if (insErr) {
+      setError(insErr.message);
+      return;
+    }
+    if (fixedDocType === "cv" && inserted) {
+      // Await the fast "queued"/validation phase so the DB reflects a status
+      // before we refresh — otherwise the page can render before analysis
+      // has written anything and the progress UI never engages. The slow
+      // extraction work itself still runs in the background server-side.
+      await parseResumeAction((inserted as { id: string }).id);
+    }
     router.refresh();
   }
 
@@ -76,7 +106,11 @@ export function DocumentManager({
   function setPrimary(doc: CandidateDocumentRow) {
     start(async () => {
       const supabase = createClient();
-      await supabase.from("candidate_documents").update({ is_primary: false }).eq("candidate_id", candidateId).eq("doc_type", "cv");
+      await supabase
+        .from("candidate_documents")
+        .update({ is_primary: false })
+        .eq("candidate_id", candidateId)
+        .eq("doc_type", "cv");
       await supabase.from("candidate_documents").update({ is_primary: true }).eq("id", doc.id);
       router.refresh();
     });
@@ -92,7 +126,9 @@ export function DocumentManager({
 
   async function view(doc: CandidateDocumentRow) {
     const supabase = createClient();
-    const { data } = await supabase.storage.from(doc.bucket_id).createSignedUrl(doc.object_path, 120);
+    const { data } = await supabase.storage
+      .from(doc.bucket_id)
+      .createSignedUrl(doc.object_path, 120);
     if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener");
   }
 
@@ -102,7 +138,9 @@ export function DocumentManager({
         <div>
           <label
             className={`flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-10 text-center transition-colors focus-within:ring-2 focus-within:ring-brand-500 focus-within:ring-offset-2 ${
-              dragging ? "border-brand-500 bg-brand-100" : "border-brand-200 bg-brand-50/50 hover:border-brand-400 hover:bg-brand-50"
+              dragging
+                ? "border-brand-500 bg-brand-100"
+                : "border-brand-200 bg-brand-50/50 hover:border-brand-400 hover:bg-brand-50"
             }`}
             onDragEnter={(event) => {
               event.preventDefault();
@@ -110,7 +148,8 @@ export function DocumentManager({
             }}
             onDragOver={(event) => event.preventDefault()}
             onDragLeave={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+                setDragging(false);
             }}
             onDrop={(event) => {
               event.preventDefault();
@@ -124,9 +163,15 @@ export function DocumentManager({
             ) : (
               <Upload className="mb-4 h-12 w-12 text-brand-400" aria-hidden />
             )}
-            {documents.length === 0 ? <span className="mb-1 text-sm font-semibold text-ink">No CV uploaded yet</span> : null}
+            {documents.length === 0 ? (
+              <span className="mb-1 text-sm font-semibold text-ink">No CV uploaded yet</span>
+            ) : null}
             <span className="text-sm font-medium text-ink">
-              {busy ? "Uploading…" : documents.length === 0 ? "Choose a CV / resume or drag it here" : "Choose another CV / resume or drag it here"}
+              {busy
+                ? "Uploading…"
+                : documents.length === 0
+                  ? "Choose a CV / resume or drag it here"
+                  : "Choose another CV / resume or drag it here"}
             </span>
             <span className="mt-1 text-xs text-ink-subtle">PDF, DOC, or DOCX · maximum 15 MB</span>
             <input
@@ -137,27 +182,60 @@ export function DocumentManager({
               disabled={busy}
             />
           </label>
-          <p className="mt-2 text-xs text-ink-subtle">Stored privately. Only you and recruiters you apply to (via a short-lived link) can open your files.</p>
-          {error ? <div className="mt-3"><Alert tone="danger">{error}</Alert></div> : null}
+          <p className="mt-2 text-xs text-ink-subtle">
+            Stored privately. Only you and recruiters you apply to (via a short-lived link) can open
+            your files.
+          </p>
+          {error ? (
+            <div className="mt-3">
+              <Alert tone="danger">{error}</Alert>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className={embedded ? "" : "card p-5"}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             {!fixedDocType ? (
               <Field label="Document type" htmlFor="doctype">
-                <Select id="doctype" value={docType} onChange={(e) => setSelectedDocType(e.target.value)} className="sm:w-64">
-                  {DOCUMENT_TYPES.map((d) => (<option key={d.key} value={d.key}>{d.label}</option>))}
+                <Select
+                  id="doctype"
+                  value={docType}
+                  onChange={(e) => setSelectedDocType(e.target.value)}
+                  className="sm:w-64"
+                >
+                  {DOCUMENT_TYPES.map((d) => (
+                    <option key={d.key} value={d.key}>
+                      {d.label}
+                    </option>
+                  ))}
                 </Select>
               </Field>
             ) : null}
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-              {progress ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {progress ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
               {busy ? "Uploading…" : fixedDocType === "cv" ? "Upload CV / resume" : "Upload file"}
-              <input type="file" className="hidden" accept={DOCUMENT_TYPES.find((d) => d.key === docType)?.accept} onChange={onFile} disabled={busy} />
+              <input
+                type="file"
+                className="hidden"
+                accept={DOCUMENT_TYPES.find((d) => d.key === docType)?.accept}
+                onChange={onFile}
+                disabled={busy}
+              />
             </label>
           </div>
-          <p className="mt-2 text-xs text-ink-subtle">Stored privately. Only you and recruiters you apply to (via a short-lived link) can open your files.</p>
-          {error ? <div className="mt-3"><Alert tone="danger">{error}</Alert></div> : null}
+          <p className="mt-2 text-xs text-ink-subtle">
+            Stored privately. Only you and recruiters you apply to (via a short-lived link) can open
+            your files.
+          </p>
+          {error ? (
+            <div className="mt-3">
+              <Alert tone="danger">{error}</Alert>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -177,17 +255,35 @@ export function DocumentManager({
                 <div className="flex min-w-0 items-center gap-3">
                   <FileText className="h-5 w-5 shrink-0 text-ink-subtle" aria-hidden />
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink">{d.title ?? d.object_path.split("/").pop()}</p>
-                    <p className="text-xs text-ink-subtle">{titleCase(d.doc_type)} · {formatDate(d.created_at)}</p>
+                    <p className="truncate text-sm font-medium text-ink">
+                      {d.title ?? d.object_path.split("/").pop()}
+                    </p>
+                    <p className="text-xs text-ink-subtle">
+                      {titleCase(d.doc_type)} · {formatDate(d.created_at)}
+                    </p>
                   </div>
                   {d.is_primary ? <Badge tone="success">Primary CV</Badge> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => view(d)}>View</Button>
+                  <Button variant="ghost" size="sm" onClick={() => view(d)}>
+                    View
+                  </Button>
                   {d.doc_type === "cv" && !d.is_primary ? (
-                    <Button variant="ghost" size="sm" onClick={() => setPrimary(d)} disabled={pending}><Star className="h-4 w-4" /> Set primary</Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPrimary(d)}
+                      disabled={pending}
+                    >
+                      <Star className="h-4 w-4" /> Set primary
+                    </Button>
                   ) : null}
-                  <button onClick={() => archive(d)} disabled={pending} aria-label="Archive" className="rounded-md p-1.5 text-ink-subtle hover:bg-red-50 hover:text-status-danger">
+                  <button
+                    onClick={() => archive(d)}
+                    disabled={pending}
+                    aria-label="Archive"
+                    className="rounded-md p-1.5 text-ink-subtle hover:bg-red-50 hover:text-status-danger"
+                  >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>

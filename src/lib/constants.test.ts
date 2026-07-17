@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { PIPELINE_STAGES, CANDIDATE_STAGES, stageByKey, CANDIDATE_FACING_STATUS } from "@/lib/constants";
+import {
+  PIPELINE_STAGES,
+  CANDIDATE_STAGES,
+  stageByKey,
+  CANDIDATE_FACING_STATUS,
+} from "@/lib/constants";
 
 describe("pipeline stages", () => {
   it("has all 15 Spine stages", () => {

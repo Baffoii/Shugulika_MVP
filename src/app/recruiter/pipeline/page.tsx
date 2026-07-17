@@ -27,7 +27,10 @@ export default async function PipelinePage() {
         description="Candidate applications grouped into phases. The full 15-stage Spine is preserved; open a candidate to move them stage by stage."
       />
       {applications.length === 0 ? (
-        <EmptyState title="No candidates in your pipeline yet" description="Applications to your assigned jobs will appear here." />
+        <EmptyState
+          title="No candidates in your pipeline yet"
+          description="Applications to your assigned jobs will appear here."
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {phasesToShow.map((phase) => {
@@ -49,9 +52,12 @@ export default async function PipelinePage() {
                         className="block rounded-lg border border-surface-border bg-white p-3 hover:border-brand-300 hover:shadow-card"
                       >
                         <p className="text-sm font-medium text-ink">
-                          {a.candidate_profiles?.given_name ?? "Candidate"} {a.candidate_profiles?.family_name ?? ""}
+                          {a.candidate_profiles?.given_name ?? "Candidate"}{" "}
+                          {a.candidate_profiles?.family_name ?? ""}
                         </p>
-                        <p className="truncate text-xs text-ink-subtle">{a.candidate_profiles?.headline ?? a.job_orders?.title ?? "—"}</p>
+                        <p className="truncate text-xs text-ink-subtle">
+                          {a.candidate_profiles?.headline ?? a.job_orders?.title ?? "—"}
+                        </p>
                         <div className="mt-2 flex items-center justify-between text-2xs text-ink-subtle">
                           <span>{stageByKey(a.current_stage)?.label}</span>
                           <span>{relativeDays(a.created_at)}</span>

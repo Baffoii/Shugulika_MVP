@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import type {
-  EmployerSubmissionRow, JobOrderRow, InvoiceRow, PlacementRow, OrganizationRow,
+  EmployerSubmissionRow,
+  JobOrderRow,
+  InvoiceRow,
+  PlacementRow,
+  OrganizationRow,
 } from "@/lib/database.types";
 
 /** Counts are RLS-scoped: each role sees only its authorized rows. */
@@ -40,7 +44,10 @@ export async function getStaffMetrics(): Promise<StaffMetrics> {
 
 export async function getJobOrders(): Promise<JobOrderRow[]> {
   const supabase = createClient();
-  const { data } = await supabase.from("job_orders").select("*").order("created_at", { ascending: false });
+  const { data } = await supabase
+    .from("job_orders")
+    .select("*")
+    .order("created_at", { ascending: false });
   return (data as JobOrderRow[] | null) ?? [];
 }
 
@@ -58,23 +65,35 @@ export async function getEmployerSubmissions(): Promise<EmployerSubmissionView[]
 
 export async function getSubmissionDetail(id: string): Promise<EmployerSubmissionView | null> {
   const supabase = createClient();
-  const { data } = await supabase.from("employer_submissions").select("*, job_orders(id,title)").eq("id", id).maybeSingle();
+  const { data } = await supabase
+    .from("employer_submissions")
+    .select("*, job_orders(id,title)")
+    .eq("id", id)
+    .maybeSingle();
   return (data as EmployerSubmissionView | null) ?? null;
 }
 
 export async function getInvoices(): Promise<InvoiceRow[]> {
   const supabase = createClient();
-  const { data } = await supabase.from("invoices").select("*").order("created_at", { ascending: false });
+  const { data } = await supabase
+    .from("invoices")
+    .select("*")
+    .order("created_at", { ascending: false });
   return (data as InvoiceRow[] | null) ?? [];
 }
 
 export async function getPlacements(): Promise<PlacementRow[]> {
   const supabase = createClient();
-  const { data } = await supabase.from("placements").select("*").order("created_at", { ascending: false });
+  const { data } = await supabase
+    .from("placements")
+    .select("*")
+    .order("created_at", { ascending: false });
   return (data as PlacementRow[] | null) ?? [];
 }
 
-export async function getOrganizations(type?: "hq" | "franchise" | "employer"): Promise<OrganizationRow[]> {
+export async function getOrganizations(
+  type?: "hq" | "franchise" | "employer",
+): Promise<OrganizationRow[]> {
   const supabase = createClient();
   let q = supabase.from("organizations").select("*").order("name");
   if (type) q = q.eq("org_type", type);
