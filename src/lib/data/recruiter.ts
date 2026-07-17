@@ -1,23 +1,71 @@
 import { createClient } from "@/lib/supabase/server";
 import type {
-  ApplicationRow, CandidateProfileRow, JobOrderRow, ApplicationStageHistoryRow,
-  RecruiterNoteRow, CandidateDocumentRow, EmployerSubmissionRow, InterviewRow,
+  ApplicationRow,
+  CandidateProfileRow,
+  JobOrderRow,
+  ApplicationStageHistoryRow,
+  RecruiterNoteRow,
+  CandidateDocumentRow,
+  EmployerSubmissionRow,
+  InterviewRow,
 } from "@/lib/database.types";
 
 export interface PipelineApplication extends ApplicationRow {
-  candidate_profiles: Pick<CandidateProfileRow, "id" | "given_name" | "family_name" | "headline" | "city" | "country_code"> | null;
+  candidate_profiles: Pick<
+    CandidateProfileRow,
+    "id" | "given_name" | "family_name" | "headline" | "city" | "country_code"
+  > | null;
   job_orders: Pick<JobOrderRow, "id" | "title" | "employer_org_id"> | null;
 }
 
 /** All applications the recruiter is authorized to see (RLS-scoped). */
 export async function getPipeline(): Promise<PipelineApplication[]> {
   const supabase = createClient();
-  const { data } = await supabase
+  // Avoid nested embeds — applications ↔ job_orders RLS has recursed in the
+  // past and PostgREST then returns null for the whole query.
+  const { data, error } = await supabase
     .from("applications")
-    .select("*, candidate_profiles(id,given_name,family_name,headline,city,country_code), job_orders(id,title,employer_org_id)")
+    .select("*")
     .is("withdrawn_at", null)
     .order("created_at", { ascending: false });
-  return (data as PipelineApplication[] | null) ?? [];
+
+  if (error) {
+    console.error("[getPipeline]", error.message);
+    return [];
+  }
+
+  const apps = (data as ApplicationRow[] | null) ?? [];
+  if (apps.length === 0) return [];
+
+  const candidateIds = [...new Set(apps.map((a) => a.candidate_id))];
+  const jobOrderIds = [...new Set(apps.map((a) => a.job_order_id))];
+
+  const [{ data: candidates }, { data: jobs }] = await Promise.all([
+    supabase
+      .from("candidate_profiles")
+      .select("id,given_name,family_name,headline,city,country_code")
+      .in("id", candidateIds),
+    supabase.from("job_orders").select("id,title,employer_org_id").in("id", jobOrderIds),
+  ]);
+
+  type Cand = PipelineApplication["candidate_profiles"];
+  type Job = PipelineApplication["job_orders"];
+  const candById = new Map(
+    ((candidates as Cand[] | null) ?? [])
+      .filter((c): c is NonNullable<Cand> => !!c)
+      .map((c) => [c.id, c] as const),
+  );
+  const jobById = new Map(
+    ((jobs as Job[] | null) ?? [])
+      .filter((j): j is NonNullable<Job> => !!j)
+      .map((j) => [j.id, j] as const),
+  );
+
+  return apps.map((a) => ({
+    ...a,
+    candidate_profiles: candById.get(a.candidate_id) ?? null,
+    job_orders: jobById.get(a.job_order_id) ?? null,
+  }));
 }
 
 export interface RecruiterMetrics {
@@ -41,19 +89,31 @@ export async function getRecruiterMetrics(): Promise<RecruiterMetrics> {
     supabase.from("placements").select("id,status"),
   ]);
   const jobRows = (jobs.data ?? []) as { status: string }[];
-  const appRows = (apps.data ?? []) as { current_stage: string; consent_status: string; withdrawn_at: string | null }[];
+  const appRows = (apps.data ?? []) as {
+    current_stage: string;
+    consent_status: string;
+    withdrawn_at: string | null;
+  }[];
   const subRows = (subs.data ?? []) as { status: string }[];
   const intRows = (interviews.data ?? []) as { status: string }[];
   const active = appRows.filter((a) => !a.withdrawn_at);
   return {
     activeJobs: jobRows.filter((j) => ["active", "approved", "on_hold"].includes(j.status)).length,
     newApplications: active.filter((a) => a.current_stage === "applied_sourced").length,
-    awaitingReview: active.filter((a) => ["applied_sourced", "cv_screening"].includes(a.current_stage)).length,
+    awaitingReview: active.filter((a) =>
+      ["applied_sourced", "cv_screening"].includes(a.current_stage),
+    ).length,
     consentPending: active.filter((a) => a.consent_status === "pending").length,
-    submissionsPending: subRows.filter((s) => ["consent_pending", "submitted", "viewed"].includes(s.status)).length,
-    interviewsScheduled: intRows.filter((i) => ["requested", "scheduled", "confirmed"].includes(i.status)).length,
+    submissionsPending: subRows.filter((s) =>
+      ["consent_pending", "submitted", "viewed"].includes(s.status),
+    ).length,
+    interviewsScheduled: intRows.filter((i) =>
+      ["requested", "scheduled", "confirmed"].includes(i.status),
+    ).length,
     offers: active.filter((a) => a.current_stage === "offer").length,
-    placements: ((placements.data ?? []) as { status: string }[]).filter((p) => p.status !== "failed").length,
+    placements: ((placements.data ?? []) as { status: string }[]).filter(
+      (p) => p.status !== "failed",
+    ).length,
   };
 }
 
@@ -75,13 +135,38 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
   if (!application) return null;
 
   const [candidate, job, history, notes, documents, submissions, interviews] = await Promise.all([
-    supabase.from("candidate_profiles").select("*").eq("id", application.candidate_id).maybeSingle(),
+    supabase
+      .from("candidate_profiles")
+      .select("*")
+      .eq("id", application.candidate_id)
+      .maybeSingle(),
     supabase.from("job_orders").select("*").eq("id", application.job_order_id).maybeSingle(),
-    supabase.from("application_stage_history").select("*").eq("application_id", id).order("created_at", { ascending: false }),
-    supabase.from("recruiter_notes").select("*").eq("subject_type", "application").eq("subject_id", id).order("created_at", { ascending: false }),
-    supabase.from("candidate_documents").select("*").eq("candidate_id", application.candidate_id).eq("status", "active"),
-    supabase.from("employer_submissions").select("*").eq("application_id", id).order("created_at", { ascending: false }),
-    supabase.from("interviews").select("*").eq("application_id", id).order("created_at", { ascending: false }),
+    supabase
+      .from("application_stage_history")
+      .select("*")
+      .eq("application_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("recruiter_notes")
+      .select("*")
+      .eq("subject_type", "application")
+      .eq("subject_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("candidate_documents")
+      .select("*")
+      .eq("candidate_id", application.candidate_id)
+      .eq("status", "active"),
+    supabase
+      .from("employer_submissions")
+      .select("*")
+      .eq("application_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("interviews")
+      .select("*")
+      .eq("application_id", id)
+      .order("created_at", { ascending: false }),
   ]);
 
   return {

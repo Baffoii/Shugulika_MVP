@@ -1,4 +1,10 @@
-import { PORTAL_ROLES, ROLE_HOME, PUBLIC_SIGNUP_ROLES, type Portal, type Role } from "@/lib/constants";
+import {
+  PORTAL_ROLES,
+  ROLE_HOME,
+  PUBLIC_SIGNUP_ROLES,
+  type Portal,
+  type Role,
+} from "@/lib/constants";
 
 /** Pure role/permission helpers — no server-only imports, so they are unit-testable. */
 
@@ -8,7 +14,15 @@ export function rolesCanAccessPortal(roles: Role[], portal: Portal): boolean {
 
 /** Best landing route for a user based on their roles (priority order). */
 export function homeForRoles(roles: Role[]): string {
-  const priority: Role[] = ["hq_admin", "franchise_admin", "operations", "accounts", "recruiter", "employer_user", "candidate"];
+  const priority: Role[] = [
+    "hq_admin",
+    "franchise_admin",
+    "operations",
+    "accounts",
+    "recruiter",
+    "employer_user",
+    "candidate",
+  ];
   for (const r of priority) if (roles.includes(r)) return ROLE_HOME[r];
   return "/onboarding";
 }

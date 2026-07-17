@@ -26,7 +26,11 @@ export function Sidebar({ portal, collapsed = false }: { portal: Portal; collaps
           collapsed ? "justify-center px-2" : "px-5",
         )}
       >
-        <Logo subtitle={collapsed ? undefined : PORTAL_META[portal].subtitle} variant="sidebar" compact={collapsed} />
+        <Logo
+          subtitle={collapsed ? undefined : PORTAL_META[portal].subtitle}
+          variant="sidebar"
+          compact={collapsed}
+        />
       </div>
       <ul className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
         {items.map((item) => {
@@ -47,10 +51,16 @@ export function Sidebar({ portal, collapsed = false }: { portal: Portal; collaps
                 )}
               >
                 {active ? (
-                  <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-brand-500" aria-hidden />
+                  <span
+                    className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-brand-500"
+                    aria-hidden
+                  />
                 ) : null}
                 <Icon
-                  className={cn("h-4.5 w-4.5 shrink-0", active ? "text-brand-400" : "text-sidebar-muted")}
+                  className={cn(
+                    "h-4.5 w-4.5 shrink-0",
+                    active ? "text-brand-400" : "text-sidebar-muted",
+                  )}
                   style={{ width: 18, height: 18 }}
                   aria-hidden
                 />

@@ -1,8 +1,25 @@
 import type { Portal } from "@/lib/constants";
 import {
-  LayoutDashboard, User, Briefcase, Bookmark, CalendarClock, ClipboardList,
-  Bell, Settings, Users, GitBranch, Building2, Send, BadgeDollarSign, BarChart3,
-  Globe2, Store, ShieldCheck, Plug, ScrollText, type LucideIcon,
+  LayoutDashboard,
+  User,
+  Briefcase,
+  Bookmark,
+  CalendarClock,
+  ClipboardList,
+  Bell,
+  Settings,
+  Users,
+  GitBranch,
+  Building2,
+  Send,
+  BadgeDollarSign,
+  BarChart3,
+  Globe2,
+  Store,
+  ShieldCheck,
+  Plug,
+  ScrollText,
+  type LucideIcon,
 } from "lucide-react";
 
 export interface NavItem {

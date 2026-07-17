@@ -20,8 +20,9 @@ export function PlaceholderModules({
     <div>
       <PageHeader title={title} description={description} />
       <Alert tone="info" title="Not enabled in this MVP">
-        These are later-phase capabilities. Their place in the product is reserved and the data model is ready, but the integrations aren&apos;t connected yet — no
-        actions here produce real results.
+        These are later-phase capabilities. Their place in the product is reserved and the data
+        model is ready, but the integrations aren&apos;t connected yet — no actions here produce
+        real results.
       </Alert>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {features.map((f) => (

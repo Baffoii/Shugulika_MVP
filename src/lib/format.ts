@@ -1,6 +1,9 @@
 /** Small, dependency-free formatting helpers. */
 
-export function formatDate(value: string | null | undefined, opts?: Intl.DateTimeFormatOptions): string {
+export function formatDate(
+  value: string | null | undefined,
+  opts?: Intl.DateTimeFormatOptions,
+): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
@@ -11,7 +14,13 @@ export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function relativeDays(value: string | null | undefined): string {
@@ -25,11 +34,18 @@ export function relativeDays(value: string | null | undefined): string {
   return days > 0 ? `in ${days} days` : `${Math.abs(days)} days ago`;
 }
 
-export function formatMoney(amount: number | null | undefined, currency: string | null | undefined): string {
+export function formatMoney(
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+): string {
   if (amount === null || amount === undefined) return "—";
   const cur = currency ?? "TZS";
   try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(amount);
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: cur,
+      maximumFractionDigits: 0,
+    }).format(amount);
   } catch {
     return `${cur} ${amount.toLocaleString()}`;
   }
@@ -41,7 +57,8 @@ export function salaryRange(
   currency: string | null | undefined,
 ): string {
   if (min == null && max == null) return "Undisclosed";
-  if (min != null && max != null) return `${formatMoney(min, currency)} – ${formatMoney(max, currency)}`;
+  if (min != null && max != null)
+    return `${formatMoney(min, currency)} – ${formatMoney(max, currency)}`;
   return formatMoney(min ?? max, currency);
 }
 
@@ -53,7 +70,5 @@ export function initials(name: string | null | undefined, fallback = "?"): strin
 
 export function titleCase(value: string | null | undefined): string {
   if (!value) return "";
-  return value
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -15,9 +15,21 @@ function required(name: string, value: string | undefined): string {
 export const env = {
   supabaseUrl: () => required("NEXT_PUBLIC_SUPABASE_URL", process.env.NEXT_PUBLIC_SUPABASE_URL),
   supabaseKey: () =>
-    required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
+    required(
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    ),
   siteUrl: () => process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  /** Server-only. Never expose to the client. */
+  openaiApiKey: () => required("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
+  /** Server-only. Never expose to the client. */
+  openaiResumeModel: () => process.env.OPENAI_RESUME_MODEL ?? "gpt-4.1-mini",
 };
+
+/** True when the OpenAI key is configured (used to gracefully disable CV parsing). */
+export function isResumeParsingConfigured(): boolean {
+  return !!process.env.OPENAI_API_KEY;
+}
 
 /** True when both required Supabase values are present (used for graceful degradation). */
 export function isSupabaseConfigured(): boolean {

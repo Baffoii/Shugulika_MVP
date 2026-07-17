@@ -1,0 +1,196 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main, develop]
+
+# Cancel superseded runs on the same ref (e.g. new push to a PR).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Dummy public values so `next build` and the smoke e2e can run without a real
+  # project. Never place real or service-role secrets here.
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_dummy_key
+  NEXT_PUBLIC_SITE_URL: http://localhost:3000
+
+jobs:
+  # ---- Which areas changed? (drives conditional DB/e2e jobs) -----------------
+  changes:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false || github.event_name == 'push'
+    outputs:
+      db: ${{ steps.filter.outputs.db }}
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            db:
+              - 'supabase/migrations/**'
+              - 'src/lib/database.types.ts'
+              - 'src/test/db/**'
+            code:
+              - 'src/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '*.config.*'
+
+  # ---- Stage 1: fast feedback (format, lint, types, env) ---------------------
+  static:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci # lockfile-consistent, reproducible install
+      - name: Lockfile in sync
+        run: |
+          npm ls --all >/dev/null 2>&1 || echo "note: dependency tree has warnings"
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run validate:env
+
+  # ---- Stage 2: unit + component tests with coverage -------------------------
+  unit:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Unit + component tests (coverage + thresholds)
+        run: npm run test:coverage
+      - name: Coverage summary
+        if: always()
+        run: cat coverage/coverage-summary.json 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const t=JSON.parse(s).total;console.log('Coverage — lines '+t.lines.pct+'%, branches '+t.branches.pct+'%, functions '+t.functions.pct+'%, statements '+t.statements.pct+'%')}catch{console.log('no coverage summary')}})" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  # ---- Stage 3: database migrations + RLS/isolation tests --------------------
+  database:
+    needs: changes
+    if: needs.changes.outputs.db == 'true' || needs.changes.outputs.code == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shug_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shug_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: RLS & tenant-isolation tests (applies migrations to a clean DB)
+        run: npm run test:db
+      - name: Verify schema + types in sync
+        run: npm run db:verify
+
+  # ---- Stage 4: production build (Vercel-compatible) -------------------------
+  build:
+    needs: [static]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Validate build environment
+        run: npm run validate:env
+      - name: Production build (same command Vercel runs)
+        run: npm run build
+      - name: Guard against case-only import mismatches
+        run: |
+          # Linux is case-sensitive; catch imports that would break on Vercel.
+          ! git ls-files 'src/**' | sort -f | uniq -di | grep . || (echo "Case-insensitive filename collision" && exit 1)
+
+  # ---- Stage 5: end-to-end smoke (built app) --------------------------------
+  e2e:
+    needs: [build]
+    if: needs.changes.outputs.code == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Run e2e smoke
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ---- Stage 6: dependency + secret scanning --------------------------------
+  security:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Dependency audit (block on high/critical in prod deps)
+        # Blocks on high/critical prod advisories, minus a documented allowlist
+        # of upstream framework advisories (see scripts/audit-ci.mjs).
+        run: npm run audit:ci
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---- Single required status check that aggregates the pipeline ------------
+  ci-required:
+    if: always()
+    needs: [static, unit, database, build, e2e, security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job failed
+        run: |
+          results='${{ needs.static.result }} ${{ needs.unit.result }} ${{ needs.build.result }} ${{ needs.security.result }}'
+          # database/e2e may be skipped by path filters; only fail on explicit failure.
+          db='${{ needs.database.result }}'; e2e='${{ needs.e2e.result }}'
+          echo "static=${{ needs.static.result }} unit=${{ needs.unit.result }} database=$db build=${{ needs.build.result }} e2e=$e2e security=${{ needs.security.result }}"
+          for r in $results; do [ "$r" = "success" ] || { echo "A required check failed."; exit 1; }; done
+          [ "$db" = "failure" ] && { echo "database check failed."; exit 1; } || true
+          [ "$e2e" = "failure" ] && { echo "e2e check failed."; exit 1; } || true
+          echo "All required checks passed."

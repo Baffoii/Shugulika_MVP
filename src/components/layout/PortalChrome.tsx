@@ -95,14 +95,22 @@ export function PortalChrome({
           className="absolute -right-3 top-[4.25rem] z-40 hidden h-6 w-6 items-center justify-center rounded-full border border-surface-border bg-white text-ink-subtle shadow-sm hover:bg-surface-muted hover:text-ink lg:flex"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+          {collapsed ? (
+            <PanelLeftOpen className="h-3.5 w-3.5" />
+          ) : (
+            <PanelLeftClose className="h-3.5 w-3.5" />
+          )}
         </button>
       </aside>
 
       {/* Mobile drawer */}
       {mobileOpen ? (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-ink/30" onClick={() => setMobileOpen(false)} aria-hidden />
+          <div
+            className="absolute inset-0 bg-ink/30"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden
+          />
           <div className="absolute inset-y-0 left-0 w-72 bg-sidebar shadow-drawer">
             <button
               className="absolute right-3 top-4 rounded-md p-1 text-sidebar-muted hover:bg-sidebar-hover hover:text-white"
@@ -132,9 +140,15 @@ export function PortalChrome({
             onClick={toggle}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+            {collapsed ? (
+              <PanelLeftOpen className="h-5 w-5" />
+            ) : (
+              <PanelLeftClose className="h-5 w-5" />
+            )}
           </button>
-          <div className="hidden text-sm font-medium text-ink-muted sm:block">{PORTAL_META[portal].label} portal</div>
+          <div className="hidden text-sm font-medium text-ink-muted sm:block">
+            {PORTAL_META[portal].label} portal
+          </div>
           <div className="ml-auto flex items-center gap-2">
             {switches.length > 1 ? (
               <div className="hidden items-center gap-1 md:flex">
@@ -161,13 +175,20 @@ export function PortalChrome({
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-2xs font-semibold text-white">
                   {initials(userName || email)}
                 </span>
-                <span className="hidden max-w-[140px] truncate text-ink sm:block">{userName || email}</span>
+                <span className="hidden max-w-[140px] truncate text-ink sm:block">
+                  {userName || email}
+                </span>
                 <ChevronDown className="h-4 w-4 text-ink-subtle" />
               </button>
               {menuOpen ? (
-                <div className="absolute right-0 mt-1 w-56 rounded-lg border border-surface-border bg-white p-1 shadow-pop" role="menu">
+                <div
+                  className="absolute right-0 mt-1 w-56 rounded-lg border border-surface-border bg-white p-1 shadow-pop"
+                  role="menu"
+                >
                   <div className="px-3 py-2">
-                    <p className="truncate text-sm font-medium text-ink">{userName || "Signed in"}</p>
+                    <p className="truncate text-sm font-medium text-ink">
+                      {userName || "Signed in"}
+                    </p>
                     <p className="truncate text-xs text-ink-subtle">{email}</p>
                   </div>
                   {switches.length > 1 ? (
@@ -175,16 +196,26 @@ export function PortalChrome({
                       {switches
                         .filter((s) => s.portal !== portal)
                         .map((s) => (
-                          <Link key={s.portal} href={s.href} className="block rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-surface-muted">
+                          <Link
+                            key={s.portal}
+                            href={s.href}
+                            className="block rounded-md px-3 py-1.5 text-sm text-ink-muted hover:bg-surface-muted"
+                          >
                             Switch to {s.label}
                           </Link>
                         ))}
                     </div>
                   ) : null}
-                  <form action="/auth/sign-out" method="post" className="border-t border-surface-border pt-1">
+                  <form
+                    action="/auth/sign-out"
+                    method="post"
+                    className="border-t border-surface-border pt-1"
+                  >
                     <button
                       type="submit"
-                      className={cn("flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-status-danger hover:bg-red-50")}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-status-danger hover:bg-red-50",
+                      )}
                       role="menuitem"
                     >
                       <LogOut className="h-4 w-4" /> Sign out

@@ -2,6 +2,7 @@ import { JobFilters } from "@/components/jobs/JobFilters";
 import { JobCard } from "@/components/jobs/JobCard";
 import { EmptyState, Alert } from "@/components/ui/primitives";
 import { listPublicJobs } from "@/lib/data/jobs";
+import { getMyCandidate, getMyAppliedJobOrderIds } from "@/lib/data/candidate";
 import { Briefcase } from "lucide-react";
 
 export async function JobsBoard({
@@ -19,12 +20,19 @@ export async function JobsBoard({
 }) {
   const { jobs, configured, error } = await listPublicJobs(searchParams);
 
+  let appliedOrderIds = new Set<string>();
+  if (jobsBasePath.startsWith("/candidate")) {
+    const candidate = await getMyCandidate();
+    if (candidate) appliedOrderIds = await getMyAppliedJobOrderIds(candidate.id);
+  }
+
   return (
     <>
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink">Find your next role</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Browse opportunities across Shugulika&apos;s network. Only published, active roles are shown.
+          Browse opportunities across Shugulika&apos;s network. Only published, active roles are
+          shown.
         </p>
       </div>
 
@@ -34,7 +42,8 @@ export async function JobsBoard({
         {!configured ? (
           <Alert tone="warn" title="Database not connected yet">
             The public job board reads from Supabase. Apply the SQL in{" "}
-            <code className="rounded bg-white px-1">supabase/migrations/</code> (see the README), then refresh.
+            <code className="rounded bg-white px-1">supabase/migrations/</code> (see the README),
+            then refresh.
             {error ? <span className="mt-1 block text-xs opacity-70">Detail: {error}</span> : null}
           </Alert>
         ) : jobs.length === 0 ? (
@@ -45,10 +54,17 @@ export async function JobsBoard({
           />
         ) : (
           <>
-            <p className="mb-3 text-sm text-ink-subtle">{jobs.length} role{jobs.length === 1 ? "" : "s"}</p>
+            <p className="mb-3 text-sm text-ink-subtle">
+              {jobs.length} role{jobs.length === 1 ? "" : "s"}
+            </p>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {jobs.map((job) => (
-                <JobCard key={job.job_id} job={job} detailBasePath={jobsBasePath} />
+                <JobCard
+                  key={job.job_id}
+                  job={job}
+                  detailBasePath={jobsBasePath}
+                  applied={appliedOrderIds.has(job.job_order_id)}
+                />
               ))}
             </div>
           </>

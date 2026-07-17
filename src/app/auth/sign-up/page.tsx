@@ -13,10 +13,13 @@ export default function SignUpPage() {
       <SignUpForm />
       <p className="mt-4 text-sm text-ink-muted">
         Already have an account?{" "}
-        <Link href="/auth/sign-in" className="text-brand-700 hover:underline">Sign in</Link>
+        <Link href="/auth/sign-in" className="text-brand-700 hover:underline">
+          Sign in
+        </Link>
       </p>
       <p className="mt-3 rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-subtle">
-        Recruiter, franchise, operations, accounts and HQ accounts are invite-only and provisioned by an administrator.
+        Recruiter, franchise, operations, accounts and HQ accounts are invite-only and provisioned
+        by an administrator.
       </p>
     </Card>
   );

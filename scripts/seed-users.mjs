@@ -37,7 +37,10 @@ function loadEnv(file) {
       if (eq === -1) continue;
       const key = line.slice(0, eq).trim();
       let val = line.slice(eq + 1).trim();
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
         val = val.slice(1, -1);
       }
       if (!(key in process.env)) process.env[key] = val;
@@ -71,15 +74,65 @@ const FRANCHISE_ORG = "22222222-2222-2222-2222-222222222222";
 const EMPLOYER_ORG = "33333333-3333-3333-3333-333333333333";
 
 const ACCOUNTS = [
-  { type: "HQ Administrator", email: "hq.admin@shugulika.test", name: "HQ Administrator", role: "hq_admin", org: HQ_ORG, landing: "/hq/dashboard", pwEnv: "SEED_HQ_ADMIN_PASSWORD" },
-  { type: "Franchise Administrator", email: "franchise.admin@shugulika.test", name: "Franchise Administrator", role: "franchise_admin", org: FRANCHISE_ORG, landing: "/franchise/dashboard", pwEnv: "SEED_FRANCHISE_ADMIN_PASSWORD" },
-  { type: "Operations Administrator", email: "operations.admin@shugulika.test", name: "Operations Administrator", role: "operations", org: FRANCHISE_ORG, landing: "/franchise/dashboard", pwEnv: "SEED_OPERATIONS_ADMIN_PASSWORD" },
-  { type: "Recruiter", email: "recruiter@shugulika.test", name: "Demo Recruiter", role: "recruiter", org: FRANCHISE_ORG, landing: "/recruiter/dashboard", pwEnv: "SEED_RECRUITER_PASSWORD" },
-  { type: "Employer User", email: "employer@shugulika.test", name: "Demo Employer", role: "employer_user", org: EMPLOYER_ORG, landing: "/employer/dashboard", pwEnv: "SEED_EMPLOYER_PASSWORD" },
-  { type: "Candidate", email: "candidate@shugulika.test", name: "Demo Candidate", role: "candidate", org: null, landing: "/candidate/dashboard", pwEnv: "SEED_CANDIDATE_PASSWORD" },
+  {
+    type: "HQ Administrator",
+    email: "hq.admin@shugulika.test",
+    name: "HQ Administrator",
+    role: "hq_admin",
+    org: HQ_ORG,
+    landing: "/hq/dashboard",
+    pwEnv: "SEED_HQ_ADMIN_PASSWORD",
+  },
+  {
+    type: "Franchise Administrator",
+    email: "franchise.admin@shugulika.test",
+    name: "Franchise Administrator",
+    role: "franchise_admin",
+    org: FRANCHISE_ORG,
+    landing: "/franchise/dashboard",
+    pwEnv: "SEED_FRANCHISE_ADMIN_PASSWORD",
+  },
+  {
+    type: "Operations Administrator",
+    email: "operations.admin@shugulika.test",
+    name: "Operations Administrator",
+    role: "operations",
+    org: FRANCHISE_ORG,
+    landing: "/franchise/dashboard",
+    pwEnv: "SEED_OPERATIONS_ADMIN_PASSWORD",
+  },
+  {
+    type: "Recruiter",
+    email: "recruiter@shugulika.test",
+    name: "Demo Recruiter",
+    role: "recruiter",
+    org: FRANCHISE_ORG,
+    landing: "/recruiter/dashboard",
+    pwEnv: "SEED_RECRUITER_PASSWORD",
+  },
+  {
+    type: "Employer User",
+    email: "employer@shugulika.test",
+    name: "Demo Employer",
+    role: "employer_user",
+    org: EMPLOYER_ORG,
+    landing: "/employer/dashboard",
+    pwEnv: "SEED_EMPLOYER_PASSWORD",
+  },
+  {
+    type: "Candidate",
+    email: "candidate@shugulika.test",
+    name: "Demo Candidate",
+    role: "candidate",
+    org: null,
+    landing: "/candidate/dashboard",
+    pwEnv: "SEED_CANDIDATE_PASSWORD",
+  },
 ];
 
-const admin = createClient(URL, SERVICE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
+const admin = createClient(URL, SERVICE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
 
 /** Find an existing auth user id by email (paginated). */
 async function findUserIdByEmail(email) {
@@ -114,7 +167,11 @@ async function provision(acc) {
     // Already registered → look it up and (re)assert the password + confirmation.
     userId = await findUserIdByEmail(acc.email);
     if (userId) {
-      await admin.auth.admin.updateUserById(userId, { password, email_confirm: true, user_metadata: { full_name: acc.name, role: acc.role } });
+      await admin.auth.admin.updateUserById(userId, {
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: acc.name, role: acc.role },
+      });
       result.note = "existing user updated";
     } else {
       result.note = created.error.message;
@@ -129,7 +186,9 @@ async function provision(acc) {
 
   // 2) Assign profile + role deterministically (service role bypasses RLS).
   try {
-    await admin.from("profiles").upsert({ id: userId, email: acc.email, full_name: acc.name }, { onConflict: "id" });
+    await admin
+      .from("profiles")
+      .upsert({ id: userId, email: acc.email, full_name: acc.name }, { onConflict: "id" });
     // Remove any auto-provisioned membership from the signup trigger.
     await admin.from("memberships").delete().eq("user_id", userId);
     // Non-candidate accounts should not carry a candidate profile.
@@ -137,7 +196,10 @@ async function provision(acc) {
       await admin.from("candidate_profiles").delete().eq("user_id", userId);
     }
     const { error: memErr } = await admin.from("memberships").insert({
-      user_id: userId, organization_id: acc.org, role: acc.role, status: "active",
+      user_id: userId,
+      organization_id: acc.org,
+      role: acc.role,
+      status: "active",
     });
     if (memErr) {
       result.note = memErr.message.includes("foreign key")
@@ -146,7 +208,9 @@ async function provision(acc) {
       return result;
     }
     if (acc.role === "candidate") {
-      await admin.from("candidate_profiles").upsert({ user_id: userId, given_name: acc.name.split(" ")[0] }, { onConflict: "user_id" });
+      await admin
+        .from("candidate_profiles")
+        .upsert({ user_id: userId, given_name: acc.name.split(" ")[0] }, { onConflict: "user_id" });
     }
     result.roleOk = true;
   } catch (e) {

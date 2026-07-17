@@ -7,7 +7,13 @@ export const metadata: Metadata = { title: "Jobs" };
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: { q?: string; country?: string; employment_type?: string; work_arrangement?: string; experience_level?: string };
+  searchParams: {
+    q?: string;
+    country?: string;
+    employment_type?: string;
+    work_arrangement?: string;
+    experience_level?: string;
+  };
 }) {
   return (
     <div className="min-h-screen bg-surface-muted">

@@ -12,8 +12,12 @@ export default function SignInPage({ searchParams }: { searchParams: { redirectT
       <p className="mt-1 text-sm text-ink-muted">Sign in to your Shugulika account.</p>
       <SignInForm redirectTo={searchParams.redirectTo ?? null} />
       <div className="mt-4 flex items-center justify-between text-sm">
-        <Link href="/auth/forgot-password" className="text-brand-700 hover:underline">Forgot password?</Link>
-        <Link href="/auth/sign-up" className="text-brand-700 hover:underline">Create an account</Link>
+        <Link href="/auth/forgot-password" className="text-brand-700 hover:underline">
+          Forgot password?
+        </Link>
+        <Link href="/auth/sign-up" className="text-brand-700 hover:underline">
+          Create an account
+        </Link>
       </div>
     </Card>
   );
