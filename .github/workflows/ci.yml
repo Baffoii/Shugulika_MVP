@@ -170,7 +170,9 @@ jobs:
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - name: Dependency audit (block on high/critical in prod deps)
-        run: npm audit --omit=dev --audit-level=high
+        # Blocks on high/critical prod advisories, minus a documented allowlist
+        # of upstream framework advisories (see scripts/audit-ci.mjs).
+        run: npm run audit:ci
       - name: Secret scan (gitleaks)
         uses: gitleaks/gitleaks-action@v2
         env:

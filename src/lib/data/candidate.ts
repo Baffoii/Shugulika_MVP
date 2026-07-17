@@ -34,41 +34,76 @@ export interface ApplicationWithJob extends ApplicationRow {
     | null;
 }
 
+/**
+ * Load the candidate's applications without embedding job_orders.
+ * Nested embeds hit RLS recursion between applications ↔ job_orders; titles
+ * come from the safe public_jobs view instead.
+ */
 export async function getMyApplications(candidateId: string): Promise<ApplicationWithJob[]> {
   const supabase = createClient();
-  // Disambiguate organizations embed — job_orders has both employer_org_id and
-  // responsible_org_id FKs; without !employer_org_id PostgREST errors and the
-  // client returns null → empty "No applications yet" while notifications still work.
   const { data, error } = await supabase
     .from("applications")
-    .select(
-      "*, job_orders(id,title,employer_org_id,city,country_code,is_confidential, organizations!employer_org_id(name))",
-    )
+    .select("*")
     .eq("candidate_id", candidateId)
     .order("created_at", { ascending: false });
-  if (!error && data) return data as unknown as ApplicationWithJob[];
 
-  // Fallback without org embed if the relationship hint isn't available yet.
-  const { data: fallback } = await supabase
-    .from("applications")
-    .select("*, job_orders(id,title,employer_org_id,city,country_code,is_confidential)")
-    .eq("candidate_id", candidateId)
-    .order("created_at", { ascending: false });
-  return ((fallback as ApplicationWithJob[] | null) ?? []).map((row) => ({
-    ...row,
-    job_orders: row.job_orders
-      ? { ...row.job_orders, organizations: row.job_orders.organizations ?? null }
-      : null,
-  }));
+  if (error) {
+    console.error("[getMyApplications]", error.message);
+    return [];
+  }
+
+  const apps = (data as ApplicationRow[] | null) ?? [];
+  if (apps.length === 0) return [];
+
+  const orderIds = [...new Set(apps.map((a) => a.job_order_id))];
+  const { data: jobRows } = await supabase
+    .from("public_jobs")
+    .select("job_order_id, title, employer_name, city, country_code, is_confidential")
+    .in("job_order_id", orderIds);
+
+  type JobMeta = {
+    job_order_id: string;
+    title: string;
+    employer_name: string;
+    city: string | null;
+    country_code: string;
+    is_confidential: boolean;
+  };
+  const byOrder = new Map(
+    ((jobRows as JobMeta[] | null) ?? []).map((j) => [j.job_order_id, j] as const),
+  );
+
+  return apps.map((a) => {
+    const meta = byOrder.get(a.job_order_id);
+    if (!meta) {
+      return { ...a, job_orders: null };
+    }
+    return {
+      ...a,
+      job_orders: {
+        id: a.job_order_id,
+        title: meta.title,
+        employer_org_id: "",
+        city: meta.city,
+        country_code: meta.country_code,
+        is_confidential: meta.is_confidential,
+        organizations: { name: meta.employer_name },
+      },
+    };
+  });
 }
 
 /** Job order IDs the candidate already has an application for (incl. withdrawn). */
 export async function getMyAppliedJobOrderIds(candidateId: string): Promise<Set<string>> {
   const supabase = createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("applications")
     .select("job_order_id")
     .eq("candidate_id", candidateId);
+  if (error) {
+    console.error("[getMyAppliedJobOrderIds]", error.message);
+    return new Set();
+  }
   return new Set(((data as { job_order_id: string }[] | null) ?? []).map((r) => r.job_order_id));
 }
 

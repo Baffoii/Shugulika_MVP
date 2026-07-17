@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "validate:env": "node scripts/validate-env.mjs",
     "db:verify": "node scripts/db-verify.mjs",
+    "audit:ci": "node scripts/audit-ci.mjs",
     "ci": "npm run format:check && npm run lint && npm run typecheck && npm run validate:env && npm run test:coverage && npm run build",
     "seed:users": "node scripts/seed-users.mjs"
   },

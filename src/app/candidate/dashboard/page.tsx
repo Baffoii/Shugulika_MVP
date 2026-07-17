@@ -174,19 +174,21 @@ export default async function CandidateDashboard() {
             See all
           </Link>
         </div>
-        {jobsRes.jobs.length > 0 ? (
+        {jobsRes.jobs.filter((j) => !appliedOrderIds.has(j.job_order_id)).length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {jobsRes.jobs.slice(0, 3).map((j) => (
-              <JobCard
-                key={j.job_id}
-                job={j}
-                detailBasePath="/candidate/jobs"
-                applied={appliedOrderIds.has(j.job_order_id)}
-              />
-            ))}
+            {jobsRes.jobs
+              .filter((j) => !appliedOrderIds.has(j.job_order_id))
+              .slice(0, 3)
+              .map((j) => (
+                <JobCard key={j.job_id} job={j} detailBasePath="/candidate/jobs" />
+              ))}
           </div>
         ) : (
-          <Card className="p-5 text-sm text-ink-muted">No roles to show yet.</Card>
+          <Card className="p-5 text-sm text-ink-muted">
+            {appliedOrderIds.size > 0
+              ? "You've already applied to the featured roles — browse all open jobs for more."
+              : "No roles to show yet."}
+          </Card>
         )}
       </div>
     </div>
