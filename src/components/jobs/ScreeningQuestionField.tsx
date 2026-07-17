@@ -27,9 +27,7 @@ function QuestionShell({
   return (
     <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm">
       <p className="text-sm font-semibold text-ink">{prompt}</p>
-      {required ? (
-        <p className="mt-1 text-xs font-semibold text-status-danger">Required</p>
-      ) : null}
+      {required ? <p className="mt-1 text-xs font-semibold text-status-danger">Required</p> : null}
       <div className="mt-3">{children}</div>
       {error ? (
         <p className="mt-2 text-xs font-medium text-status-danger" role="alert">
@@ -40,13 +38,7 @@ function QuestionShell({
   );
 }
 
-function BooleanChoice({
-  name,
-  required,
-}: {
-  name: string;
-  required: boolean;
-}) {
+function BooleanChoice({ name, required }: { name: string; required: boolean }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {(
@@ -171,16 +163,10 @@ export function EmployerQuestionsSection({
     <section className="space-y-3">
       <div>
         <h2 className="text-base font-semibold text-ink">Employer questions</h2>
-        <p className="mt-0.5 text-sm text-ink-muted">
-          Asked by {employerName} for this role.
-        </p>
+        <p className="mt-0.5 text-sm text-ink-muted">Asked by {employerName} for this role.</p>
       </div>
       {questions.map((q) => (
-        <ScreeningQuestionField
-          key={q.id}
-          question={q}
-          error={fieldErrors?.[`answer_${q.id}`]}
-        />
+        <ScreeningQuestionField key={q.id} question={q} error={fieldErrors?.[`answer_${q.id}`]} />
       ))}
     </section>
   );

@@ -46,7 +46,7 @@ export async function getMyApplications(candidateId: string): Promise<Applicatio
     )
     .eq("candidate_id", candidateId)
     .order("created_at", { ascending: false });
-  if (!error && data) return data as ApplicationWithJob[];
+  if (!error && data) return data as unknown as ApplicationWithJob[];
 
   // Fallback without org embed if the relationship hint isn't available yet.
   const { data: fallback } = await supabase
@@ -69,18 +69,16 @@ export async function getMyAppliedJobOrderIds(candidateId: string): Promise<Set<
     .from("applications")
     .select("job_order_id")
     .eq("candidate_id", candidateId);
-  return new Set(
-    ((data as { job_order_id: string }[] | null) ?? []).map((r) => r.job_order_id),
-  );
+  return new Set(((data as { job_order_id: string }[] | null) ?? []).map((r) => r.job_order_id));
 }
 
 /** Display label for an application row: "Title at Employer". */
 export function applicationRoleLabel(app: ApplicationWithJob): string {
   const title = app.job_orders?.title?.trim();
   if (!title) return "Role";
-  const employer = app.job_orders.is_confidential
+  const employer = app.job_orders?.is_confidential
     ? "Confidential Employer"
-    : (app.job_orders.organizations?.name?.trim() ?? null);
+    : (app.job_orders?.organizations?.name?.trim() ?? null);
   return employer ? `${title} at ${employer}` : title;
 }
 
