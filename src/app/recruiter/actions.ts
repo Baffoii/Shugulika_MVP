@@ -80,7 +80,7 @@ export async function advanceStageAction(formData: FormData): Promise<ActionResu
       { stage: app.current_stage },
       { stage: "rejected", reason: reasonLabel },
     );
-    await notifyCandidate(app, "Not selected", "There's an update on your application.");
+    await notifyCandidateStatus(app, "rejected");
     revalidatePath(`/recruiter/applications/${applicationId}`);
     revalidatePath("/recruiter/pipeline");
     return { ok: true };
@@ -136,11 +136,47 @@ export async function advanceStageAction(formData: FormData): Promise<ActionResu
     { stage: app.current_stage },
     { stage: toStage },
   );
-  const label = CANDIDATE_FACING_STATUS[toStage];
-  if (label) await notifyCandidate(app, label, "Your application has moved forward.");
+  await notifyCandidateStatus(app, toStage);
   revalidatePath(`/recruiter/applications/${applicationId}`);
   revalidatePath("/recruiter/pipeline");
   return { ok: true };
+}
+
+/** Notify the candidate whenever their application status changes. */
+async function notifyCandidateStatus(app: ApplicationRow, toStage: string) {
+  const supabase = createClient();
+  const [{ data: cand }, { data: jobMeta }] = await Promise.all([
+    supabase.from("candidate_profiles").select("user_id").eq("id", app.candidate_id).maybeSingle(),
+    supabase
+      .from("public_jobs")
+      .select("title, employer_name")
+      .eq("job_order_id", app.job_order_id)
+      .maybeSingle(),
+  ]);
+  const userId = (cand as { user_id: string } | null)?.user_id;
+  if (!userId) return;
+
+  const meta = jobMeta as { title: string; employer_name: string } | null;
+  const roleLabel = meta ? `${meta.title} at ${meta.employer_name}` : "your application";
+  const statusLabel = CANDIDATE_FACING_STATUS[toStage] ?? toStage.replace(/_/g, " ");
+
+  const title = statusLabel;
+  const body =
+    toStage === "rejected"
+      ? `Your application for ${roleLabel} was not selected.`
+      : toStage === "hired"
+        ? `Congratulations — your application for ${roleLabel} moved to Hired.`
+        : `Your application for ${roleLabel} is now: ${statusLabel}.`;
+
+  const { error } = await supabase.from("notifications").insert({
+    user_id: userId,
+    category: "application_status",
+    title,
+    body,
+    subject_type: "application",
+    subject_id: app.id,
+  });
+  if (error) console.error("[notifyCandidateStatus]", error.message);
 }
 
 async function notifyCandidate(app: ApplicationRow, title: string, body: string) {
@@ -151,16 +187,16 @@ async function notifyCandidate(app: ApplicationRow, title: string, body: string)
     .eq("id", app.candidate_id)
     .maybeSingle();
   const userId = (cand as { user_id: string } | null)?.user_id;
-  if (userId) {
-    await supabase.from("notifications").insert({
-      user_id: userId,
-      category: "application_status",
-      title,
-      body,
-      subject_type: "application",
-      subject_id: app.id,
-    });
-  }
+  if (!userId) return;
+  const { error } = await supabase.from("notifications").insert({
+    user_id: userId,
+    category: "application_status",
+    title,
+    body,
+    subject_type: "application",
+    subject_id: app.id,
+  });
+  if (error) console.error("[notifyCandidate]", error.message);
 }
 
 export async function addNoteAction(formData: FormData): Promise<ActionResult> {

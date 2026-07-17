@@ -21,14 +21,51 @@ export interface PipelineApplication extends ApplicationRow {
 /** All applications the recruiter is authorized to see (RLS-scoped). */
 export async function getPipeline(): Promise<PipelineApplication[]> {
   const supabase = createClient();
-  const { data } = await supabase
+  // Avoid nested embeds — applications ↔ job_orders RLS has recursed in the
+  // past and PostgREST then returns null for the whole query.
+  const { data, error } = await supabase
     .from("applications")
-    .select(
-      "*, candidate_profiles(id,given_name,family_name,headline,city,country_code), job_orders(id,title,employer_org_id)",
-    )
+    .select("*")
     .is("withdrawn_at", null)
     .order("created_at", { ascending: false });
-  return (data as PipelineApplication[] | null) ?? [];
+
+  if (error) {
+    console.error("[getPipeline]", error.message);
+    return [];
+  }
+
+  const apps = (data as ApplicationRow[] | null) ?? [];
+  if (apps.length === 0) return [];
+
+  const candidateIds = [...new Set(apps.map((a) => a.candidate_id))];
+  const jobOrderIds = [...new Set(apps.map((a) => a.job_order_id))];
+
+  const [{ data: candidates }, { data: jobs }] = await Promise.all([
+    supabase
+      .from("candidate_profiles")
+      .select("id,given_name,family_name,headline,city,country_code")
+      .in("id", candidateIds),
+    supabase.from("job_orders").select("id,title,employer_org_id").in("id", jobOrderIds),
+  ]);
+
+  type Cand = PipelineApplication["candidate_profiles"];
+  type Job = PipelineApplication["job_orders"];
+  const candById = new Map(
+    ((candidates as Cand[] | null) ?? [])
+      .filter((c): c is NonNullable<Cand> => !!c)
+      .map((c) => [c.id, c] as const),
+  );
+  const jobById = new Map(
+    ((jobs as Job[] | null) ?? [])
+      .filter((j): j is NonNullable<Job> => !!j)
+      .map((j) => [j.id, j] as const),
+  );
+
+  return apps.map((a) => ({
+    ...a,
+    candidate_profiles: candById.get(a.candidate_id) ?? null,
+    job_orders: jobById.get(a.job_order_id) ?? null,
+  }));
 }
 
 export interface RecruiterMetrics {

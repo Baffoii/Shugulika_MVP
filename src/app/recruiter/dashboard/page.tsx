@@ -56,18 +56,20 @@ export default async function RecruiterDashboard() {
           ) : (
             <ul className="divide-y divide-surface-border">
               {needsAction.map((a) => (
-                <li key={a.id} className="flex items-center justify-between gap-3 px-5 py-3">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/recruiter/applications/${a.id}`}
-                      className="truncate text-sm font-medium text-ink hover:underline"
-                    >
-                      {a.candidate_profiles?.given_name ?? "Candidate"}{" "}
-                      {a.candidate_profiles?.family_name ?? ""} — {a.job_orders?.title ?? "Role"}
-                    </Link>
-                    <p className="text-xs text-ink-subtle">Applied {formatDate(a.created_at)}</p>
-                  </div>
-                  <StageBadge stageKey={a.current_stage} />
+                <li key={a.id}>
+                  <Link
+                    href={`/recruiter/applications/${a.id}`}
+                    className="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-ink">
+                        {a.candidate_profiles?.given_name ?? "Candidate"}{" "}
+                        {a.candidate_profiles?.family_name ?? ""} — {a.job_orders?.title ?? "Role"}
+                      </p>
+                      <p className="text-xs text-ink-subtle">Applied {formatDate(a.created_at)}</p>
+                    </div>
+                    <StageBadge stageKey={a.current_stage} />
+                  </Link>
                 </li>
               ))}
             </ul>

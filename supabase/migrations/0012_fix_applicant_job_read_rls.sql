@@ -19,7 +19,7 @@ returns setof uuid language sql stable security definer set search_path = public
   from public.applications a
   join public.job_orders jo on jo.id = a.job_order_id
   where a.candidate_id = public.auth_candidate_id();
-$$;
+$$; 
 
 drop policy if exists jo_applicant_read on public.job_orders;
 create policy jo_applicant_read on public.job_orders for select to authenticated

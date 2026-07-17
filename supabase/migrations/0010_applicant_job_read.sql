@@ -1,28 +1,30 @@
 -- File 0010: let candidates read job-order title/employer for roles they've
--- applied to, so My applications / dashboard / notifications can show the
--- specific role instead of a generic "Role" placeholder. Staff policies are
--- unchanged; this only opens a narrow applicant read path.
-create policy jo_applicant_read on public.job_orders for select to authenticated
-  using (
-    exists (
-      select 1 from public.applications a
-      where a.job_order_id = job_orders.id
-        and a.candidate_id = public.auth_candidate_id()
-    )
-  );
+-- applied to. MUST use SECURITY DEFINER helpers — a plain subquery on
+-- applications inside job_orders policies mutually recurses with app_read.
+-- (If you already applied an older recursive version of this file, run 0012
+-- and 0014 to repair.)
 
--- Employer org name for those same applied roles (respect confidential flag
--- in the app layer — this only grants the name when the candidate applied).
+create or replace function public.auth_applied_job_order_ids()
+returns setof uuid language sql stable security definer set search_path = public as $$
+  select a.job_order_id from public.applications a
+  where a.candidate_id = public.auth_candidate_id();
+$$;
+
+create or replace function public.auth_applied_employer_org_ids()
+returns setof uuid language sql stable security definer set search_path = public as $$
+  select jo.employer_org_id
+  from public.applications a
+  join public.job_orders jo on jo.id = a.job_order_id
+  where a.candidate_id = public.auth_candidate_id();
+$$;
+
+drop policy if exists jo_applicant_read on public.job_orders;
+create policy jo_applicant_read on public.job_orders for select to authenticated
+  using (job_orders.id in (select public.auth_applied_job_order_ids()));
+
+drop policy if exists org_applicant_read on public.organizations;
 create policy org_applicant_read on public.organizations for select to authenticated
-  using (
-    exists (
-      select 1
-      from public.applications a
-      join public.job_orders jo on jo.id = a.job_order_id
-      where a.candidate_id = public.auth_candidate_id()
-        and jo.employer_org_id = organizations.id
-    )
-  );
+  using (organizations.id in (select public.auth_applied_employer_org_ids()));
 
 -- Rewrite generic apply notifications that were created before role-specific copy.
 update public.notifications n
