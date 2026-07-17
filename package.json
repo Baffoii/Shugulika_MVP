@@ -25,18 +25,18 @@
     "seed:users": "node scripts/seed-users.mjs"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "2.45.4",
+    "@supabase/ssr": "^0.12.3",
+    "@supabase/supabase-js": "2.110.7",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.436.0",
+    "lucide-react": "^1.25.0",
     "mammoth": "^1.12.0",
-    "next": "^14.2.35",
-    "openai": "^6.47.0",
+    "next": "^16.2.10",
+    "openai": "^6.48.0",
     "pdf-parse": "^2.4.5",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "tailwind-merge": "^2.5.2",
-    "zod": "^3.23.8"
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -44,8 +44,8 @@
     "@testing-library/react": "^16.0.1",
     "@types/node": "^20.16.5",
     "@types/pg": "^8.20.0",
-    "@types/react": "^18.3.5",
-    "@types/react-dom": "^18.3.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^2.1.9",
     "autoprefixer": "^10.4.20",
