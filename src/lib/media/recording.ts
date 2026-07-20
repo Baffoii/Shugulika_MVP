@@ -211,13 +211,7 @@ export function startRecording(
   };
 }
 
-export type MicLevelStatus =
-  | "disconnected"
-  | "muted"
-  | "too_quiet"
-  | "normal"
-  | "hot"
-  | "clipping";
+export type MicLevelStatus = "disconnected" | "muted" | "too_quiet" | "normal" | "hot" | "clipping";
 
 export interface MicLevelSample {
   /** Linear 0..1 RMS-derived level for the meter fill. */

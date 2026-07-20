@@ -201,10 +201,7 @@ export default async function InterviewResultsPage({
                     </div>
                   </dl>
                   {attempt?.upload_status === "uploaded" ? (
-                    <Playback
-                      attemptId={attempt.id}
-                      durationSeconds={attempt.duration_seconds}
-                    />
+                    <Playback attemptId={attempt.id} durationSeconds={attempt.duration_seconds} />
                   ) : canReview ? (
                     <Alert tone="warn">The selected recording is unavailable.</Alert>
                   ) : null}

@@ -110,7 +110,9 @@ export function MicLevelMeter({
             ? "text-emerald-700"
             : sample.status === "clipping" || sample.status === "disconnected"
               ? "text-status-danger"
-              : sample.status === "too_quiet" || sample.status === "hot" || sample.status === "muted"
+              : sample.status === "too_quiet" ||
+                  sample.status === "hot" ||
+                  sample.status === "muted"
                 ? "text-amber-700"
                 : "text-ink-subtle",
         )}

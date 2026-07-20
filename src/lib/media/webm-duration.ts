@@ -57,10 +57,7 @@ function writeFloat64Be(buffer: Uint8Array, offset: number, value: number) {
  * (e.g. mp4) are returned unchanged. Failures also return the original blob so
  * recording never blocks on metadata repair.
  */
-export async function fixRecordingDuration(
-  blob: Blob,
-  durationSeconds: number,
-): Promise<Blob> {
+export async function fixRecordingDuration(blob: Blob, durationSeconds: number): Promise<Blob> {
   if (!blob.type.includes("webm") || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     return blob;
   }
@@ -178,7 +175,9 @@ export async function fixRecordingDuration(
     }
     sizeBytes[0] = lengthMask | remaining;
 
-    const out = new Uint8Array(beforeInfo.length + infoData.length + durationElement.length + afterInfo.length);
+    const out = new Uint8Array(
+      beforeInfo.length + infoData.length + durationElement.length + afterInfo.length,
+    );
     out.set(beforeInfo, 0);
     out.set(sizeBytes, sizeFieldStart);
     out.set(infoData, infoStart);

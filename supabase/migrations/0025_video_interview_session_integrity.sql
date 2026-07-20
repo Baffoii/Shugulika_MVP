@@ -93,38 +93,21 @@ set search_path = public
 as $$
 declare
   v_candidate_id uuid;
-  v_assignment_id uuid;
 begin
   v_candidate_id := coalesce(new.candidate_id, old.candidate_id);
+  -- candidate_has_active_interview already requires an in_progress assignment
+  -- whose documents_locked_at is set, so this is the only gate needed.
   if not public.candidate_has_active_interview(v_candidate_id) then
     return coalesce(new, old);
   end if;
 
-  select a.id into v_assignment_id
-  from public.interview_assignments a
-  where a.candidate_id = v_candidate_id
-    and a.status = 'in_progress'
-    and a.documents_locked_at is not null
-  order by a.started_at desc nulls last
-  limit 1;
-
-  if v_assignment_id is not null then
-    insert into public.interview_events (
-      assignment_id, actor_user_id, event_type, metadata
-    ) values (
-      v_assignment_id,
-      auth.uid(),
-      'document_change_attempted',
-      jsonb_build_object(
-        'operation', tg_op,
-        'document_id', coalesce(new.id, old.id),
-        'doc_type', coalesce(new.doc_type, old.doc_type),
-        'object_path', coalesce(new.object_path, old.object_path),
-        'note', 'Document changes are blocked while an interview session is active. Flagged for recruiter review.'
-      )
-    );
-  end if;
-
+  -- Hard block: identity/supporting documents cannot change mid-interview.
+  -- We deliberately do NOT insert a document_change_attempted event here: this
+  -- BEFORE trigger raises to abort the write, and that rollback would discard
+  -- any audit row written in the same transaction. The attempt is instead
+  -- recorded by the candidate client via
+  -- public.record_interview_session_event(..., 'document_change_attempted'),
+  -- which commits independently of the blocked write.
   raise exception
     'Identity and supporting documents are locked for the active interview session and cannot be changed until the interview is submitted or cancelled.';
 end;
@@ -178,7 +161,7 @@ begin
   -- Controlled recovery: same token may resume. A missing/mismatched token after
   -- a prior session is treated as an interruption and flagged for review.
   if v_assignment.session_token is null then
-    v_token := encode(extensions.gen_random_bytes(24), 'hex');
+    v_token := encode(gen_random_bytes(24), 'hex');
     update public.interview_assignments
     set session_token = v_token,
         session_token_issued_at = now()
@@ -197,7 +180,7 @@ begin
       jsonb_build_object('reason', coalesce(p_reason, 'reconnect'), 'controlled_recovery', true)
     );
   else
-    v_token := encode(extensions.gen_random_bytes(24), 'hex');
+    v_token := encode(gen_random_bytes(24), 'hex');
     v_count := v_assignment.interruption_count + 1;
     v_unusual := v_count >= 2 or coalesce(v_assignment.has_unusual_interruptions, false);
     update public.interview_assignments

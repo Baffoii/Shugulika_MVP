@@ -537,6 +537,16 @@ d("asynchronous video interview database security", () => {
 
   it("locks documents during an active interview and flags change attempts", async () => {
     const fixture = await seedInterview({ status: "in_progress" });
+
+    // A live session is required to record client-driven attempt events.
+    const session = await commitAs(
+      client,
+      ids.candidate1,
+      `select session_token from public.begin_or_resume_interview_session($1, null, 'initial')`,
+      [fixture.assignmentId],
+    );
+    const token = (session.rows[0] as { session_token: string }).session_token;
+
     await commitAs(
       client,
       ids.candidate1,
@@ -551,6 +561,7 @@ d("asynchronous video interview database security", () => {
     );
     expect(locked.rows[0]).toMatchObject({ locked: true, snap_type: "array" });
 
+    // The DB hard-blocks any document mutation while the lock is active.
     await expect(
       queryAs(
         client,
@@ -561,6 +572,16 @@ d("asynchronous video interview database security", () => {
         [fixture.candidateProfileId],
       ),
     ).rejects.toThrow(/locked/i);
+
+    // The attempt is recorded out-of-band via the session-event RPC (the blocked
+    // write's own transaction rolls back, so it cannot persist its own audit row).
+    const recorded = await commitAs(
+      client,
+      ids.candidate1,
+      `select public.record_interview_session_event($1, $2, 'document_change_attempted', null, $3::jsonb) as ok`,
+      [fixture.assignmentId, token, JSON.stringify({ operation: "INSERT", doc_type: "passport" })],
+    );
+    expect(recorded.rows[0]).toMatchObject({ ok: true });
 
     const flagged = await client.query(
       `select event_type, metadata->>'operation' as operation

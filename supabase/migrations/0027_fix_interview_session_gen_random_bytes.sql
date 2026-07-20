@@ -1,6 +1,9 @@
--- gen_random_bytes lives in the extensions schema on Supabase.
--- begin_or_resume_interview_session used an unqualified call with search_path=public,
--- which caused: function gen_random_bytes(integer) does not exist
+-- gen_random_bytes (pgcrypto) lives in the extensions schema on Supabase but in
+-- public on the clean test harness. Qualifying it as extensions.gen_random_bytes
+-- breaks the harness ("schema extensions does not exist"); leaving search_path at
+-- public alone broke Supabase ("function gen_random_bytes(integer) does not exist").
+-- Fix: keep search_path = public, extensions and call it unqualified so it resolves
+-- in whichever schema pgcrypto is installed.
 
 create or replace function public.begin_or_resume_interview_session(
   p_assignment_id uuid,
@@ -42,7 +45,7 @@ begin
   end if;
 
   if v_assignment.session_token is null then
-    v_token := encode(extensions.gen_random_bytes(24), 'hex');
+    v_token := encode(gen_random_bytes(24), 'hex');
     update public.interview_assignments
     set session_token = v_token,
         session_token_issued_at = now()
@@ -61,7 +64,7 @@ begin
       jsonb_build_object('reason', coalesce(p_reason, 'reconnect'), 'controlled_recovery', true)
     );
   else
-    v_token := encode(extensions.gen_random_bytes(24), 'hex');
+    v_token := encode(gen_random_bytes(24), 'hex');
     v_count := v_assignment.interruption_count + 1;
     v_unusual := v_count >= 2 or coalesce(v_assignment.has_unusual_interruptions, false);
     update public.interview_assignments

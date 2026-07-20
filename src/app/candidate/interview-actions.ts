@@ -313,7 +313,12 @@ export async function createAttemptAction(input: {
   // Prefer wall-clock span; never inflate with prep/idle time or a stale client figure.
   const measuredDuration = (endedAt - startedAt) / 1000;
   const duration = Math.min(
-    Math.max(0, Number.isFinite(input.durationSeconds) ? Math.min(measuredDuration, input.durationSeconds) : measuredDuration),
+    Math.max(
+      0,
+      Number.isFinite(input.durationSeconds)
+        ? Math.min(measuredDuration, input.durationSeconds)
+        : measuredDuration,
+    ),
     question.response_seconds + 5, // small grace over the limit for encoder flush
   );
   // Allow a short encoder/UI grace under the template minimum.
@@ -651,7 +656,8 @@ export async function beginOrResumeSessionAction(
   });
   if (error) return { ok: false, error: error.message };
   const row = Array.isArray(data) ? data[0] : data;
-  if (!row?.session_token) return { ok: false, error: "Could not establish the interview session." };
+  if (!row?.session_token)
+    return { ok: false, error: "Could not establish the interview session." };
   return {
     ok: true,
     sessionToken: row.session_token as string,

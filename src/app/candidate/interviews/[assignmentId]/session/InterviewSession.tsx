@@ -372,7 +372,12 @@ function DeviceCheck({
             </Field>
             <MicLevelMeter sample={micSample} />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => void connect()} disabled={busy}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void connect()}
+                disabled={busy}
+              >
                 <RefreshCw className="h-4 w-4" aria-hidden />
                 {busy ? "Checking…" : "Retry devices"}
               </Button>
@@ -742,7 +747,16 @@ export function InterviewSession({ initialDetail }: { initialDetail: CandidateIn
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stream, question, interruptedAttempt, registeredAttempt, allowReview, applyClip, assignment.id, assignment.candidate_id],
+    [
+      stream,
+      question,
+      interruptedAttempt,
+      registeredAttempt,
+      allowReview,
+      applyClip,
+      assignment.id,
+      assignment.candidate_id,
+    ],
   );
   const beginRecordingRef = useRef(beginRecording);
   useEffect(() => {
@@ -821,7 +835,9 @@ export function InterviewSession({ initialDetail }: { initialDetail: CandidateIn
                     attempt.id === activeAttempt.id ? ("uploaded" as const) : attempt.upload_status,
                   is_selected_submission: attempt.id === activeAttempt.id,
                   uploaded_at:
-                    attempt.id === activeAttempt.id ? new Date().toISOString() : attempt.uploaded_at,
+                    attempt.id === activeAttempt.id
+                      ? new Date().toISOString()
+                      : attempt.uploaded_at,
                   file_size_bytes:
                     attempt.id === activeAttempt.id
                       ? activeClip.blob.size
@@ -1039,7 +1055,8 @@ export function InterviewSession({ initialDetail }: { initialDetail: CandidateIn
   // itself via the maxDurationSeconds passed into startRecording().
   useEffect(() => {
     if (phase !== "recording" || recordingStartedAt == null || recordingMaxSeconds == null) return;
-    const tick = () => setRecordingRemaining(remainingFromStartedAt(recordingStartedAt, recordingMaxSeconds));
+    const tick = () =>
+      setRecordingRemaining(remainingFromStartedAt(recordingStartedAt, recordingMaxSeconds));
     tick();
     const intervalId = window.setInterval(tick, 250);
     return () => window.clearInterval(intervalId);
@@ -1086,7 +1103,9 @@ export function InterviewSession({ initialDetail }: { initialDetail: CandidateIn
 
     async function restoreOrBegin() {
       const persisted = readPersistedProgress(assignment.id);
-      const restoredIndex = persisted ? questions.findIndex((q) => q.id === persisted.questionId) : -1;
+      const restoredIndex = persisted
+        ? questions.findIndex((q) => q.id === persisted.questionId)
+        : -1;
       const restoredQuestion = restoredIndex >= 0 ? questions[restoredIndex] : null;
 
       if (persisted && restoredQuestion && restoredQuestion.status !== "completed") {
@@ -1371,8 +1390,7 @@ export function InterviewSession({ initialDetail }: { initialDetail: CandidateIn
         <Alert tone="warn" title="Your last recording was interrupted">
           <span className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            The response time limit passed while you were away, so this attempt could not be
-            saved.
+            The response time limit passed while you were away, so this attempt could not be saved.
             {canRecordAgainAfterInterruption
               ? " Press Record your response below to try again."
               : " You have used all attempts for this question."}
@@ -1536,7 +1554,9 @@ export function InterviewSession({ initialDetail }: { initialDetail: CandidateIn
               <div className="grid grid-cols-2 gap-3 rounded-lg bg-surface-muted p-3 text-sm">
                 <div>
                   <p className="text-xs text-ink-subtle">Preparation</p>
-                  <p className="font-medium text-ink">{formatClock(question.preparation_seconds)}</p>
+                  <p className="font-medium text-ink">
+                    {formatClock(question.preparation_seconds)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-ink-subtle">Response limit</p>

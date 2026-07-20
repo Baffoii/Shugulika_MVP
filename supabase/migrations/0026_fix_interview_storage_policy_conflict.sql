@@ -27,7 +27,11 @@ with check (
 );
 
 -- Soften the draft helper so any remaining callers fail closed instead of
--- raising when draft tables are absent.
+-- raising when draft tables are absent. The `private` schema originates from
+-- out-of-repo draft work, so ensure it exists on clean/staging databases
+-- before (re)defining the helper.
+create schema if not exists private;
+
 create or replace function private.authorized_org_ids()
 returns setof uuid
 language sql

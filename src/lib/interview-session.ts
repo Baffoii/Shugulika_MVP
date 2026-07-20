@@ -56,13 +56,7 @@ export function isUnusualInterruption(input: {
 }
 
 export type PersistedQuestionPhase =
-  | "prompt"
-  | "preparing"
-  | "ready"
-  | "recording"
-  | "registering"
-  | "preview"
-  | "uploading";
+  "prompt" | "preparing" | "ready" | "recording" | "registering" | "preview" | "uploading";
 
 export type PersistedScreen = "device" | "questions" | "break" | "review" | "submitted";
 
@@ -226,7 +220,11 @@ export function resolveRestoredTimers(input: {
 } {
   const now = input.nowMs ?? Date.now();
   if (input.phase === "preparing") {
-    const prepRemaining = remainingFromStartedAt(input.prepStartedAt, input.preparationSeconds, now);
+    const prepRemaining = remainingFromStartedAt(
+      input.prepStartedAt,
+      input.preparationSeconds,
+      now,
+    );
     if (prepRemaining <= 0) {
       return {
         phase: "recording",
@@ -244,9 +242,7 @@ export function resolveRestoredTimers(input: {
   }
   if (input.phase === "recording" || input.phase === "ready") {
     const limit = input.recordingMaxSeconds ?? input.responseSeconds;
-    const started =
-      input.recordingStartedAt ??
-      (input.phase === "recording" ? now : null);
+    const started = input.recordingStartedAt ?? (input.phase === "recording" ? now : null);
     const recordingRemaining =
       started == null ? limit : remainingFromStartedAt(started, limit, now);
     if (recordingRemaining <= 0) {
