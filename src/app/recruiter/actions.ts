@@ -90,7 +90,9 @@ export async function advanceStageAction(formData: FormData): Promise<ActionResu
   if (!target || target.stageClass !== "candidate")
     return { ok: false, error: "Invalid target stage." };
 
-  // Gate: cannot pass Shortlisted (ordinal 6) without a recorded screening note.
+  // Gate: cannot pass Shortlisted (ordinal 6) without a screening note.
+  // Accept either an existing recruiter note or the note typed on this move form
+  // (saved as an internal recruiter note — never shown to the candidate).
   const shortlisted = stageByKey("shortlisted");
   if (shortlisted && target.ordinal > shortlisted.ordinal) {
     const { count } = await supabase
@@ -99,7 +101,24 @@ export async function advanceStageAction(formData: FormData): Promise<ActionResu
       .eq("subject_type", "application")
       .eq("subject_id", applicationId);
     if (!count || count === 0) {
-      return { ok: false, error: "Add a screening note before advancing past Shortlisted." };
+      if (!note) {
+        return {
+          ok: false,
+          error:
+            "Add an internal screening note below before advancing past Shortlisted. Candidates never see this note.",
+        };
+      }
+      const actorId = await actor();
+      if (!actorId) return { ok: false, error: "Not signed in." };
+      const { error: noteError } = await supabase.from("recruiter_notes").insert({
+        subject_type: "application",
+        subject_id: applicationId,
+        owning_org_id: app.owning_org_id,
+        author_id: actorId,
+        body: note,
+        visibility: "franchise_internal",
+      });
+      if (noteError) return { ok: false, error: noteError.message };
     }
   }
 
@@ -139,6 +158,7 @@ export async function advanceStageAction(formData: FormData): Promise<ActionResu
   await notifyCandidateStatus(app, toStage);
   revalidatePath(`/recruiter/applications/${applicationId}`);
   revalidatePath("/recruiter/pipeline");
+  revalidatePath("/candidate/notifications");
   return { ok: true };
 }
 
@@ -160,13 +180,18 @@ async function notifyCandidateStatus(app: ApplicationRow, toStage: string) {
   const roleLabel = meta ? `${meta.title} at ${meta.employer_name}` : "your application";
   const statusLabel = CANDIDATE_FACING_STATUS[toStage] ?? toStage.replace(/_/g, " ");
 
-  const title = statusLabel;
+  const title =
+    toStage === "rejected"
+      ? "Application update"
+      : toStage === "hired"
+        ? "Congratulations — hired"
+        : "Application progress update";
   const body =
     toStage === "rejected"
       ? `Your application for ${roleLabel} was not selected.`
       : toStage === "hired"
         ? `Congratulations — your application for ${roleLabel} moved to Hired.`
-        : `Your application for ${roleLabel} is now: ${statusLabel}.`;
+        : `Your application for ${roleLabel} moved to: ${statusLabel}.`;
 
   const { error } = await supabase.from("notifications").insert({
     user_id: userId,

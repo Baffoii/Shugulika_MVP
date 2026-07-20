@@ -415,6 +415,20 @@ export async function createAssignmentAction(formData: FormData): Promise<Interv
   if (!template) {
     return { ok: false, error: "Application or template not found in your organization." };
   }
+
+  const { data: completedExisting } = await context.supabase
+    .from("interview_assignments")
+    .select("id")
+    .eq("application_id", application.id)
+    .in("status", ["submitted", "reviewed"])
+    .limit(1);
+  if (completedExisting?.length) {
+    return {
+      ok: false,
+      error: "This candidate already completed a video interview for this application.",
+    };
+  }
+
   const { data: questionsData } = await context.supabase
     .from("interview_template_questions")
     .select("*")

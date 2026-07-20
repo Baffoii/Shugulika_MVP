@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getInterviewResults } from "@/lib/data/video-interviews";
 import { formatDateTime } from "@/lib/format";
 import { formatBytes, formatDuration } from "@/lib/interview-analytics";
-import { interviewStatusLabel } from "@/lib/constants";
+import { interviewReviewBadge, interviewStatusLabel } from "@/lib/constants";
 import {
   Alert,
   Badge,
@@ -47,6 +47,7 @@ export default async function InterviewResultsPage({
   );
   const canCancel = ["draft", "invited", "in_progress"].includes(assignment.status);
   const canReview = ["submitted", "reviewed"].includes(assignment.status);
+  const statusBadge = interviewReviewBadge(assignment.status);
   return (
     <div>
       <Link href="/recruiter/interviews" className="text-sm text-brand-700 hover:underline">
@@ -55,19 +56,7 @@ export default async function InterviewResultsPage({
       <PageHeader
         title={candidateName}
         description={`${job?.title ?? assignment.template_name_snapshot} · ${assignment.template_name_snapshot}`}
-        actions={
-          <Badge
-            tone={
-              assignment.status === "reviewed"
-                ? "success"
-                : assignment.status === "submitted"
-                  ? "brand"
-                  : "neutral"
-            }
-          >
-            {interviewStatusLabel(assignment.status)}
-          </Badge>
-        }
+        actions={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
       />
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

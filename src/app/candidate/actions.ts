@@ -667,10 +667,22 @@ export async function applyToJobAction(
     });
   }
 
+  // Fan-out to recruiters in the owning org (SECURITY DEFINER RPC — candidates
+  // cannot insert notifications for other users via RLS).
+  const { error: staffNotifyError } = await supabase.rpc("notify_staff_of_application", {
+    p_application_id: applicationId,
+    p_event: isResubmit ? "updated" : "created",
+  });
+  if (staffNotifyError) {
+    console.error("[notify_staff_of_application]", staffNotifyError.message);
+  }
+
   revalidatePath("/candidate/applications");
   revalidatePath("/candidate/dashboard");
   revalidatePath("/candidate/notifications");
   revalidatePath("/candidate/jobs");
+  revalidatePath("/recruiter/notifications");
+  revalidatePath("/recruiter/pipeline");
   return { ok: true };
 }
 

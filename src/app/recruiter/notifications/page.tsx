@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, Card, EmptyState, Badge } from "@/components/ui/primitives";
 import { MarkNotificationsRead } from "@/components/notifications/MarkNotificationsRead";
-import { getMyNotifications } from "@/lib/data/candidate";
+import { getMyNotifications } from "@/lib/data/recruiter";
 import { formatDateTime, titleCase } from "@/lib/format";
 import { Bell } from "lucide-react";
 
@@ -10,25 +10,25 @@ export const metadata: Metadata = { title: "Notifications" };
 
 function notificationHref(subjectType: string | null, subjectId: string | null): string | null {
   if (!subjectType || !subjectId) return null;
-  if (subjectType === "application") return "/candidate/applications";
-  if (subjectType === "interview_assignment") return `/candidate/interviews/${subjectId}`;
+  if (subjectType === "application") return `/recruiter/applications/${subjectId}`;
+  if (subjectType === "interview_assignment") return `/recruiter/interviews/${subjectId}`;
   return null;
 }
 
-export default async function NotificationsPage() {
+export default async function RecruiterNotificationsPage() {
   const notifications = await getMyNotifications();
   return (
     <div>
       <MarkNotificationsRead />
       <PageHeader
         title="Notifications"
-        description="Updates about your applications, interviews, and consent requests."
+        description="New applications and video interview submissions for your pipeline."
       />
       {notifications.length === 0 ? (
         <EmptyState
           icon={<Bell className="h-8 w-8" />}
           title="No notifications yet"
-          description="We'll let you know when something needs your attention."
+          description="You'll be notified when candidates apply or submit video interviews."
         />
       ) : (
         <Card>
@@ -39,8 +39,10 @@ export default async function NotificationsPage() {
                 <>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-ink">{n.title}</p>
-                    <Badge tone="neutral">{titleCase(n.category)}</Badge>
-                    {!n.read_at ? <Badge tone="brand">New</Badge> : null}
+                    <Badge tone={n.category === "interview" ? "brand" : "info"}>
+                      {titleCase(n.category)}
+                    </Badge>
+                    {!n.read_at ? <Badge tone="danger">New</Badge> : null}
                   </div>
                   {n.body ? <p className="mt-0.5 text-sm text-ink-muted">{n.body}</p> : null}
                   <p className="mt-1 text-xs text-ink-subtle">{formatDateTime(n.created_at)}</p>

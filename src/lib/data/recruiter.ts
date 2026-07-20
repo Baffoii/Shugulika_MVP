@@ -8,6 +8,7 @@ import type {
   CandidateDocumentRow,
   EmployerSubmissionRow,
   InterviewRow,
+  NotificationRow,
 } from "@/lib/database.types";
 
 export interface PipelineApplication extends ApplicationRow {
@@ -179,4 +180,14 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
     submissions: (submissions.data as EmployerSubmissionRow[] | null) ?? [],
     interviews: (interviews.data as InterviewRow[] | null) ?? [],
   };
+}
+
+export async function getMyNotifications(limit = 50): Promise<NotificationRow[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("notifications")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data as NotificationRow[] | null) ?? [];
 }
