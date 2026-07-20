@@ -42,8 +42,19 @@ create or replace function auth.role() returns text language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', 'anon')
 $$;
 create schema if not exists storage;
-create table if not exists storage.buckets (id text primary key, name text, public boolean default false);
-create table if not exists storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text, owner uuid);
+create table if not exists storage.buckets (
+  id text primary key, name text, public boolean default false,
+  file_size_limit bigint, allowed_mime_types text[]
+);
+create table if not exists storage.objects (
+  id uuid primary key default gen_random_uuid(), bucket_id text, name text,
+  owner uuid, metadata jsonb default '{}',
+  created_at timestamptz default now(), updated_at timestamptz default now()
+);
+alter table storage.objects enable row level security;
+grant usage on schema storage to anon, authenticated, service_role;
+grant select, insert, update, delete on storage.objects to anon, authenticated;
+grant select on storage.buckets to anon, authenticated;
 create or replace function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array($1,'/') $$;
 `;
 
@@ -221,5 +232,27 @@ export async function queryAs(
     return { rows: res.rows };
   } finally {
     await client.query("rollback");
+  }
+}
+
+/** Run and commit a mutation as an authenticated user (use sparingly in isolated fixtures). */
+export async function commitAs(
+  client: Client,
+  userId: string,
+  sql: string,
+  params: unknown[] = [],
+): Promise<{ rows: Array<Record<string, unknown>> }> {
+  await client.query("begin");
+  try {
+    await client.query("set local role authenticated");
+    await client.query("select set_config('request.jwt.claims', $1, true)", [
+      JSON.stringify({ sub: userId, role: "authenticated" }),
+    ]);
+    const res = await client.query(sql, params);
+    await client.query("commit");
+    return { rows: res.rows };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
   }
 }

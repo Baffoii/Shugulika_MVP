@@ -17,12 +17,15 @@ export function DocumentManager({
   documents,
   fixedDocType,
   embedded = false,
+  documentsLocked = false,
 }: {
   candidateId: string;
   userId: string;
   documents: CandidateDocumentRow[];
   fixedDocType?: string;
   embedded?: boolean;
+  /** When true, an active interview has locked documents — mutations are blocked. */
+  documentsLocked?: boolean;
 }) {
   const router = useRouter();
   const [selectedDocType, setSelectedDocType] = useState(fixedDocType ?? "cv");
@@ -36,6 +39,12 @@ export function DocumentManager({
 
   async function uploadFile(file: File) {
     if (busy) return;
+    if (documentsLocked) {
+      setError(
+        "Documents are locked for your active interview session and cannot be changed until the interview is submitted.",
+      );
+      return;
+    }
     setError(null);
     const cfg = DOCUMENT_TYPES.find((d) => d.key === docType);
     const extension = `.${file.name.split(".").pop()?.toLowerCase() ?? ""}`;
@@ -104,6 +113,12 @@ export function DocumentManager({
   }
 
   function setPrimary(doc: CandidateDocumentRow) {
+    if (documentsLocked) {
+      setError(
+        "Documents are locked for your active interview session and cannot be changed until the interview is submitted.",
+      );
+      return;
+    }
     start(async () => {
       const supabase = createClient();
       await supabase
@@ -117,6 +132,12 @@ export function DocumentManager({
   }
 
   function archive(doc: CandidateDocumentRow) {
+    if (documentsLocked) {
+      setError(
+        "Documents are locked for your active interview session and cannot be changed until the interview is submitted.",
+      );
+      return;
+    }
     start(async () => {
       const supabase = createClient();
       await supabase.from("candidate_documents").update({ status: "archived" }).eq("id", doc.id);
@@ -134,6 +155,13 @@ export function DocumentManager({
 
   return (
     <div className="space-y-4">
+      {documentsLocked ? (
+        <Alert tone="warn">
+          An interview session is in progress. Identity and supporting documents are locked and
+          cannot be replaced until the interview is submitted. Attempted changes are flagged for
+          recruiter review.
+        </Alert>
+      ) : null}
       {profileCvDropzone ? (
         <div>
           <label
@@ -179,7 +207,7 @@ export function DocumentManager({
               className="sr-only"
               accept={DOCUMENT_TYPES.find((d) => d.key === docType)?.accept}
               onChange={onFile}
-              disabled={busy}
+              disabled={busy || documentsLocked}
             />
           </label>
           <p className="mt-2 text-xs text-ink-subtle">
@@ -223,7 +251,7 @@ export function DocumentManager({
                 className="hidden"
                 accept={DOCUMENT_TYPES.find((d) => d.key === docType)?.accept}
                 onChange={onFile}
-                disabled={busy}
+                disabled={busy || documentsLocked}
               />
             </label>
           </div>

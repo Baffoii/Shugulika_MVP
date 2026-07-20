@@ -9,6 +9,15 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    // DB suites rebuild one shared ephemeral schema. Running test files in
+    // parallel races those resets; the suite is small enough that deterministic
+    // file-level sequencing is preferable.
+    fileParallelism: false,
+    poolOptions: {
+      threads: {
+        singleThread: true,
+      },
+    },
     // Integration/DB tests connect to a real Postgres and are opt-in (they run
     // only when DATABASE_URL is set — CI provides it, unit runs skip them).
     coverage: {

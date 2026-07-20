@@ -42,6 +42,11 @@ Then run these in order in the Supabase **SQL Editor** (or via the Supabase CLI)
 3. `supabase/migrations/0003_mvp_storage.sql` — `candidate-documents` private bucket + storage policies
 4. `supabase/migrations/0004_mvp_seed.sql` — reference data + demo orgs and **3 advertised jobs** (so the public board works immediately)
 
+Continue with every later numbered migration in filename order through `0024`. In particular,
+`0016`–`0024` add asynchronous video interview tables, RLS, the private recording bucket,
+analytics views, demo metadata, and security hardening. Migrations are additive; do not replace or
+edit already-applied production migrations.
+
 These were validated end-to-end on PostgreSQL 15 with a Supabase-compatible shim (auth/storage/roles):
 the reset + all four apply cleanly (including on top of the conflicting draft), and RLS isolation, the
 signup trigger, and confidential-employer masking were runtime-tested.
@@ -195,6 +200,60 @@ immediately, and (assigned via `job_assignments`) in each recruiter's **Jobs & o
 
 ---
 
+## 6d. Asynchronous video interviews
+
+The MVP includes a first-party, HireVue-style asynchronous video interview flow without a paid
+video, transcription, or AI provider:
+
+- Recruiters create reusable templates, configure question timers/attempts, assign a template from
+  an application, review factual response analytics, play private recordings through short-lived
+  signed URLs, add internal notes/ratings, and mark an interview reviewed.
+- Candidates review the invitation and privacy notice, give explicit consent, test camera and
+  microphone, record one timed response at a time, retry within the configured limit, recover a
+  failed upload without re-recording while the page remains open, review completion, and submit.
+- `navigator.mediaDevices.getUserMedia()` and `MediaRecorder` record at a 720p target with controlled
+  bitrate. Supabase Postgres stores metadata and progress; the private `interview-recordings` bucket
+  stores files. No permanent public recording URL is stored.
+- RLS enforces candidate ownership and franchise isolation. Employers receive no recording access
+  under the current product rules. Submitted interviews and completed questions are candidate-locked.
+- Analytics are timestamp/count calculations only. The feature does **not** perform transcription,
+  facial or emotion analysis, personality analysis, lie detection, suitability scoring, or hiring
+  recommendations.
+
+### Setup and demo
+
+1. Apply migrations through `0024_video_interviews_security_fixes.sql`.
+2. Sign in as `candidate@shugulika.test` and open `/candidate/interviews` for the seeded invitation.
+3. Sign in as `recruiter@shugulika.test` and open `/recruiter/interview-templates` or
+   `/recruiter/interviews`. The submitted demo assignment contains metadata only; playback correctly
+   reports that its intentionally absent mock file is unavailable.
+
+No new environment variables are required. The browser uses the existing publishable Supabase key;
+the application never exposes or uses a service-role key for recording/upload/playback.
+
+### Retention and notifications
+
+Each template/assignment stores `retention_days` (default 180). The HQ-only
+`purge_expired_interview_recordings()` function marks expired attempt rows for deletion; an operator
+must delete the corresponding Storage objects or connect this function to a future scheduled cleanup
+job. Invitations and submission alerts use existing in-app notifications. Transactional email can be
+added later behind the notification adapter; no communication vendor is required. The
+`interview_deadline_reminder_candidates` view exposes due assignments without repeat reminders, and
+`send_interview_deadline_reminder()` writes the existing in-app notification format for a future
+scheduler or manual staff action.
+
+### Current limitations
+
+- Recording depends on modern browser MediaRecorder support and HTTPS (localhost is accepted by
+  browsers for development). iOS/Safari codec behavior varies, so MIME type is selected at runtime.
+- An actively recording clip cannot survive refresh/tab closure. The candidate resumes from the last
+  server-completed question and must restart the interrupted attempt.
+- Multipart/resumable uploads and scheduled retention deletion are not included. A failed ordinary
+  upload is retryable while its local Blob remains in memory.
+- No transcript, AI-generated question, automated analysis, or quality inference is implemented.
+
+---
+
 ## 7. What's implemented (working, Supabase-backed)
 - **Auth**: email/password sign-up, sign-in, sign-out, password reset, email callback, session persistence
   (`@supabase/ssr`), middleware auth gate, role-aware redirects, `/unauthorized` and `/onboarding` states.
@@ -207,6 +266,9 @@ immediately, and (assigned via `job_assignments`) in each recruiter's **Jobs & o
   education, skills); document library with **Supabase Storage** upload, primary-CV selection, signed-URL view,
   archive; job apply flow with **granular, timestamped consent**; applications list with candidate-friendly
   statuses + withdraw; saved jobs; interviews; notifications; settings with **search-visibility** controls.
+- **Asynchronous video interviews**: recruiter templates/assignments, immutable question snapshots,
+  candidate device test + timed recorder + retry/upload/review flow, private Storage, signed recruiter
+  playback, deterministic analytics, internal review notes/ratings, audit events, and notifications.
 - **Recruiter portal**: dashboard/KPIs; phase-grouped **pipeline board** over the 15-stage Spine; application
   **workspace** with stage transitions enforcing **mandatory controls** (screening note before Shortlisted;
   rejection requires a reason; consent-gated Client Submission), recruiter notes with visibility scopes, stage
@@ -230,7 +292,7 @@ immediately, and (assigned via `job_assignments`) in each recruiter's **Jobs & o
   **Files are not falsely labelled as watermarked** — server-side watermarking is integration-pending.
 
 ## 9. Placeholders (clearly labelled, no fake results)
-AI video interviews · AI question generation / analysis · assessments (TestGorilla/Central Test) · AI CV parsing ·
+AI question generation / analysis · assessments (TestGorilla/Central Test) · AI CV parsing ·
 AI matching · candidate intro videos · WhatsApp (applications/notifications/chat) · SMS OTP · live payments ·
 mobile money · recurring billing · accounting sync · social/external job publishing · advanced analytics ·
 whistleblowing case management · automated document watermarking. Each has a reserved nav location and a

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PUBLIC_SIGNUP_ROLES } from "@/lib/constants";
+import { INTERVIEW_LIMITS, PUBLIC_SIGNUP_ROLES } from "@/lib/constants";
 
 export const signUpSchema = z.object({
   fullName: z.string().min(2, "Please enter your name").max(120),
@@ -103,6 +103,83 @@ export const consentSchema = z.object({
   purpose: z.string().min(1),
   covered_org_id: z.string().uuid().optional(),
   note: z.string().max(500).optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Asynchronous video interviews
+// ---------------------------------------------------------------------------
+export const interviewTemplateSchema = z.object({
+  name: z.string().min(2, "Give the template a name").max(160),
+  description: z.string().max(1000).optional().or(z.literal("")),
+  instructions: z.string().max(4000).optional().or(z.literal("")),
+  default_preparation_seconds: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(INTERVIEW_LIMITS.maxPreparationSeconds),
+  default_response_seconds: z.coerce
+    .number()
+    .int()
+    .min(INTERVIEW_LIMITS.minResponseSeconds)
+    .max(INTERVIEW_LIMITS.maxResponseSeconds),
+  default_max_attempts: z.coerce.number().int().min(1).max(INTERVIEW_LIMITS.maxAttempts),
+  retention_days: z.coerce.number().int().min(1).max(3650),
+  allow_pause_between_questions: z.boolean().default(false),
+  allow_response_review: z.boolean().default(true),
+  default_deadline_days: z.preprocess(
+    (value) => (value === undefined || value === null || value === "" ? 7 : value),
+    z.coerce
+      .number()
+      .int()
+      .min(INTERVIEW_LIMITS.minDeadlineDays)
+      .max(INTERVIEW_LIMITS.maxDeadlineDays),
+  ),
+  expiration_grace_hours: z.preprocess(
+    (value) => (value === undefined || value === null || value === "" ? 0 : value),
+    z.coerce.number().int().min(0).max(INTERVIEW_LIMITS.maxExpirationGraceHours),
+  ),
+});
+export type InterviewTemplateInput = z.infer<typeof interviewTemplateSchema>;
+
+export const interviewQuestionSchema = z.object({
+  question_text: z.string().min(1, "Enter the question").max(2000),
+  guidance: z.string().max(2000).optional().or(z.literal("")),
+  // Blank string = inherit the template default.
+  preparation_seconds: z
+    .union([
+      z.literal(""),
+      z.coerce.number().int().min(0).max(INTERVIEW_LIMITS.maxPreparationSeconds),
+    ])
+    .optional(),
+  response_seconds: z
+    .union([
+      z.literal(""),
+      z.coerce
+        .number()
+        .int()
+        .min(INTERVIEW_LIMITS.minResponseSeconds)
+        .max(INTERVIEW_LIMITS.maxResponseSeconds),
+    ])
+    .optional(),
+  max_attempts: z
+    .union([z.literal(""), z.coerce.number().int().min(1).max(INTERVIEW_LIMITS.maxAttempts)])
+    .optional(),
+  is_required: z.boolean().optional(),
+});
+export type InterviewQuestionInput = z.infer<typeof interviewQuestionSchema>;
+
+export const interviewAssignmentSchema = z.object({
+  application_id: z.string().uuid(),
+  template_id: z.string().uuid(),
+  expires_at: z.string().min(1, "Set a submission deadline"),
+  candidate_instructions: z.string().max(2000).optional().or(z.literal("")),
+});
+export type InterviewAssignmentInput = z.infer<typeof interviewAssignmentSchema>;
+
+export const interviewReviewSchema = z.object({
+  assignment_id: z.string().uuid(),
+  overall_rating: z.union([z.literal(""), z.coerce.number().int().min(1).max(5)]).optional(),
+  internal_notes: z.string().max(4000).optional().or(z.literal("")),
 });
 
 /** Normalize Zod issues to a simple field->message map for form rendering. */
