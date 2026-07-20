@@ -12,7 +12,14 @@ import {
 } from "@/components/ui/primitives";
 import { StageBadge, StatusBadge } from "@/components/StatusBadge";
 import { getApplicationDetail } from "@/lib/data/recruiter";
-import { StageControl, NoteForm, SubmissionButton, ViewCvButton } from "./Workspace";
+import {
+  StageControl,
+  NoteForm,
+  SubmissionButton,
+  VideoInterviewCard,
+  ViewCvButton,
+} from "./Workspace";
+import { getAssignmentsForApplication, listInterviewTemplates } from "@/lib/data/video-interviews";
 import { formatDate, formatDateTime, titleCase, initials } from "@/lib/format";
 import { FileText, MapPin } from "lucide-react";
 
@@ -23,7 +30,11 @@ export default async function ApplicationWorkspace({
 }: {
   params: { applicationId: string };
 }) {
-  const detail = await getApplicationDetail(params.applicationId);
+  const [detail, templates, interviewAssignments] = await Promise.all([
+    getApplicationDetail(params.applicationId),
+    listInterviewTemplates(),
+    getAssignmentsForApplication(params.applicationId),
+  ]);
   if (!detail) notFound();
   const { application, candidate, job, history, notes, documents, submissions } = detail;
   const name = `${candidate?.given_name ?? "Candidate"} ${candidate?.family_name ?? ""}`.trim();
@@ -137,6 +148,15 @@ export default async function ApplicationWorkspace({
         {/* Right: actions */}
         <div className="space-y-4">
           <StageControl applicationId={application.id} currentStage={application.current_stage} />
+
+          <VideoInterviewCard
+            applicationId={application.id}
+            templates={templates.filter(
+              (template) =>
+                template.is_active && template.organization_id === application.owning_org_id,
+            )}
+            assignments={interviewAssignments}
+          />
 
           <Card>
             <CardHeader>

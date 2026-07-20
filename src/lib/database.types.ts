@@ -488,6 +488,214 @@ export type IntegrationConnectionRow = {
   updated_at: string;
 };
 export type FeatureFlagRow = { key: string; is_enabled: boolean; notes: string | null };
+
+// ---- Asynchronous video interviews (migrations 0016–0019) -------------------
+export type InterviewAssignmentStatus =
+  "draft" | "invited" | "in_progress" | "submitted" | "reviewed" | "expired" | "cancelled";
+export type InterviewQuestionStatus = "pending" | "in_progress" | "completed";
+export type InterviewUploadStatus = "pending" | "uploading" | "uploaded" | "failed";
+export type InterviewReviewStatus = "pending" | "reviewed" | "advanced" | "not_selected";
+export type InterviewEventType =
+  | "interview_opened"
+  | "consent_given"
+  | "permissions_requested"
+  | "permissions_denied"
+  | "question_opened"
+  | "preparation_started"
+  | "recording_started"
+  | "recording_stopped"
+  | "retry_selected"
+  | "upload_started"
+  | "upload_completed"
+  | "upload_failed"
+  | "response_selected"
+  | "question_completed"
+  | "interview_submitted"
+  | "session_started"
+  | "session_heartbeat"
+  | "session_interrupted"
+  | "session_resumed"
+  | "visibility_hidden"
+  | "visibility_visible"
+  | "page_unload_warned"
+  | "connection_lost"
+  | "connection_restored"
+  | "break_started"
+  | "break_ended"
+  | "document_change_attempted"
+  | "document_snapshot_locked";
+
+export type InterviewDocumentSnapshotItem = {
+  document_id: string;
+  doc_type: string;
+  title: string | null;
+  bucket_id: string;
+  object_path: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  is_primary: boolean;
+  status: string;
+  created_at: string;
+};
+
+export type InterviewTemplateRow = {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  default_preparation_seconds: number;
+  default_response_seconds: number;
+  default_max_attempts: number;
+  retention_days: number;
+  allow_pause_between_questions: boolean;
+  allow_response_review: boolean;
+  default_deadline_days: number;
+  expiration_grace_hours: number;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type InterviewTemplateQuestionRow = {
+  id: string;
+  template_id: string;
+  question_text: string;
+  guidance: string | null;
+  display_order: number;
+  preparation_seconds: number | null;
+  response_seconds: number | null;
+  max_attempts: number | null;
+  is_required: boolean;
+  created_at: string;
+  updated_at: string;
+};
+export type InterviewAssignmentRow = {
+  id: string;
+  template_id: string;
+  candidate_id: string;
+  application_id: string;
+  job_order_id: string;
+  organization_id: string;
+  assigned_by: string | null;
+  status: InterviewAssignmentStatus;
+  invited_at: string | null;
+  started_at: string | null;
+  submitted_at: string | null;
+  expires_at: string | null;
+  cancelled_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  candidate_instructions: string | null;
+  template_name_snapshot: string;
+  template_instructions_snapshot: string | null;
+  consented_at: string | null;
+  privacy_notice_version: string | null;
+  instructions_version: string | null;
+  retention_days: number;
+  allow_pause_between_questions: boolean;
+  allow_response_review: boolean;
+  expiration_grace_hours: number;
+  session_token: string | null;
+  session_token_issued_at: string | null;
+  interruption_count: number;
+  has_unusual_interruptions: boolean;
+  documents_locked_at: string | null;
+  document_snapshot: InterviewDocumentSnapshotItem[] | Json;
+  created_at: string;
+  updated_at: string;
+};
+export type InterviewAssignmentQuestionRow = {
+  id: string;
+  assignment_id: string;
+  source_template_question_id: string | null;
+  question_text_snapshot: string;
+  question_description_snapshot: string | null;
+  display_order: number;
+  preparation_seconds: number;
+  response_seconds: number;
+  max_attempts: number;
+  is_required: boolean;
+  status: InterviewQuestionStatus;
+  started_at: string | null;
+  completed_at: string | null;
+};
+export type InterviewResponseAttemptRow = {
+  id: string;
+  assignment_question_id: string;
+  assignment_id: string;
+  candidate_id: string;
+  attempt_number: number;
+  storage_bucket: string;
+  /** Private storage path (never a public URL). */
+  storage_path: string;
+  mime_type: string | null;
+  file_size_bytes: number | null;
+  duration_seconds: number | null;
+  preparation_time_used_seconds: number | null;
+  recording_started_at: string | null;
+  recording_ended_at: string | null;
+  uploaded_at: string | null;
+  upload_status: InterviewUploadStatus;
+  is_selected_submission: boolean;
+  discarded_at: string | null;
+  client_metadata: Json;
+  created_at: string;
+};
+export type InterviewReviewRow = {
+  id: string;
+  assignment_id: string;
+  recruiter_id: string;
+  overall_rating: number | null;
+  review_status: InterviewReviewStatus;
+  internal_notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type InterviewEventRow = {
+  id: number;
+  assignment_id: string;
+  assignment_question_id: string | null;
+  actor_user_id: string | null;
+  event_type: InterviewEventType;
+  event_timestamp: string;
+  metadata: Json;
+};
+export type InterviewQuestionAnalyticsRow = {
+  assignment_question_id: string;
+  assignment_id: string;
+  display_order: number;
+  is_required: boolean;
+  status: InterviewQuestionStatus;
+  attempts_used: number;
+  retry_count: number;
+  selected_attempt_number: number | null;
+  selected_response_duration_seconds: number | null;
+  average_attempt_duration_seconds: number | null;
+  total_attempt_duration_seconds: number;
+  preparation_time_used_seconds: number | null;
+  time_from_question_opened_to_completion_seconds: number | null;
+  upload_failure_count: number;
+};
+export type InterviewAssignmentAnalyticsRow = {
+  assignment_id: string;
+  status: InterviewAssignmentStatus;
+  required_question_count: number;
+  total_question_count: number;
+  completed_question_count: number;
+  completion_percentage: number;
+  started_at: string | null;
+  submitted_at: string | null;
+  total_elapsed_seconds: number | null;
+  total_attempts: number;
+  total_retries: number;
+  average_final_response_duration_seconds: number | null;
+  average_attempts_per_question: number | null;
+  total_final_recording_duration_seconds: number;
+  total_recording_duration_seconds: number;
+  upload_failure_count: number;
+  total_uploaded_bytes: number;
+};
 export type PublicJobRow = {
   job_id: string;
   public_slug: string | null;
@@ -561,9 +769,31 @@ export type Database = {
       audit_logs: Tbl<AuditLogRow>;
       integration_connections: Tbl<IntegrationConnectionRow>;
       feature_flags: Tbl<FeatureFlagRow>;
+      interview_templates: Tbl<InterviewTemplateRow>;
+      interview_template_questions: Tbl<InterviewTemplateQuestionRow>;
+      interview_assignments: Tbl<InterviewAssignmentRow>;
+      interview_assignment_questions: Tbl<InterviewAssignmentQuestionRow>;
+      interview_response_attempts: Tbl<InterviewResponseAttemptRow>;
+      interview_reviews: Tbl<InterviewReviewRow>;
+      interview_events: Tbl<InterviewEventRow>;
     };
     Views: {
       public_jobs: { Row: PublicJobRow; Relationships: [] };
+      interview_question_analytics: { Row: InterviewQuestionAnalyticsRow; Relationships: [] };
+      interview_assignment_analytics: {
+        Row: InterviewAssignmentAnalyticsRow;
+        Relationships: [];
+      };
+      interview_deadline_reminder_candidates: {
+        Row: {
+          assignment_id: string;
+          organization_id: string;
+          expires_at: string;
+          candidate_user_id: string;
+          job_title: string;
+        };
+        Relationships: [];
+      };
       apply_targets: {
         Row: {
           job_order_id: string;
@@ -574,7 +804,49 @@ export type Database = {
         Relationships: [];
       };
     };
-    Functions: Record<string, never>;
+    Functions: {
+      submit_interview: {
+        Args: { p_assignment_id: string };
+        Returns: InterviewAssignmentRow;
+      };
+      send_interview_deadline_reminder: {
+        Args: { p_assignment_id: string };
+        Returns: boolean;
+      };
+      begin_or_resume_interview_session: {
+        Args: {
+          p_assignment_id: string;
+          p_previous_token?: string | null;
+          p_reason?: string | null;
+        };
+        Returns: {
+          session_token: string;
+          resumed: boolean;
+          interruption_count: number;
+          has_unusual_interruptions: boolean;
+          allow_pause_between_questions: boolean;
+          allow_response_review: boolean;
+        }[];
+      };
+      record_interview_session_event: {
+        Args: {
+          p_assignment_id: string;
+          p_session_token: string;
+          p_event_type: string;
+          p_assignment_question_id?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: boolean;
+      };
+      lock_interview_document_snapshot: {
+        Args: { p_assignment_id: string };
+        Returns: Json;
+      };
+      candidate_has_active_interview: {
+        Args: { p_candidate_id: string };
+        Returns: boolean;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

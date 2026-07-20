@@ -7,6 +7,10 @@ import {
   candidateProfileSchema,
   certificationSchema,
   languageSchema,
+  interviewAssignmentSchema,
+  interviewQuestionSchema,
+  interviewReviewSchema,
+  interviewTemplateSchema,
   fieldErrors,
 } from "@/lib/validation";
 
@@ -184,5 +188,131 @@ describe("fieldErrors normalizes Zod issues for forms", () => {
     ]);
     expect(fieldErrors(nested)["experience.0.title"]).toBe("Required");
     expect(fieldErrors(new z.ZodError([]))).toEqual({});
+  });
+});
+
+describe("asynchronous interview validation", () => {
+  const uuid = "00000000-0000-4000-8000-000000000001";
+
+  it("accepts template limits and coerces numeric form values", () => {
+    const result = interviewTemplateSchema.safeParse({
+      name: "First-round screen",
+      description: "",
+      instructions: "",
+      default_preparation_seconds: "600",
+      default_response_seconds: "300",
+      default_max_attempts: "5",
+      retention_days: "180",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.default_response_seconds).toBe(300);
+      expect(result.data.default_max_attempts).toBe(5);
+      expect(result.data.allow_response_review).toBe(true);
+      expect(result.data.default_deadline_days).toBe(7);
+      expect(result.data.expiration_grace_hours).toBe(0);
+    }
+  });
+
+  it("accepts explicit session and deadline settings", () => {
+    const result = interviewTemplateSchema.safeParse({
+      name: "Screen",
+      default_preparation_seconds: 30,
+      default_response_seconds: 120,
+      default_max_attempts: 2,
+      retention_days: 180,
+      allow_pause_between_questions: true,
+      allow_response_review: false,
+      default_deadline_days: 14,
+      expiration_grace_hours: 24,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.allow_pause_between_questions).toBe(true);
+      expect(result.data.allow_response_review).toBe(false);
+      expect(result.data.default_deadline_days).toBe(14);
+    }
+  });
+
+  it.each([
+    ["name", "x"],
+    ["default_preparation_seconds", 601],
+    ["default_response_seconds", 9],
+    ["default_response_seconds", 301],
+    ["default_max_attempts", 0],
+    ["default_max_attempts", 6],
+    ["retention_days", 0],
+    ["default_deadline_days", 0],
+    ["expiration_grace_hours", 100],
+  ])("rejects an invalid template %s", (field, value) => {
+    expect(
+      interviewTemplateSchema.safeParse({
+        name: "Screen",
+        default_preparation_seconds: 30,
+        default_response_seconds: 120,
+        default_max_attempts: 2,
+        retention_days: 180,
+        default_deadline_days: 7,
+        expiration_grace_hours: 0,
+        [field]: value,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("allows blank question overrides to inherit template defaults", () => {
+    expect(
+      interviewQuestionSchema.safeParse({
+        question_text: "Tell us about yourself",
+        preparation_seconds: "",
+        response_seconds: "",
+        max_attempts: "",
+        is_required: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("enforces question text and override limits", () => {
+    expect(interviewQuestionSchema.safeParse({ question_text: "" }).success).toBe(false);
+    expect(
+      interviewQuestionSchema.safeParse({
+        question_text: "Question",
+        response_seconds: 9,
+        max_attempts: 6,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires UUID assignment links and a deadline", () => {
+    expect(
+      interviewAssignmentSchema.safeParse({
+        application_id: uuid,
+        template_id: uuid,
+        expires_at: "2026-08-01T12:00:00Z",
+        candidate_instructions: "",
+      }).success,
+    ).toBe(true);
+    expect(
+      interviewAssignmentSchema.safeParse({
+        application_id: "not-a-uuid",
+        template_id: uuid,
+        expires_at: "",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts a blank review rating but rejects ratings outside one to five", () => {
+    expect(
+      interviewReviewSchema.safeParse({
+        assignment_id: uuid,
+        overall_rating: "",
+        internal_notes: "",
+      }).success,
+    ).toBe(true);
+    expect(
+      interviewReviewSchema.safeParse({ assignment_id: uuid, overall_rating: 0 }).success,
+    ).toBe(false);
+    expect(
+      interviewReviewSchema.safeParse({ assignment_id: uuid, overall_rating: "5" }).success,
+    ).toBe(true);
   });
 });

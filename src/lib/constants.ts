@@ -317,8 +317,60 @@ export const INTERVIEW_TYPES = [
   { key: "employer", label: "Employer interview" },
   { key: "live_video", label: "Live video" },
   { key: "in_person", label: "In person" },
-  { key: "ai_async", label: "AI asynchronous video" },
+  // Legacy database key retained for compatibility; the first-party MVP does
+  // not perform AI analysis or automated judgment.
+  { key: "ai_async", label: "Asynchronous video" },
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Asynchronous video interviews (migrations 0016–0019)
+// ---------------------------------------------------------------------------
+export const INTERVIEW_ASSIGNMENT_STATUSES = [
+  { key: "draft", label: "Draft" },
+  { key: "invited", label: "Invited" },
+  { key: "in_progress", label: "In progress" },
+  { key: "submitted", label: "Submitted" },
+  { key: "reviewed", label: "Reviewed" },
+  { key: "expired", label: "Expired" },
+  { key: "cancelled", label: "Cancelled" },
+] as const;
+export type InterviewAssignmentStatusKey = (typeof INTERVIEW_ASSIGNMENT_STATUSES)[number]["key"];
+
+export function interviewStatusLabel(key: string): string {
+  return INTERVIEW_ASSIGNMENT_STATUSES.find((s) => s.key === key)?.label ?? key;
+}
+
+/** MVP cost controls — mirrored by database CHECK constraints and triggers. */
+export const INTERVIEW_LIMITS = {
+  /** Hard cap on questions per template (DB trigger enforces too). */
+  maxQuestions: 15,
+  /** Max preparation countdown per question (seconds). */
+  maxPreparationSeconds: 600,
+  /** Min/max recording length per response (seconds). */
+  minResponseSeconds: 10,
+  maxResponseSeconds: 300,
+  /** Attempt cap per question (1 = no retries). */
+  maxAttempts: 5,
+  /** Suggested assignment deadline window (days). */
+  minDeadlineDays: 1,
+  maxDeadlineDays: 90,
+  /** Extra hours after deadline for an already-started session to finish. */
+  maxExpirationGraceHours: 72,
+  /** Max upload size per recording (bytes) — also enforced by the bucket. */
+  maxUploadBytes: 104_857_600,
+  /** Recording target: 720p, modest bitrate to control storage cost. */
+  videoWidth: 1280,
+  videoHeight: 720,
+  videoBitsPerSecond: 1_200_000,
+  audioBitsPerSecond: 96_000,
+} as const;
+
+/** localStorage key prefix for continuous interview session tokens. */
+export const INTERVIEW_SESSION_TOKEN_KEY = "shugulika.interview.session";
+
+/** Version stamps stored with each consent record. */
+export const INTERVIEW_PRIVACY_NOTICE_VERSION = "2026-07-v1";
+export const INTERVIEW_INSTRUCTIONS_VERSION = "2026-07-v1";
 
 export const INVOICE_STATUSES = [
   "draft",
@@ -425,11 +477,11 @@ export interface PlaceholderFeature {
 export const PLACEHOLDER_FEATURES: PlaceholderFeature[] = [
   {
     key: "ai_video_interview",
-    title: "AI video interviews",
+    title: "AI interview analysis",
     description:
-      "Asynchronous video interviews with structured questions and human-reviewed scoring.",
-    status: "integration_pending",
-    portals: ["recruiter", "candidate", "employer"],
+      "Automated analysis of recorded video interviews. First-party async recording is live under Interviews; AI scoring is not enabled.",
+    status: "not_enabled",
+    portals: ["recruiter", "employer", "hq"],
   },
   {
     key: "ai_questions",

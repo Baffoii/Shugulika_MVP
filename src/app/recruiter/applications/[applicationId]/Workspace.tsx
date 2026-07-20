@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { advanceStageAction, addNoteAction, createSubmissionAction } from "@/app/recruiter/actions";
+import { cancelAssignmentAction, createAssignmentAction } from "@/app/recruiter/interview-actions";
 import {
   Card,
   CardHeader,
@@ -12,9 +13,17 @@ import {
   Alert,
   Badge,
 } from "@/components/ui/primitives";
-import { Field, Select, Textarea } from "@/components/ui/form";
-import { CANDIDATE_STAGES, REJECTION_REASONS, stageByKey } from "@/lib/constants";
+import { Field, Input, Select, Textarea } from "@/components/ui/form";
+import {
+  CANDIDATE_STAGES,
+  REJECTION_REASONS,
+  interviewStatusLabel,
+  stageByKey,
+} from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
+import type { InterviewAssignmentRow, InterviewTemplateRow } from "@/lib/database.types";
+import { formatDate } from "@/lib/format";
+import Link from "next/link";
 
 export function StageControl({
   applicationId,
@@ -240,5 +249,186 @@ export function ViewCvButton({
     <Button variant="ghost" size="sm" onClick={open} disabled={pending}>
       {pending ? "Opening…" : label}
     </Button>
+  );
+}
+
+export function VideoInterviewCard({
+  applicationId,
+  templates,
+  assignments,
+}: {
+  applicationId: string;
+  templates: InterviewTemplateRow[];
+  assignments: InterviewAssignmentRow[];
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const defaultDeadline = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+  const [deadlineDaysByTemplate] = useState(() =>
+    Object.fromEntries(templates.map((t) => [t.id, t.default_deadline_days ?? 7])),
+  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const suggestedDeadline = useMemo(() => {
+    const days = deadlineDaysByTemplate[selectedTemplateId] ?? 7;
+    return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+  }, [deadlineDaysByTemplate, selectedTemplateId]);
+
+  function run(action: () => Promise<{ ok: boolean; error?: string }>, done?: () => void) {
+    setError(null);
+    start(async () => {
+      const result = await action();
+      if (!result.ok) return setError(result.error ?? "Could not update interview.");
+      done?.();
+      router.refresh();
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Video interview</CardTitle>
+        {!open && templates.length ? (
+          <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(true)}>
+            Assign
+          </Button>
+        ) : null}
+      </CardHeader>
+      <CardBody className="space-y-3">
+        {error ? <Alert tone="danger">{error}</Alert> : null}
+        {assignments.length ? (
+          <ul className="space-y-2">
+            {assignments.map((assignment) => (
+              <li key={assignment.id} className="rounded-lg border border-surface-border p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <Link
+                      href={`/recruiter/interviews/${assignment.id}`}
+                      className="text-sm font-medium text-brand-700 hover:underline"
+                    >
+                      {assignment.template_name_snapshot}
+                    </Link>
+                    <p className="text-xs text-ink-subtle">
+                      Due {formatDate(assignment.expires_at)}
+                    </p>
+                  </div>
+                  <Badge
+                    tone={
+                      assignment.status === "submitted"
+                        ? "brand"
+                        : assignment.status === "reviewed"
+                          ? "success"
+                          : "neutral"
+                    }
+                  >
+                    {interviewStatusLabel(assignment.status)}
+                  </Badge>
+                </div>
+                {["draft", "invited", "in_progress"].includes(assignment.status) ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2"
+                    disabled={pending}
+                    onClick={() => {
+                      if (!window.confirm("Cancel this interview invitation?")) return;
+                      const data = new FormData();
+                      data.set("assignment_id", assignment.id);
+                      run(() => cancelAssignmentAction(data));
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : !open ? (
+          <p className="text-sm text-ink-subtle">No video interview assigned.</p>
+        ) : null}
+        {!templates.length ? (
+          <p className="text-sm text-ink-muted">
+            Create an active{" "}
+            <Link href="/recruiter/interview-templates" className="text-brand-700 hover:underline">
+              interview template
+            </Link>{" "}
+            first.
+          </p>
+        ) : null}
+        {open ? (
+          <form
+            className="space-y-3 rounded-lg bg-surface-muted p-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              data.set("application_id", applicationId);
+              run(
+                () => createAssignmentAction(data),
+                () => setOpen(false),
+              );
+            }}
+          >
+            <Field label="Template" htmlFor="interview-template" required>
+              <Select
+                id="interview-template"
+                name="template_id"
+                required
+                defaultValue=""
+                onChange={(event) => setSelectedTemplateId(event.target.value)}
+              >
+                <option value="" disabled>
+                  Select a template…
+                </option>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} ({template.default_deadline_days ?? 7}d deadline)
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Submission deadline"
+              htmlFor="interview-deadline"
+              hint="End of the selected local day. Suggested from the template deadline setting."
+              required
+            >
+              <Input
+                id="interview-deadline"
+                name="expires_at"
+                type="date"
+                min={new Date().toISOString().slice(0, 10)}
+                key={suggestedDeadline}
+                defaultValue={selectedTemplateId ? suggestedDeadline : defaultDeadline}
+                required
+              />
+            </Field>
+            <Field label="Additional instructions" htmlFor="interview-instructions">
+              <Textarea
+                id="interview-instructions"
+                name="candidate_instructions"
+                className="min-h-[64px]"
+                maxLength={2000}
+              />
+            </Field>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" disabled={pending}>
+                {pending ? "Assigning…" : "Send invitation"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={pending}
+                onClick={() => setOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </form>
+        ) : null}
+      </CardBody>
+    </Card>
   );
 }
