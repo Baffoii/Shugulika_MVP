@@ -30,7 +30,8 @@ describe("pipeline stages", () => {
   });
 
   it("maps internal stages to simpler candidate-facing statuses", () => {
-    expect(CANDIDATE_FACING_STATUS["cv_screening"]).toBe("Under review");
+    expect(CANDIDATE_FACING_STATUS["cv_screening"]).toBe("Resume under review");
+    expect(CANDIDATE_FACING_STATUS["ai_interview_screening"]).toBe("Video interview stage");
     expect(CANDIDATE_FACING_STATUS["client_submission"]).toBe("Submitted to employer");
     expect(CANDIDATE_FACING_STATUS["hired"]).toBe("Hired");
   });

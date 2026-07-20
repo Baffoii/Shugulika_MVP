@@ -846,6 +846,10 @@ export type Database = {
         Args: { p_candidate_id: string };
         Returns: boolean;
       };
+      notify_staff_of_application: {
+        Args: { p_application_id: string; p_event?: string };
+        Returns: number;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

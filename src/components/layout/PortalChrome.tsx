@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Logo } from "@/components/brand/Logo";
+import { NotificationToasts } from "@/components/notifications/NotificationToasts";
 import { PORTAL_META } from "@/components/layout/nav-config";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -172,7 +173,7 @@ export function PortalChrome({
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
               >
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-2xs font-semibold text-white">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 text-2xs font-semibold text-white">
                   {initials(userName || email)}
                 </span>
                 <span className="hidden max-w-[140px] truncate text-ink sm:block">
@@ -229,6 +230,9 @@ export function PortalChrome({
 
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
+      {(portal === "candidate" || portal === "recruiter") && !hideSidebar ? (
+        <NotificationToasts portal={portal} />
+      ) : null}
     </div>
   );
 }

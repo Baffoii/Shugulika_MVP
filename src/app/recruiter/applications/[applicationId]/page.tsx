@@ -20,6 +20,7 @@ import {
   ViewCvButton,
 } from "./Workspace";
 import { getAssignmentsForApplication, listInterviewTemplates } from "@/lib/data/video-interviews";
+import { hasInterviewSpotlight } from "@/lib/constants";
 import { formatDate, formatDateTime, titleCase, initials } from "@/lib/format";
 import { FileText, MapPin } from "lucide-react";
 
@@ -38,6 +39,10 @@ export default async function ApplicationWorkspace({
   if (!detail) notFound();
   const { application, candidate, job, history, notes, documents, submissions } = detail;
   const name = `${candidate?.given_name ?? "Candidate"} ${candidate?.family_name ?? ""}`.trim();
+  const orgTemplates = templates.filter(
+    (template) => template.is_active && template.organization_id === application.owning_org_id,
+  );
+  const interviewSpotlight = hasInterviewSpotlight(interviewAssignments);
 
   return (
     <div>
@@ -57,6 +62,15 @@ export default async function ApplicationWorkspace({
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Left: candidate + documents + history */}
         <div className="space-y-4 lg:col-span-2">
+          {interviewSpotlight ? (
+            <VideoInterviewCard
+              applicationId={application.id}
+              templates={orgTemplates}
+              assignments={interviewAssignments}
+              layout="spotlight"
+            />
+          ) : null}
+
           <Card>
             <CardHeader>
               <CardTitle>Candidate</CardTitle>
@@ -149,14 +163,14 @@ export default async function ApplicationWorkspace({
         <div className="space-y-4">
           <StageControl applicationId={application.id} currentStage={application.current_stage} />
 
-          <VideoInterviewCard
-            applicationId={application.id}
-            templates={templates.filter(
-              (template) =>
-                template.is_active && template.organization_id === application.owning_org_id,
-            )}
-            assignments={interviewAssignments}
-          />
+          {!interviewSpotlight ? (
+            <VideoInterviewCard
+              applicationId={application.id}
+              templates={orgTemplates}
+              assignments={interviewAssignments}
+              layout="sidebar"
+            />
+          ) : null}
 
           <Card>
             <CardHeader>

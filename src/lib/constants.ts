@@ -197,15 +197,15 @@ export function stageByKey(key: string): PipelineStage | undefined {
 /** Simplified, candidate-facing status mapping (less internally technical). */
 export const CANDIDATE_FACING_STATUS: Record<string, string> = {
   applied_sourced: "Application received",
-  cv_screening: "Under review",
-  longlisted: "Under review",
-  ai_interview_screening: "Screening in progress",
-  shortlisted: "Screening in progress",
-  screening_interview: "Screening in progress",
-  testing: "Screening in progress",
-  reference_checks: "Screening in progress",
+  cv_screening: "Resume under review",
+  longlisted: "Moved forward after resume review",
+  ai_interview_screening: "Video interview stage",
+  shortlisted: "Shortlisted",
+  screening_interview: "Live screening interview",
+  testing: "Skills assessment",
+  reference_checks: "Reference checks",
   client_submission: "Submitted to employer",
-  client_interview: "Interview process",
+  client_interview: "Employer interview",
   offer: "Offer stage",
   hired: "Hired",
   rejected: "Not selected",
@@ -338,6 +338,26 @@ export type InterviewAssignmentStatusKey = (typeof INTERVIEW_ASSIGNMENT_STATUSES
 
 export function interviewStatusLabel(key: string): string {
   return INTERVIEW_ASSIGNMENT_STATUSES.find((s) => s.key === key)?.label ?? key;
+}
+
+/** Recruiter-facing review badge for submitted vs reviewed interviews. */
+export function interviewReviewBadge(status: string): {
+  label: string;
+  tone: "danger" | "success" | "brand" | "neutral" | "warn" | "info";
+} {
+  if (status === "submitted") return { label: "Not reviewed", tone: "danger" };
+  if (status === "reviewed") return { label: "Reviewed", tone: "success" };
+  if (status === "in_progress") return { label: "In progress", tone: "warn" };
+  if (status === "invited") return { label: "Invited", tone: "info" };
+  if (status === "expired" || status === "cancelled") {
+    return { label: interviewStatusLabel(status), tone: "neutral" };
+  }
+  return { label: interviewStatusLabel(status), tone: "neutral" };
+}
+
+/** Submitted/reviewed interviews should lead the application workspace main column. */
+export function hasInterviewSpotlight(assignments: ReadonlyArray<{ status: string }>): boolean {
+  return assignments.some((a) => a.status === "submitted" || a.status === "reviewed");
 }
 
 /** MVP cost controls — mirrored by database CHECK constraints and triggers. */

@@ -17,13 +17,14 @@ import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import {
   CANDIDATE_STAGES,
   REJECTION_REASONS,
-  interviewStatusLabel,
+  interviewReviewBadge,
   stageByKey,
 } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { InterviewAssignmentRow, InterviewTemplateRow } from "@/lib/database.types";
 import { formatDate } from "@/lib/format";
 import Link from "next/link";
+import { PlayCircle } from "lucide-react";
 
 export function StageControl({
   applicationId,
@@ -39,11 +40,25 @@ export function StageControl({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const isReject = toStage === "rejected";
+  const targetStage = toStage ? stageByKey(toStage) : undefined;
+  const shortlisted = stageByKey("shortlisted");
+  const needsScreeningNote = Boolean(
+    targetStage &&
+    shortlisted &&
+    targetStage.stageClass === "candidate" &&
+    targetStage.ordinal > shortlisted.ordinal,
+  );
 
   function submit() {
     setError(null);
     if (!toStage) {
       setError("Choose a stage.");
+      return;
+    }
+    if (needsScreeningNote && !note.trim()) {
+      setError(
+        "Add an internal screening note before advancing past Shortlisted. Candidates never see this note.",
+      );
       return;
     }
     const fd = new FormData();
@@ -95,12 +110,17 @@ export function StageControl({
             </Select>
           </Field>
         ) : null}
-        <Field label="Note (optional)" htmlFor="stage-note">
+        <Field
+          label={needsScreeningNote ? "Internal screening note" : "Internal note (optional)"}
+          htmlFor="stage-note"
+          hint="Never shown to the candidate. Used for recruiter/franchise records only."
+          required={needsScreeningNote}
+        >
           <Textarea
             id="stage-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Add context for this change…"
+            placeholder="Add internal context for this change…"
             className="min-h-[64px]"
           />
         </Field>
@@ -113,9 +133,11 @@ export function StageControl({
           >
             {pending ? "Saving…" : isReject ? "Reject" : "Move forward"}
           </Button>
-          <p className="text-xs text-ink-subtle">
-            A screening note is required before advancing past Shortlisted.
-          </p>
+          {needsScreeningNote ? (
+            <p className="text-xs text-ink-subtle">
+              Required to advance past Shortlisted — candidates never see this.
+            </p>
+          ) : null}
         </div>
       </CardBody>
     </Card>
@@ -256,10 +278,13 @@ export function VideoInterviewCard({
   applicationId,
   templates,
   assignments,
+  layout = "sidebar",
 }: {
   applicationId: string;
   templates: InterviewTemplateRow[];
   assignments: InterviewAssignmentRow[];
+  /** Spotlight = main column, larger review affordance for submitted responses. */
+  layout?: "sidebar" | "spotlight";
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -274,6 +299,17 @@ export function VideoInterviewCard({
     const days = deadlineDaysByTemplate[selectedTemplateId] ?? 7;
     return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
   }, [deadlineDaysByTemplate, selectedTemplateId]);
+  const spotlight = layout === "spotlight";
+  const awaitingReview = assignments.filter((a) => a.status === "submitted");
+  const alreadyCompleted = assignments.some(
+    (a) => a.status === "submitted" || a.status === "reviewed",
+  );
+  const canAssign = templates.length > 0 && !alreadyCompleted;
+  const sortedAssignments = useMemo(() => {
+    const rank = (status: string) =>
+      status === "submitted" ? 0 : status === "reviewed" ? 1 : status === "in_progress" ? 2 : 3;
+    return [...assignments].sort((a, b) => rank(a.status) - rank(b.status));
+  }, [assignments]);
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>, done?: () => void) {
     setError(null);
@@ -286,10 +322,23 @@ export function VideoInterviewCard({
   }
 
   return (
-    <Card>
+    <Card className={spotlight ? "border-brand-200 shadow-sm" : undefined}>
       <CardHeader>
-        <CardTitle>Video interview</CardTitle>
-        {!open && templates.length ? (
+        <div>
+          <CardTitle>Video interview</CardTitle>
+          {spotlight && awaitingReview.length > 0 ? (
+            <p className="mt-0.5 text-sm text-ink-muted">
+              {awaitingReview.length === 1
+                ? "New responses are ready for review."
+                : `${awaitingReview.length} interviews awaiting review.`}
+            </p>
+          ) : alreadyCompleted ? (
+            <p className="mt-0.5 text-sm text-ink-muted">
+              This candidate has already completed their video interview for this application.
+            </p>
+          ) : null}
+        </div>
+        {!open && canAssign ? (
           <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(true)}>
             Assign
           </Button>
@@ -297,53 +346,82 @@ export function VideoInterviewCard({
       </CardHeader>
       <CardBody className="space-y-3">
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        {assignments.length ? (
-          <ul className="space-y-2">
-            {assignments.map((assignment) => (
-              <li key={assignment.id} className="rounded-lg border border-surface-border p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <Link
-                      href={`/recruiter/interviews/${assignment.id}`}
-                      className="text-sm font-medium text-brand-700 hover:underline"
-                    >
-                      {assignment.template_name_snapshot}
-                    </Link>
-                    <p className="text-xs text-ink-subtle">
-                      Due {formatDate(assignment.expires_at)}
-                    </p>
+        {sortedAssignments.length ? (
+          <ul className={spotlight ? "space-y-3" : "space-y-2"}>
+            {sortedAssignments.map((assignment) => {
+              const badge = interviewReviewBadge(assignment.status);
+              const canPlay = assignment.status === "submitted" || assignment.status === "reviewed";
+              return (
+                <li
+                  key={assignment.id}
+                  className={
+                    spotlight
+                      ? "rounded-xl border border-surface-border bg-surface-muted/40 p-4"
+                      : "rounded-lg border border-surface-border p-3"
+                  }
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={
+                          spotlight
+                            ? "text-base font-semibold text-ink"
+                            : "text-sm font-medium text-ink"
+                        }
+                      >
+                        {assignment.template_name_snapshot}
+                      </p>
+                      <p className="text-xs text-ink-subtle">
+                        {assignment.submitted_at
+                          ? `Submitted ${formatDate(assignment.submitted_at)}`
+                          : `Due ${formatDate(assignment.expires_at)}`}
+                      </p>
+                    </div>
+                    <Badge tone={badge.tone}>{badge.label}</Badge>
                   </div>
-                  <Badge
-                    tone={
-                      assignment.status === "submitted"
-                        ? "brand"
-                        : assignment.status === "reviewed"
-                          ? "success"
-                          : "neutral"
-                    }
-                  >
-                    {interviewStatusLabel(assignment.status)}
-                  </Badge>
-                </div>
-                {["draft", "invited", "in_progress"].includes(assignment.status) ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="mt-2"
-                    disabled={pending}
-                    onClick={() => {
-                      if (!window.confirm("Cancel this interview invitation?")) return;
-                      const data = new FormData();
-                      data.set("assignment_id", assignment.id);
-                      run(() => cancelAssignmentAction(data));
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                ) : null}
-              </li>
-            ))}
+                  <div className={`flex flex-wrap gap-2 ${spotlight ? "mt-3" : "mt-2"}`}>
+                    {canPlay ? (
+                      <Link
+                        href={`/recruiter/interviews/${assignment.id}`}
+                        className={
+                          spotlight
+                            ? "inline-flex items-center gap-2 rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+                            : "inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:underline"
+                        }
+                      >
+                        <PlayCircle className={spotlight ? "h-4 w-4" : "h-3.5 w-3.5"} aria-hidden />
+                        {assignment.status === "submitted"
+                          ? "Review recordings"
+                          : "View recordings"}
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/recruiter/interviews/${assignment.id}`}
+                        className="text-sm font-medium text-brand-700 hover:underline"
+                      >
+                        Open interview
+                      </Link>
+                    )}
+                    {["draft", "invited", "in_progress"].includes(assignment.status) ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => {
+                          if (!window.confirm("Cancel this interview invitation?")) return;
+                          const data = new FormData();
+                          data.set("assignment_id", assignment.id);
+                          run(() => cancelAssignmentAction(data));
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : !open ? (
           <p className="text-sm text-ink-subtle">No video interview assigned.</p>
@@ -357,7 +435,7 @@ export function VideoInterviewCard({
             first.
           </p>
         ) : null}
-        {open ? (
+        {open && canAssign ? (
           <form
             className="space-y-3 rounded-lg bg-surface-muted p-3"
             onSubmit={(event) => {
