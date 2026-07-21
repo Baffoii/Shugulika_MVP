@@ -53,8 +53,44 @@ export type MembershipRow = {
   organization_id: string | null;
   role: string;
   country_code: string | null;
+  /** Present for recruiter memberships: generic | head | junior */
+  recruiter_level: "generic" | "head" | "junior" | null;
   status: string;
   created_at: string;
+};
+
+export type JobRoleRow = {
+  id: string;
+  label: string;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+};
+
+export type RecruiterRoleAssignmentRow = {
+  id: string;
+  recruiter_id: string;
+  recruiter_organization_id: string | null;
+  job_role_id: string;
+  assigned_by: string | null;
+  assigned_region_code: string | null;
+  status: "active" | "inactive" | "archived";
+  created_at: string;
+  updated_at: string;
+};
+
+export type RecruiterKpiTargetRow = {
+  id: string;
+  recruiter_level: "generic" | "head" | "junior";
+  organization_id: string | null;
+  target_time_to_fill_days: number;
+  target_placement_rate_pct: number;
+  target_apps_reviewed_per_week: number;
+  target_offer_to_hire_ratio_pct: number;
+  min_aptitude_test_score: number | null;
+  created_at: string;
+  updated_at: string;
 };
 export type CandidateProfileRow = {
   id: string;
@@ -223,6 +259,8 @@ export type JobOrderRow = {
   target_start_date: string | null;
   closed_reason: string | null;
   created_by: string | null;
+  /** Controlled vocabulary from job_roles.id */
+  job_role: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -267,6 +305,9 @@ export type ApplicationRow = {
   next_action: string | null;
   next_action_due: string | null;
   withdrawn_at: string | null;
+  rejected_from_stage: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -731,6 +772,9 @@ export type Database = {
       profiles: Tbl<ProfileRow>;
       organizations: Tbl<OrganizationRow>;
       memberships: Tbl<MembershipRow>;
+      job_roles: Tbl<JobRoleRow>;
+      recruiter_role_assignments: Tbl<RecruiterRoleAssignmentRow>;
+      recruiter_kpi_targets: Tbl<RecruiterKpiTargetRow>;
       candidate_profiles: Tbl<CandidateProfileRow>;
       candidate_experiences: Tbl<CandidateExperienceRow>;
       candidate_education: Tbl<CandidateEducationRow>;
@@ -849,6 +893,15 @@ export type Database = {
       notify_staff_of_application: {
         Args: { p_application_id: string; p_event?: string };
         Returns: number;
+      };
+      notify_candidate_of_application_status: {
+        Args: {
+          p_application_id: string;
+          p_title: string;
+          p_body: string;
+          p_category?: string;
+        };
+        Returns: string;
       };
     };
     Enums: Record<string, never>;

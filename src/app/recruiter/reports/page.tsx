@@ -1,11 +1,17 @@
-import { SectionStub } from "@/components/SectionStub";
+import { redirect } from "next/navigation";
+
 export const metadata = { title: "Reports" };
-export default function Page() {
-  return (
-    <SectionStub
-      title="Reports & KPIs"
-      description="Recruiter activity, efficiency, conversion, and outcomes."
-      note="KPIs are computed from the same stage history the dashboard uses. Detailed reporting views are a later-phase feature."
-    />
-  );
+
+/** Reports stub replaced by the KPI dashboard. */
+export default function RecruiterReportsRedirect({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>> | Record<
+    string,
+    string | string[] | undefined
+  >;
+}) {
+  // Preserve query string if any
+  void searchParams;
+  redirect("/recruiter/kpis");
 }

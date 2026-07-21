@@ -17,7 +17,9 @@ export const metadata: Metadata = { title: "Recruiter dashboard" };
 export default async function RecruiterDashboard() {
   const [metrics, pipeline] = await Promise.all([getRecruiterMetrics(), getPipeline()]);
   const needsAction = pipeline
-    .filter((a) => ["applied_sourced", "cv_screening"].includes(a.current_stage))
+    .filter((a) =>
+      ["cv_review", "test_review", "interview_review"].includes(a.current_stage),
+    )
     .slice(0, 8);
 
   return (

@@ -141,7 +141,7 @@ d("Row-Level Security & tenant isolation", () => {
         client,
         ids.candidate2,
         `insert into public.applications (candidate_id, job_order_id, owning_org_id, recruitment_path, current_stage)
-         values ($1, $2, $3, 'B', 'applied_sourced')`,
+         values ($1, $2, $3, 'B', 'cv_review')`,
         [c1Profile, ids.jobOrderA, ids.franchiseA],
       ),
     ).rejects.toThrow();

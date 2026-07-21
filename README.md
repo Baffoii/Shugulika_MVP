@@ -200,7 +200,58 @@ immediately, and (assigned via `job_assignments`) in each recruiter's **Jobs & o
 
 ---
 
-## 6d. Asynchronous video interviews
+## 6d. Simplified recruitment pipeline
+
+Candidates move **forward only** through a shorter screening flow:
+
+**Apply → CV Review → Testing → Test Review / Grading → Interview Screening → Interview Review →
+(optional) Reference Checks → Client Submission → Offer → Hired**
+
+- New applications start in **CV Review** (not a separate “Applied” stage).
+- After Testing or Interview Screening, recruiters mark the step complete and the candidate
+  auto-advances to the matching review stage.
+- From Testing onward, recruiters can skip ahead to **Client Submission** when ready.
+- **Reject** is permanent; the stage they were rejected from is stored for reporting.
+- **Client Submission** automatically creates a masked employer CV pack (no separate consent step —
+  applying / staying active is enough). Withdrawal removes employer visibility.
+- Each stage move writes history + audit and notifies the candidate (via a secure RPC so the
+  notification cannot silently fail under RLS).
+
+Legacy stage keys remain in the database for history only; they are not offered as move targets.
+
+---
+
+## 6e. Fake employer logins (migration `0030`)
+
+Every demo employer that paid Shugulika for headhunting has a real `employer_user` login. Jobs stay
+linked via `job_orders.employer_org_id`. Seeded **Candidate CV packs** are the end of the pipeline
+(what the employer sees after Client Submission).
+
+Shared password for all rows below: **`12345678`** → `/employer/dashboard`.
+
+| Company                     | Email                         | Contact        | Seeded CVs |
+|-----------------------------|-------------------------------|----------------|------------|
+| Bahari Financial Group      | `employer@shugulika.test`     | Amina Juma     | 2          |
+| Serengeti Logistics         | `serengeti@shugulika.test`    | Joseph Mkapa   | 2          |
+| Kilimanjaro Tech Labs       | `kilimanjaro@shugulika.test`  | Grace Kimaro   | 1          |
+| Uhuru Health Clinic         | `uhuru@shugulika.test`        | Halima Said    | 1          |
+| Zanzibar Coastal Resorts    | `zanzibar@shugulika.test`     | Omar Hassan    | 1          |
+| Tembo Manufacturing Ltd     | `tembo@shugulika.test`        | Peter Mwanga   | 1          |
+
+How to try it:
+
+1. Sign in as `employer@shugulika.test` (or any row above).
+2. Open **Your roles** for that company’s jobs, and **Candidate CVs** for masked packs.
+3. From the recruiter portal, move a live application to **Client Submission** — a new pack appears
+   automatically for that employer.
+
+Employers only see their own org. They can shortlist / request interview / reject with reason.
+
+> ⚠️ Same weak MVP password (`12345678`). Change or delete these accounts before any production deployment.
+
+---
+
+## 6f. Asynchronous video interviews
 
 The MVP includes a first-party, HireVue-style asynchronous video interview flow without a paid
 video, transcription, or AI provider:
@@ -269,14 +320,16 @@ scheduler or manual staff action.
 - **Asynchronous video interviews**: recruiter templates/assignments, immutable question snapshots,
   candidate device test + timed recorder + retry/upload/review flow, private Storage, signed recruiter
   playback, deterministic analytics, internal review notes/ratings, audit events, and notifications.
-- **Recruiter portal**: dashboard/KPIs; phase-grouped **pipeline board** over the 15-stage Spine; application
-  **workspace** with stage transitions enforcing **mandatory controls** (screening note before Shortlisted;
-  rejection requires a reason; consent-gated Client Submission), recruiter notes with visibility scopes, stage
-  history timeline, and masked, consent-gated **employer submission** creation. Every change writes stage history
-  + audit + a candidate notification.
+- **Recruiter portal**: dashboard/KPIs; phase-grouped **pipeline board** over the simplified candidate
+  flow (CV Review → Testing → Test Review → Interview Screening → Interview Review → optional Reference
+  Checks → Client Submission → Offer → Hired); application workspace with forward-only stage moves,
+  automatic Test Review / Interview Review transitions, permanent rejection that records the stage
+  rejected from, recruiter notes, stage history, and automatic employer CV pack creation on Client
+  Submission. Every change writes stage history + audit + a candidate notification.
 - **Employer portal**: dashboard; **masked** submission review (identity/contact hidden); decision workflow
   (shortlist / request interview / reject-with-reason) with audit; employer comments. Employers only ever see
-  candidates submitted to them (enforced by RLS).
+  candidates submitted to them (enforced by RLS). Client Submission from the recruiter portal creates that pack
+  automatically while the application is active.
 - **Franchise & HQ**: metrics dashboards (RLS-scoped), franchise/employer/job/placement/invoice lists, **audit log**
   viewer (append-only, HQ-only).
 - **Cross-cutting**: notifications, activity events, append-only audit log, integration placeholders.
@@ -314,8 +367,8 @@ whistleblowing case management · automated document watermarking. Each has a re
   loading real candidate data.
 
 ## 12. Tests
-`vitest` unit tests cover portal-access rules, home routing, **privileged-role restriction**, the 15-stage
-model (Advertised/Invoiced/Closed are not candidate stages), gate metadata, and form validation
+`vitest` unit tests cover portal-access rules, home routing, **privileged-role restriction**, the simplified
+candidate pipeline (forward-only moves, entry stage, terminal rejection), gate metadata, and form validation
 (rejection-requires-reason, sign-up role restriction). Run `npm run test`.
 
 ## Testing & CI/CD

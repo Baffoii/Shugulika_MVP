@@ -22,11 +22,11 @@ export default async function EmployerDashboard() {
     <div>
       <PageHeader
         title="Employer dashboard"
-        description="Your jobs and the candidates submitted to you. You only ever see candidates authorized for your organization."
+        description="Shugulika runs the recruiting pipeline for you. Review the roles you engaged us on and the candidate CVs we send once they clear screening and consent."
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Active jobs" value={metrics.activeJobs} tone="brand" />
-        <StatCard label="Candidates submitted" value={metrics.submissions} tone="info" />
+        <StatCard label="Active roles" value={metrics.activeJobs} tone="brand" />
+        <StatCard label="CVs submitted" value={metrics.submissions} tone="info" />
         <StatCard label="Interviews" value={metrics.interviews} tone="neutral" />
         <StatCard label="Offers" value={metrics.offers} tone="success" />
       </div>
@@ -34,16 +34,16 @@ export default async function EmployerDashboard() {
       <div className="mt-6">
         <Card>
           <CardHeader>
-            <CardTitle>Your job orders</CardTitle>
+            <CardTitle>Your roles with Shugulika</CardTitle>
             <Link href="/employer/job-orders" className="text-sm text-brand-700 hover:underline">
-              Manage
+              View all
             </Link>
           </CardHeader>
           {jobs.length === 0 ? (
             <div className="p-5">
               <EmptyState
-                title="No job orders yet"
-                description="Submit a job order to start receiving candidates."
+                title="No roles yet"
+                description="When your franchise opens a headhunting search for you, the role appears here."
               />
             </div>
           ) : (

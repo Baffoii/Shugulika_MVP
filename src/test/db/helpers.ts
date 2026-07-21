@@ -184,7 +184,7 @@ export async function setupDb(client: Client): Promise<SeedIds> {
   );
   await client.query(
     `insert into public.applications (id, candidate_id, job_order_id, owning_org_id, recruitment_path, current_stage, assigned_recruiter_id)
-       values ($1,$2,$3,$4,'B','applied_sourced',$5)`,
+       values ($1,$2,$3,$4,'B','cv_review',$5)`,
     [applicationC1, cand1Profile, jobOrderA, franchiseA, recA],
   );
   await client.query(

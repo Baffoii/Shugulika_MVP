@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { stageByKey, CANDIDATE_FACING_STATUS, REJECTION_REASONS } from "@/lib/constants";
+import { stageByKey, CANDIDATE_FACING_STATUS, REJECTION_REASONS, allowedNextStages } from "@/lib/constants";
 import type { ApplicationRow, CandidateProfileRow } from "@/lib/database.types";
 
 export interface ActionResult {
   ok: boolean;
   error?: string;
+  /** Stage/note succeeded, but a side effect (e.g. candidate notify) failed. */
+  warning?: string;
 }
 
 async function actor(): Promise<string | null> {
@@ -42,11 +44,100 @@ async function writeAudit(
   });
 }
 
-/** Advance/reject an application with mandatory controls:
- *  - a rejection requires a reason;
- *  - cannot pass Shortlisted without a recorded screening note. */
-export async function advanceStageAction(formData: FormData): Promise<ActionResult> {
+function revalidateApplicationPaths(applicationId: string) {
+  revalidatePath(`/recruiter/applications/${applicationId}`);
+  revalidatePath("/recruiter/pipeline");
+  revalidatePath("/candidate/notifications");
+  revalidatePath("/employer/submissions");
+}
+
+/** Shared stage transition with forward-only + rejection permanence rules. */
+async function moveApplicationToStage(
+  app: ApplicationRow,
+  toStage: string,
+  opts: {
+    note?: string;
+    source?: string;
+    allowAuto?: boolean;
+  } = {},
+): Promise<ActionResult> {
   const supabase = createClient();
+  const note = opts.note?.trim() ?? "";
+  const source = opts.source ?? "recruiter";
+
+  if (app.withdrawn_at) {
+    return {
+      ok: false,
+      error: "This application was withdrawn by the candidate and cannot be advanced.",
+    };
+  }
+  if (app.current_stage === "rejected") {
+    return {
+      ok: false,
+      error: "This candidate was rejected and cannot be moved to another stage.",
+    };
+  }
+
+  const target = stageByKey(toStage);
+  if (!target || target.stageClass !== "candidate" || target.legacy) {
+    return { ok: false, error: "Invalid target stage." };
+  }
+
+  const current = stageByKey(app.current_stage);
+  if (current && !opts.allowAuto && target.ordinal <= current.ordinal) {
+    return {
+      ok: false,
+      error: "Candidates can only move forward. Going back to an earlier stage is not allowed.",
+    };
+  }
+
+  if (!opts.allowAuto) {
+    const allowed = allowedNextStages(app.current_stage).map((s) => s.key);
+    if (!allowed.includes(toStage)) {
+      return {
+        ok: false,
+        error: `Cannot move from ${current?.label ?? app.current_stage} to ${target.label}.`,
+      };
+    }
+  }
+
+  if (toStage === "client_submission") {
+    const submission = await ensureEmployerSubmission(app, note);
+    if (!submission.ok) return submission;
+  }
+
+  const { error } = await supabase
+    .from("applications")
+    .update({ current_stage: toStage })
+    .eq("id", app.id);
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("application_stage_history").insert({
+    application_id: app.id,
+    from_stage: app.current_stage,
+    to_stage: toStage,
+    actor_id: await actor(),
+    actor_role: "recruiter",
+    note: note || null,
+    source,
+  });
+  await writeAudit(
+    "application.stage_changed",
+    app.id,
+    app.owning_org_id,
+    { stage: app.current_stage },
+    { stage: toStage },
+  );
+  const notify = await notifyCandidateStatus(app, toStage);
+  revalidateApplicationPaths(app.id);
+  return notify.ok ? { ok: true } : { ok: true, warning: notify.error };
+}
+
+/** Advance/reject an application:
+ *  - forward-only stage moves;
+ *  - rejection is permanent and records the stage where it happened;
+ *  - Client Submission auto-creates the employer-visible CV pack. */
+export async function advanceStageAction(formData: FormData): Promise<ActionResult> {
   const applicationId = String(formData.get("application_id") ?? "");
   const toStage = String(formData.get("to_stage") ?? "");
   const note = String(formData.get("note") ?? "").trim();
@@ -56,125 +147,108 @@ export async function advanceStageAction(formData: FormData): Promise<ActionResu
   if (!app) return { ok: false, error: "Application not found or not authorized." };
 
   if (toStage === "rejected") {
-    if (!rejectionReason) return { ok: false, error: "A rejection reason is required." };
-    const reasonLabel =
-      REJECTION_REASONS.find((r) => r.key === rejectionReason)?.label ?? rejectionReason;
-    await supabase
-      .from("applications")
-      .update({ current_stage: "applied_sourced", is_on_hold: false })
-      .eq("id", applicationId);
-    await supabase.from("application_stage_history").insert({
-      application_id: applicationId,
-      from_stage: app.current_stage,
-      to_stage: "rejected",
-      actor_id: await actor(),
-      actor_role: "recruiter",
-      reason: reasonLabel,
-      note: note || null,
-      source: "recruiter",
-    });
-    await writeAudit(
-      "application.rejected",
-      applicationId,
-      app.owning_org_id,
-      { stage: app.current_stage },
-      { stage: "rejected", reason: reasonLabel },
-    );
-    await notifyCandidateStatus(app, "rejected");
-    revalidatePath(`/recruiter/applications/${applicationId}`);
-    revalidatePath("/recruiter/pipeline");
-    return { ok: true };
+    return rejectApplication(app, rejectionReason, note);
   }
 
-  const target = stageByKey(toStage);
-  if (!target || target.stageClass !== "candidate")
-    return { ok: false, error: "Invalid target stage." };
+  return moveApplicationToStage(app, toStage, { note, source: "recruiter" });
+}
 
-  // Gate: cannot pass Shortlisted (ordinal 6) without a screening note.
-  // Accept either an existing recruiter note or the note typed on this move form
-  // (saved as an internal recruiter note — never shown to the candidate).
-  const shortlisted = stageByKey("shortlisted");
-  if (shortlisted && target.ordinal > shortlisted.ordinal) {
-    const { count } = await supabase
-      .from("recruiter_notes")
-      .select("id", { count: "exact", head: true })
-      .eq("subject_type", "application")
-      .eq("subject_id", applicationId);
-    if (!count || count === 0) {
-      if (!note) {
-        return {
-          ok: false,
-          error:
-            "Add an internal screening note below before advancing past Shortlisted. Candidates never see this note.",
-        };
-      }
-      const actorId = await actor();
-      if (!actorId) return { ok: false, error: "Not signed in." };
-      const { error: noteError } = await supabase.from("recruiter_notes").insert({
-        subject_type: "application",
-        subject_id: applicationId,
-        owning_org_id: app.owning_org_id,
-        author_id: actorId,
-        body: note,
-        visibility: "franchise_internal",
-      });
-      if (noteError) return { ok: false, error: noteError.message };
-    }
+/** Testing submitted → automatically enter Test Review / Grading. */
+export async function markTestingSubmittedAction(formData: FormData): Promise<ActionResult> {
+  const applicationId = String(formData.get("application_id") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+  const app = await loadApplication(applicationId);
+  if (!app) return { ok: false, error: "Application not found or not authorized." };
+  if (app.current_stage !== "testing") {
+    return { ok: false, error: "Testing can only be marked submitted while the candidate is in Testing." };
   }
+  return moveApplicationToStage(app, "test_review", {
+    note,
+    source: "testing_submitted",
+    allowAuto: true,
+  });
+}
 
-  // Gate: entering Client Submission requires an active submission record.
-  if (toStage === "client_submission") {
-    const { count } = await supabase
-      .from("employer_submissions")
-      .select("id", { count: "exact", head: true })
-      .eq("application_id", applicationId)
-      .in("status", ["submitted", "viewed", "shortlisted", "interview_requested", "offered"]);
-    if (!count || count === 0) {
-      return {
-        ok: false,
-        error:
-          "Create an employer submission (with candidate consent) before moving to Client Submission.",
-      };
-    }
+/** Interview Screening completed → automatically enter Interview Review. */
+export async function markInterviewCompleteAction(formData: FormData): Promise<ActionResult> {
+  const applicationId = String(formData.get("application_id") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+  const app = await loadApplication(applicationId);
+  if (!app) return { ok: false, error: "Application not found or not authorized." };
+  if (app.current_stage !== "interview_screening") {
+    return {
+      ok: false,
+      error: "Interview can only be marked complete while the candidate is in Interview Screening.",
+    };
   }
+  return moveApplicationToStage(app, "interview_review", {
+    note,
+    source: "interview_completed",
+    allowAuto: true,
+  });
+}
 
-  await supabase.from("applications").update({ current_stage: toStage }).eq("id", applicationId);
+async function rejectApplication(
+  app: ApplicationRow,
+  rejectionReason: string,
+  note: string,
+): Promise<ActionResult> {
+  const supabase = createClient();
+  if (app.current_stage === "rejected") {
+    return { ok: false, error: "This candidate is already rejected." };
+  }
+  if (app.withdrawn_at) {
+    return { ok: false, error: "This application was withdrawn and cannot be rejected." };
+  }
+  if (!rejectionReason) return { ok: false, error: "A rejection reason is required." };
+
+  const reasonLabel =
+    REJECTION_REASONS.find((r) => r.key === rejectionReason)?.label ?? rejectionReason;
+  const rejectedAt = new Date().toISOString();
+  const rejectedFrom = app.current_stage;
+
+  const { error } = await supabase
+    .from("applications")
+    .update({
+      current_stage: "rejected",
+      is_on_hold: false,
+      rejected_from_stage: rejectedFrom,
+      rejected_at: rejectedAt,
+      rejection_reason: reasonLabel,
+    })
+    .eq("id", app.id);
+  if (error) return { ok: false, error: error.message };
+
   await supabase.from("application_stage_history").insert({
-    application_id: applicationId,
-    from_stage: app.current_stage,
-    to_stage: toStage,
+    application_id: app.id,
+    from_stage: rejectedFrom,
+    to_stage: "rejected",
     actor_id: await actor(),
     actor_role: "recruiter",
-    note: note || null,
+    reason: reasonLabel,
+    note: note || `Rejected during ${stageByKey(rejectedFrom)?.label ?? rejectedFrom}`,
     source: "recruiter",
   });
   await writeAudit(
-    "application.stage_changed",
-    applicationId,
+    "application.rejected",
+    app.id,
     app.owning_org_id,
-    { stage: app.current_stage },
-    { stage: toStage },
+    { stage: rejectedFrom },
+    { stage: "rejected", reason: reasonLabel, rejected_from_stage: rejectedFrom },
   );
-  await notifyCandidateStatus(app, toStage);
-  revalidatePath(`/recruiter/applications/${applicationId}`);
-  revalidatePath("/recruiter/pipeline");
-  revalidatePath("/candidate/notifications");
-  return { ok: true };
+  const notify = await notifyCandidateStatus(app, "rejected");
+  revalidateApplicationPaths(app.id);
+  return notify.ok ? { ok: true } : { ok: true, warning: notify.error };
 }
 
 /** Notify the candidate whenever their application status changes. */
-async function notifyCandidateStatus(app: ApplicationRow, toStage: string) {
+async function notifyCandidateStatus(app: ApplicationRow, toStage: string): Promise<ActionResult> {
   const supabase = createClient();
-  const [{ data: cand }, { data: jobMeta }] = await Promise.all([
-    supabase.from("candidate_profiles").select("user_id").eq("id", app.candidate_id).maybeSingle(),
-    supabase
-      .from("public_jobs")
-      .select("title, employer_name")
-      .eq("job_order_id", app.job_order_id)
-      .maybeSingle(),
-  ]);
-  const userId = (cand as { user_id: string } | null)?.user_id;
-  if (!userId) return;
+  const { data: jobMeta } = await supabase
+    .from("public_jobs")
+    .select("title, employer_name")
+    .eq("job_order_id", app.job_order_id)
+    .maybeSingle();
 
   const meta = jobMeta as { title: string; employer_name: string } | null;
   const roleLabel = meta ? `${meta.title} at ${meta.employer_name}` : "your application";
@@ -193,35 +267,18 @@ async function notifyCandidateStatus(app: ApplicationRow, toStage: string) {
         ? `Congratulations — your application for ${roleLabel} moved to Hired.`
         : `Your application for ${roleLabel} moved to: ${statusLabel}.`;
 
-  const { error } = await supabase.from("notifications").insert({
-    user_id: userId,
-    category: "application_status",
-    title,
-    body,
-    subject_type: "application",
-    subject_id: app.id,
+  // Security-definer RPC — does not depend on notif_staff_insert RLS.
+  const { error } = await supabase.rpc("notify_candidate_of_application_status", {
+    p_application_id: app.id,
+    p_title: title,
+    p_body: body,
+    p_category: "application_status",
   });
-  if (error) console.error("[notifyCandidateStatus]", error.message);
-}
-
-async function notifyCandidate(app: ApplicationRow, title: string, body: string) {
-  const supabase = createClient();
-  const { data: cand } = await supabase
-    .from("candidate_profiles")
-    .select("user_id")
-    .eq("id", app.candidate_id)
-    .maybeSingle();
-  const userId = (cand as { user_id: string } | null)?.user_id;
-  if (!userId) return;
-  const { error } = await supabase.from("notifications").insert({
-    user_id: userId,
-    category: "application_status",
-    title,
-    body,
-    subject_type: "application",
-    subject_id: app.id,
-  });
-  if (error) console.error("[notifyCandidate]", error.message);
+  if (error) {
+    console.error("[notifyCandidateStatus]", error.message);
+    return { ok: false, error: `Stage updated, but the candidate was not notified: ${error.message}` };
+  }
+  return { ok: true };
 }
 
 export async function addNoteAction(formData: FormData): Promise<ActionResult> {
@@ -247,15 +304,26 @@ export async function addNoteAction(formData: FormData): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Create a masked, consent-gated employer submission. If employer-specific
- *  consent isn't on file, the submission is created in 'consent_pending' and the
- *  candidate is asked to approve — it cannot be viewed by the employer yet. */
-export async function createSubmissionAction(formData: FormData): Promise<ActionResult> {
+/** Ensure the employer has one active, masked candidate pack for this
+ * application. This is called automatically when the recruiter advances the
+ * candidate to Client Submission. */
+async function ensureEmployerSubmission(
+  app: ApplicationRow,
+  summary: string,
+): Promise<ActionResult> {
   const supabase = createClient();
-  const applicationId = String(formData.get("application_id") ?? "");
-  const summary = String(formData.get("summary") ?? "").trim();
-  const app = await loadApplication(applicationId);
-  if (!app) return { ok: false, error: "Not authorized." };
+  if (app.withdrawn_at) {
+    return { ok: false, error: "The candidate withdrew this application." };
+  }
+
+  const { data: existing } = await supabase
+    .from("employer_submissions")
+    .select("id,status")
+    .eq("application_id", app.id)
+    .in("status", ["submitted", "viewed", "shortlisted", "interview_requested", "offered"])
+    .limit(1)
+    .maybeSingle();
+  if (existing) return { ok: true };
 
   const { data: jo } = await supabase
     .from("job_orders")
@@ -272,18 +340,8 @@ export async function createSubmissionAction(formData: FormData): Promise<Action
     .maybeSingle();
   const c = cand as CandidateProfileRow | null;
 
-  // Look for an employer-specific consent covering this employer.
-  const { data: consent } = await supabase
-    .from("candidate_consents")
-    .select("id")
-    .eq("candidate_id", app.candidate_id)
-    .eq("purpose", "employer_submission")
-    .eq("covered_org_id", employerOrgId)
-    .is("withdrawn_at", null)
-    .maybeSingle();
-  const hasConsent = !!consent;
-
-  // Masked snapshot — approved fields only, no name/contact until permitted.
+  // Employer-facing snapshot. Contact and unrelated candidate data remain
+  // protected; withdrawal is enforced at application level before this point.
   const disclosed = {
     headline: c?.headline ?? null,
     location: [c?.city, c?.country_code].filter(Boolean).join(", "),
@@ -294,44 +352,31 @@ export async function createSubmissionAction(formData: FormData): Promise<Action
   const { data: sub, error } = await supabase
     .from("employer_submissions")
     .insert({
-      application_id: applicationId,
+      application_id: app.id,
       candidate_id: app.candidate_id,
       job_order_id: app.job_order_id,
       employer_org_id: employerOrgId,
       submitting_org_id: app.owning_org_id,
       submitting_recruiter_id: await actor(),
-      consent_id: (consent as { id: string } | null)?.id ?? null,
-      status: hasConsent ? "submitted" : "consent_pending",
+      consent_id: null,
+      status: "submitted",
       is_masked: true,
-      summary: summary || null,
+      summary: summary.trim() || null,
       disclosed_profile: disclosed as never,
       disclosed_fields: ["headline", "location", "summary", "availability"],
       cv_document_id: app.cv_document_id,
-      submitted_at: hasConsent ? new Date().toISOString() : null,
+      submitted_at: new Date().toISOString(),
     })
     .select("id")
     .single();
   if (error) return { ok: false, error: error.message };
 
-  await supabase
-    .from("applications")
-    .update({ consent_status: hasConsent ? "granted" : "pending" })
-    .eq("id", applicationId);
+  await supabase.from("applications").update({ consent_status: "granted" }).eq("id", app.id);
   await writeAudit("submission.created", (sub as { id: string }).id, app.owning_org_id, null, {
     employer: employerOrgId,
-    consent: hasConsent,
+    consent_basis: "active_application",
   });
 
-  // Ask the candidate for employer-specific consent when it's missing.
-  if (!hasConsent) {
-    await notifyCandidate(
-      app,
-      "Action required: approve client submission",
-      "A recruiter would like to submit your profile to an employer. Please review and approve.",
-    );
-  }
-
-  revalidatePath(`/recruiter/applications/${applicationId}`);
   revalidatePath("/recruiter/clients");
   return { ok: true };
 }

@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Plug,
   ScrollText,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 
@@ -59,14 +60,14 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
     { href: "/recruiter/interviews", label: "Interviews", icon: CalendarClock },
     { href: "/recruiter/interview-templates", label: "Interview templates", icon: ClipboardList },
     { href: "/recruiter/notifications", label: "Notifications", icon: Bell },
-    { href: "/recruiter/reports", label: "Reports", icon: BarChart3 },
+    { href: "/recruiter/kpis", label: "KPIs", icon: BarChart3 },
     { href: "/recruiter/settings", label: "Settings", icon: Settings },
   ],
   employer: [
     { href: "/employer/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/employer/company", label: "Company", icon: Building2 },
-    { href: "/employer/job-orders", label: "Job orders", icon: Briefcase },
-    { href: "/employer/submissions", label: "Submissions", icon: Send },
+    { href: "/employer/job-orders", label: "Your roles", icon: Briefcase },
+    { href: "/employer/submissions", label: "Candidate CVs", icon: Send },
     { href: "/employer/offers", label: "Offers", icon: ClipboardList },
     { href: "/employer/billing", label: "Billing", icon: BadgeDollarSign },
     { href: "/employer/settings", label: "Settings", icon: Settings },
@@ -86,6 +87,7 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
     { href: "/hq/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/hq/countries", label: "Countries", icon: Globe2 },
     { href: "/hq/franchises", label: "Franchises", icon: Store },
+    { href: "/hq/recruiters", label: "Recruiters", icon: Target },
     { href: "/hq/users", label: "Users & roles", icon: Users },
     { href: "/hq/jobs", label: "Jobs", icon: Briefcase },
     { href: "/hq/candidates", label: "Candidates", icon: User },

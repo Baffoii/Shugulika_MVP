@@ -12,15 +12,8 @@ import {
 } from "@/components/ui/primitives";
 import { StageBadge, StatusBadge } from "@/components/StatusBadge";
 import { getApplicationDetail } from "@/lib/data/recruiter";
-import {
-  StageControl,
-  NoteForm,
-  SubmissionButton,
-  VideoInterviewCard,
-  ViewCvButton,
-} from "./Workspace";
-import { getAssignmentsForApplication, listInterviewTemplates } from "@/lib/data/video-interviews";
-import { hasInterviewSpotlight } from "@/lib/constants";
+import { StageControl, NoteForm, ViewCvButton } from "./Workspace";
+import { stageByKey } from "@/lib/constants";
 import { formatDate, formatDateTime, titleCase, initials } from "@/lib/format";
 import { FileText, MapPin } from "lucide-react";
 
@@ -31,18 +24,10 @@ export default async function ApplicationWorkspace({
 }: {
   params: { applicationId: string };
 }) {
-  const [detail, templates, interviewAssignments] = await Promise.all([
-    getApplicationDetail(params.applicationId),
-    listInterviewTemplates(),
-    getAssignmentsForApplication(params.applicationId),
-  ]);
+  const detail = await getApplicationDetail(params.applicationId);
   if (!detail) notFound();
   const { application, candidate, job, history, notes, documents, submissions } = detail;
   const name = `${candidate?.given_name ?? "Candidate"} ${candidate?.family_name ?? ""}`.trim();
-  const orgTemplates = templates.filter(
-    (template) => template.is_active && template.organization_id === application.owning_org_id,
-  );
-  const interviewSpotlight = hasInterviewSpotlight(interviewAssignments);
 
   return (
     <div>
@@ -60,17 +45,7 @@ export default async function ApplicationWorkspace({
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* Left: candidate + documents + history */}
         <div className="space-y-4 lg:col-span-2">
-          {interviewSpotlight ? (
-            <VideoInterviewCard
-              applicationId={application.id}
-              templates={orgTemplates}
-              assignments={interviewAssignments}
-              layout="spotlight"
-            />
-          ) : null}
-
           <Card>
             <CardHeader>
               <CardTitle>Candidate</CardTitle>
@@ -143,8 +118,8 @@ export default async function ApplicationWorkspace({
                         aria-hidden
                       />
                       <p className="text-sm text-ink">
-                        {h.from_stage ? `${titleCase(h.from_stage)} → ` : ""}
-                        <span className="font-medium">{titleCase(h.to_stage)}</span>
+                        {h.from_stage ? `${stageLabel(h.from_stage)} → ` : ""}
+                        <span className="font-medium">{stageLabel(h.to_stage)}</span>
                       </p>
                       <p className="text-xs text-ink-subtle">
                         {formatDateTime(h.created_at)} · {titleCase(h.actor_role ?? h.source)}
@@ -159,18 +134,13 @@ export default async function ApplicationWorkspace({
           </Card>
         </div>
 
-        {/* Right: actions */}
         <div className="space-y-4">
-          <StageControl applicationId={application.id} currentStage={application.current_stage} />
-
-          {!interviewSpotlight ? (
-            <VideoInterviewCard
-              applicationId={application.id}
-              templates={orgTemplates}
-              assignments={interviewAssignments}
-              layout="sidebar"
-            />
-          ) : null}
+          <StageControl
+            applicationId={application.id}
+            currentStage={application.current_stage}
+            rejectedFromStage={application.rejected_from_stage}
+            rejectionReason={application.rejection_reason}
+          />
 
           <Card>
             <CardHeader>
@@ -179,8 +149,8 @@ export default async function ApplicationWorkspace({
             <CardBody className="space-y-3">
               {submissions.length === 0 ? (
                 <EmptyState
-                  title="Not submitted"
-                  description="Prepare a masked, consent-gated submission for the employer."
+                  title="Not sent yet"
+                  description="Moving the candidate to Client Submission automatically sends their masked CV pack to the employer."
                 />
               ) : (
                 <ul className="space-y-2">
@@ -195,7 +165,6 @@ export default async function ApplicationWorkspace({
                   ))}
                 </ul>
               )}
-              <SubmissionButton applicationId={application.id} />
             </CardBody>
           </Card>
 
@@ -226,4 +195,8 @@ export default async function ApplicationWorkspace({
       </div>
     </div>
   );
+}
+
+function stageLabel(key: string): string {
+  return stageByKey(key)?.label ?? titleCase(key);
 }

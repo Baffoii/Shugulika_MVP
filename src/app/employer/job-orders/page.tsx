@@ -3,8 +3,8 @@ export const metadata = { title: "Job orders" };
 export default function Page() {
   return (
     <JobOrdersPage
-      title="Job orders"
-      description="Roles you have submitted. Direct-employer roles receive applications; managed roles receive recruiter submissions."
+      title="Your roles"
+      description="Roles Shugulika is hiring for on your behalf. Managed (headhunting) roles deliver candidate CVs here after screening; direct roles can also receive applications."
     />
   );
 }

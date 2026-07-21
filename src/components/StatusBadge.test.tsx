@@ -28,8 +28,8 @@ describe("StatusBadge", () => {
 
 describe("StageBadge", () => {
   it("renders the pipeline stage label", () => {
-    render(<StageBadge stageKey="shortlisted" />);
-    expect(screen.getByText("Shortlisted")).toBeInTheDocument();
+    render(<StageBadge stageKey="cv_review" />);
+    expect(screen.getByText("CV Review")).toBeInTheDocument();
   });
   it("degrades gracefully for an unknown stage key", () => {
     render(<StageBadge stageKey="mystery_stage" />);

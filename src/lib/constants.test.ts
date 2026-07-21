@@ -4,18 +4,30 @@ import {
   CANDIDATE_STAGES,
   stageByKey,
   CANDIDATE_FACING_STATUS,
+  allowedNextStages,
+  APPLICATION_ENTRY_STAGE,
 } from "@/lib/constants";
 
 describe("pipeline stages", () => {
-  it("has all 15 Spine stages", () => {
-    expect(PIPELINE_STAGES).toHaveLength(15);
+  it("starts applications in CV Review", () => {
+    expect(APPLICATION_ENTRY_STAGE).toBe("cv_review");
   });
 
-  it("keeps 12 candidate-application stages", () => {
-    expect(CANDIDATE_STAGES).toHaveLength(12);
+  it("exposes the simplified active candidate stages", () => {
+    expect(CANDIDATE_STAGES.map((s) => s.key)).toEqual([
+      "cv_review",
+      "testing",
+      "test_review",
+      "interview_screening",
+      "interview_review",
+      "reference_checks",
+      "client_submission",
+      "offer",
+      "hired",
+    ]);
   });
 
-  it("treats Advertised, Invoiced, Closed as job/accounts milestones, not candidate stages", () => {
+  it("keeps Advertised, Invoiced, Closed as non-candidate milestones", () => {
     expect(stageByKey("advertised")?.stageClass).toBe("job");
     expect(stageByKey("invoiced")?.stageClass).toBe("accounts");
     expect(stageByKey("closed")?.stageClass).toBe("job");
@@ -23,21 +35,41 @@ describe("pipeline stages", () => {
     expect(CANDIDATE_STAGES.map((s) => s.key)).not.toContain("invoiced");
   });
 
-  it("gates Shortlisted on a screening scorecard and Client Submission on consent", () => {
-    expect(stageByKey("shortlisted")?.gated).toBe("screening_scorecard");
-    expect(stageByKey("client_submission")?.gated).toBe("employer_consent");
+  it("treats hired and rejected as terminal", () => {
+    expect(stageByKey("hired")?.terminal).toBe(true);
+    expect(stageByKey("rejected")?.terminal).toBe(true);
     expect(stageByKey("hired")?.gated).toBe("accepted_offer");
   });
 
   it("maps internal stages to simpler candidate-facing statuses", () => {
-    expect(CANDIDATE_FACING_STATUS["cv_screening"]).toBe("Resume under review");
-    expect(CANDIDATE_FACING_STATUS["ai_interview_screening"]).toBe("Video interview stage");
+    expect(CANDIDATE_FACING_STATUS["cv_review"]).toBe("Resume under review");
+    expect(CANDIDATE_FACING_STATUS["test_review"]).toBe("Assessment under review");
+    expect(CANDIDATE_FACING_STATUS["interview_screening"]).toBe("Interview scheduled");
     expect(CANDIDATE_FACING_STATUS["client_submission"]).toBe("Submitted to employer");
     expect(CANDIDATE_FACING_STATUS["hired"]).toBe("Hired");
   });
 
-  it("stage ordinals are strictly increasing", () => {
-    const ordinals = PIPELINE_STAGES.map((s) => s.ordinal);
+  it("only allows forward moves and optional skips", () => {
+    expect(allowedNextStages("cv_review").map((s) => s.key)).toEqual(["testing"]);
+    expect(allowedNextStages("testing").map((s) => s.key)).toEqual(["client_submission"]);
+    expect(allowedNextStages("test_review").map((s) => s.key)).toEqual([
+      "interview_screening",
+      "client_submission",
+    ]);
+    expect(allowedNextStages("interview_screening").map((s) => s.key)).toEqual([
+      "client_submission",
+    ]);
+    expect(allowedNextStages("interview_review").map((s) => s.key)).toEqual([
+      "reference_checks",
+      "client_submission",
+    ]);
+    expect(allowedNextStages("rejected")).toEqual([]);
+    expect(allowedNextStages("hired")).toEqual([]);
+  });
+
+  it("keeps active stage ordinals strictly increasing", () => {
+    const active = PIPELINE_STAGES.filter((s) => !s.legacy);
+    const ordinals = active.map((s) => s.ordinal);
     expect(ordinals).toEqual([...ordinals].sort((a, b) => a - b));
   });
 });

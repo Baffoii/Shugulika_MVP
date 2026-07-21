@@ -100,9 +100,9 @@ export async function getRecruiterMetrics(): Promise<RecruiterMetrics> {
   const active = appRows.filter((a) => !a.withdrawn_at);
   return {
     activeJobs: jobRows.filter((j) => ["active", "approved", "on_hold"].includes(j.status)).length,
-    newApplications: active.filter((a) => a.current_stage === "applied_sourced").length,
+    newApplications: active.filter((a) => a.current_stage === "cv_review").length,
     awaitingReview: active.filter((a) =>
-      ["applied_sourced", "cv_screening"].includes(a.current_stage),
+      ["cv_review", "test_review", "interview_review"].includes(a.current_stage),
     ).length,
     consentPending: active.filter((a) => a.consent_status === "pending").length,
     submissionsPending: subRows.filter((s) =>
