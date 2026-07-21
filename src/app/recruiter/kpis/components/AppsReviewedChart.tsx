@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import type { AppsReviewedTrendPoint } from "@/lib/data/recruiter-kpis";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/primitives";
 

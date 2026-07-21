@@ -56,12 +56,8 @@ export default async function FranchiseRecruitersPage() {
                 </TD>
                 <TD>{r.regionCode ?? "—"}</TD>
                 <TD>{r.assignedRoles.length}</TD>
-                <TD>
-                  {r.kpisSummary.timeToFill > 0 ? `${r.kpisSummary.timeToFill}d` : "—"}
-                </TD>
-                <TD>
-                  {r.kpisSummary.placementRate > 0 ? `${r.kpisSummary.placementRate}%` : "—"}
-                </TD>
+                <TD>{r.kpisSummary.timeToFill > 0 ? `${r.kpisSummary.timeToFill}d` : "—"}</TD>
+                <TD>{r.kpisSummary.placementRate > 0 ? `${r.kpisSummary.placementRate}%` : "—"}</TD>
                 <TD>
                   <ButtonLink
                     href={`/franchise/recruiters/${r.recruiterId}`}

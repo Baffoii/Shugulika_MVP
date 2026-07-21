@@ -219,7 +219,9 @@ async function loadRecruiterAppContext(
       .select("job_role_id")
       .eq("recruiter_id", recruiterId)
       .eq("status", "active");
-    const roleIds = ((roleRows as { job_role_id: string }[] | null) ?? []).map((r) => r.job_role_id);
+    const roleIds = ((roleRows as { job_role_id: string }[] | null) ?? []).map(
+      (r) => r.job_role_id,
+    );
     const filterRoles = jobRoleId ? [jobRoleId] : roleIds;
 
     if (filterRoles.length > 0) {
@@ -348,10 +350,7 @@ function hiredAtMap(history: ApplicationStageHistoryRow[]): Map<string, string> 
   return map;
 }
 
-function firstReachedMap(
-  history: ApplicationStageHistoryRow[],
-  stages: string[],
-): Set<string> {
+function firstReachedMap(history: ApplicationStageHistoryRow[], stages: string[]): Set<string> {
   const set = new Set<string>();
   const stageSet = new Set(stages);
   for (const h of history) {
@@ -935,9 +934,9 @@ export async function getRecruiterCompanies(recruiterId: string): Promise<KpiCom
     .from("job_assignments")
     .select("job_order_id")
     .eq("recruiter_user_id", recruiterId);
-  const assignedJobIds = (
-    (assignments as { job_order_id: string }[] | null) ?? []
-  ).map((a) => a.job_order_id);
+  const assignedJobIds = ((assignments as { job_order_id: string }[] | null) ?? []).map(
+    (a) => a.job_order_id,
+  );
 
   if (assignedJobIds.length > 0) {
     const { data: jobs } = await supabase
@@ -952,10 +951,7 @@ export async function getRecruiterCompanies(recruiterId: string): Promise<KpiCom
   const orgIds = [...counts.keys()];
   if (orgIds.length === 0) return cacheSet(key, []);
 
-  const { data: orgs } = await supabase
-    .from("organizations")
-    .select("id,name")
-    .in("id", orgIds);
+  const { data: orgs } = await supabase.from("organizations").select("id,name").in("id", orgIds);
 
   const companies: KpiCompany[] = ((orgs as { id: string; name: string }[] | null) ?? [])
     .map((o) => ({

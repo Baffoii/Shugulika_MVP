@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requirePortal } from "@/lib/auth";
-import {
-  canAssignRecruiterRoles,
-  assignableRegionCodes,
-  canAssignInRegion,
-} from "@/lib/rbac";
+import { canAssignRecruiterRoles, assignableRegionCodes, canAssignInRegion } from "@/lib/rbac";
 import {
   getRecruiterProfile,
   getRecruiterAssignedRoles,
@@ -30,10 +26,7 @@ export default async function FranchiseAssignRolesPage({
   const profile = await getRecruiterProfile(recruiterId);
   if (!profile) notFound();
 
-  if (
-    profile.regionCode &&
-    !canAssignInRegion(ctx.roles, ctx.memberships, profile.regionCode)
-  ) {
+  if (profile.regionCode && !canAssignInRegion(ctx.roles, ctx.memberships, profile.regionCode)) {
     redirect("/unauthorized");
   }
 

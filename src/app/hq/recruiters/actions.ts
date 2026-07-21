@@ -2,11 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
-import {
-  canAssignInRegion,
-  canAssignRecruiterRoles,
-  assignableRegionCodes,
-} from "@/lib/rbac";
+import { canAssignInRegion, canAssignRecruiterRoles, assignableRegionCodes } from "@/lib/rbac";
 import {
   assignRoleToRecruiter,
   revokeRoleFromRecruiter,

@@ -59,14 +59,14 @@ export default async function HqRecruitersPage() {
                 </TD>
                 <TD>{r.regionCode ?? "—"}</TD>
                 <TD>{r.assignedRoles.length}</TD>
+                <TD>{r.kpisSummary.timeToFill > 0 ? `${r.kpisSummary.timeToFill}d` : "—"}</TD>
+                <TD>{r.kpisSummary.placementRate > 0 ? `${r.kpisSummary.placementRate}%` : "—"}</TD>
                 <TD>
-                  {r.kpisSummary.timeToFill > 0 ? `${r.kpisSummary.timeToFill}d` : "—"}
-                </TD>
-                <TD>
-                  {r.kpisSummary.placementRate > 0 ? `${r.kpisSummary.placementRate}%` : "—"}
-                </TD>
-                <TD>
-                  <ButtonLink href={`/hq/recruiters/${r.recruiterId}`} variant="secondary" size="sm">
+                  <ButtonLink
+                    href={`/hq/recruiters/${r.recruiterId}`}
+                    variant="secondary"
+                    size="sm"
+                  >
                     Edit roles
                   </ButtonLink>
                 </TD>

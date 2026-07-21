@@ -135,11 +135,7 @@ export function StageControl({
               When the candidate submits their assessment, mark it submitted to move them to{" "}
               <span className="font-medium">Test Review / Grading</span> automatically.
             </p>
-            <Button
-              size="sm"
-              disabled={pending}
-              onClick={() => run(markTestingSubmittedAction)}
-            >
+            <Button size="sm" disabled={pending} onClick={() => run(markTestingSubmittedAction)}>
               {pending ? "Saving…" : "Mark testing submitted"}
             </Button>
           </div>
@@ -151,11 +147,7 @@ export function StageControl({
               When the interview is finished, mark it complete to move them to{" "}
               <span className="font-medium">Interview Review</span> automatically.
             </p>
-            <Button
-              size="sm"
-              disabled={pending}
-              onClick={() => run(markInterviewCompleteAction)}
-            >
+            <Button size="sm" disabled={pending} onClick={() => run(markInterviewCompleteAction)}>
               {pending ? "Saving…" : "Mark interview complete"}
             </Button>
           </div>
@@ -206,7 +198,9 @@ export function StageControl({
           >
             {pending ? "Saving…" : isReject ? "Reject permanently" : "Move forward"}
           </Button>
-          <p className="text-xs text-ink-subtle">Forward only — earlier stages are not available.</p>
+          <p className="text-xs text-ink-subtle">
+            Forward only — earlier stages are not available.
+          </p>
         </div>
       </CardBody>
     </Card>

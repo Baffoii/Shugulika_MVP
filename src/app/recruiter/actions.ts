@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { stageByKey, CANDIDATE_FACING_STATUS, REJECTION_REASONS, allowedNextStages } from "@/lib/constants";
+import {
+  stageByKey,
+  CANDIDATE_FACING_STATUS,
+  REJECTION_REASONS,
+  allowedNextStages,
+} from "@/lib/constants";
 import type { ApplicationRow, CandidateProfileRow } from "@/lib/database.types";
 
 export interface ActionResult {
@@ -160,7 +165,10 @@ export async function markTestingSubmittedAction(formData: FormData): Promise<Ac
   const app = await loadApplication(applicationId);
   if (!app) return { ok: false, error: "Application not found or not authorized." };
   if (app.current_stage !== "testing") {
-    return { ok: false, error: "Testing can only be marked submitted while the candidate is in Testing." };
+    return {
+      ok: false,
+      error: "Testing can only be marked submitted while the candidate is in Testing.",
+    };
   }
   return moveApplicationToStage(app, "test_review", {
     note,
@@ -276,7 +284,10 @@ async function notifyCandidateStatus(app: ApplicationRow, toStage: string): Prom
   });
   if (error) {
     console.error("[notifyCandidateStatus]", error.message);
-    return { ok: false, error: `Stage updated, but the candidate was not notified: ${error.message}` };
+    return {
+      ok: false,
+      error: `Stage updated, but the candidate was not notified: ${error.message}`,
+    };
   }
   return { ok: true };
 }

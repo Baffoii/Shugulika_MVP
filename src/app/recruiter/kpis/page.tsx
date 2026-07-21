@@ -38,10 +38,9 @@ function paramOne(raw: string | string[] | undefined): string | undefined {
 export default async function RecruiterKpisPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>> | Record<
-    string,
-    string | string[] | undefined
-  >;
+  searchParams:
+    | Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>;
 }) {
   const ctx = await requirePortal("recruiter");
   const params = await Promise.resolve(searchParams);
@@ -70,11 +69,7 @@ export default async function RecruiterKpisPage({
     getAppsReviewedTrend(ctx.userId, scope),
   ]);
 
-  const scopeBits = [
-    meta.name,
-    selectedCompany?.name,
-    meta.regionCode,
-  ].filter(Boolean);
+  const scopeBits = [meta.name, selectedCompany?.name, meta.regionCode].filter(Boolean);
 
   return (
     <div>

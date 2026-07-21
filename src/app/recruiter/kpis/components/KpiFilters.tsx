@@ -27,11 +27,7 @@ export function KpiFilters({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  function hrefFor(next: {
-    range?: string;
-    role?: string | null;
-    company?: string | null;
-  }) {
+  function hrefFor(next: { range?: string; role?: string | null; company?: string | null }) {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     if (next.range) params.set("range", next.range);
     if (next.role === null) params.delete("role");

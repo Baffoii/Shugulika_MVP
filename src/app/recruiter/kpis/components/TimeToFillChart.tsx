@@ -24,7 +24,11 @@ export function TimeToFillChart({ data }: { data: TimeToFillTrendPoint[] }) {
         <CardTitle>Time-to-fill trend</CardTitle>
       </CardHeader>
       <CardBody>
-        <div className="h-56 w-full" role="img" aria-label="Average time to fill over the last 8 weeks">
+        <div
+          className="h-56 w-full"
+          role="img"
+          aria-label="Average time to fill over the last 8 weeks"
+        >
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

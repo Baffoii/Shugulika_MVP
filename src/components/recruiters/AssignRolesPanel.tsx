@@ -8,7 +8,15 @@ import {
 } from "@/app/hq/recruiters/actions";
 import type { AssignedRole } from "@/lib/data/recruiter-kpis";
 import type { JobRoleRow } from "@/lib/database.types";
-import { Alert, Badge, Button, Card, CardBody, CardHeader, CardTitle } from "@/components/ui/primitives";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
 

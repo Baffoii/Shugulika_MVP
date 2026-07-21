@@ -32,10 +32,7 @@ export default async function AssignRecruiterRolesPage({
   if (!profile) notFound();
 
   // Region-locked admins may only manage recruiters in their region
-  if (
-    profile.regionCode &&
-    !canAssignInRegion(ctx.roles, ctx.memberships, profile.regionCode)
-  ) {
+  if (profile.regionCode && !canAssignInRegion(ctx.roles, ctx.memberships, profile.regionCode)) {
     redirect("/unauthorized");
   }
 
@@ -57,9 +54,7 @@ export default async function AssignRecruiterRolesPage({
 
   const allowed = assignableRegionCodes(ctx.roles, ctx.memberships);
   const regions =
-    allowed === null
-      ? allCountries
-      : allCountries.filter((c) => allowed.includes(c.code));
+    allowed === null ? allCountries : allCountries.filter((c) => allowed.includes(c.code));
 
   const defaultRegion =
     profile.regionCode && regions.some((r) => r.code === profile.regionCode)

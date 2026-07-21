@@ -74,7 +74,7 @@ function cardTitle(s: ResumeFieldSuggestionRow): string {
 
 /** Renders one resume_field_suggestions row with Accept / Edit / Reject actions. */
 export function SuggestionCard({ suggestion }: { suggestion: ResumeFieldSuggestionRow }) {
-  const router = useRouter();
+  const _router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);

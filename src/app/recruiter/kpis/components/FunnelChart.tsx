@@ -35,7 +35,11 @@ export function FunnelChart({ data }: { data: FunnelCounts }) {
           aria-label={`Funnel: ${rows.map((r) => `${r.stage} ${r.count}`).join(", ")}`}
         >
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rows} layout="vertical" margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+            <BarChart
+              data={rows}
+              layout="vertical"
+              margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
               <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
               <YAxis type="category" dataKey="stage" width={88} tick={{ fontSize: 11 }} />

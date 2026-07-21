@@ -6,10 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { PORTAL_NAV, PORTAL_META } from "@/components/layout/nav-config";
 import { Logo } from "@/components/brand/Logo";
-import {
-  NOTIFICATIONS_CHANGED_EVENT,
-  formatUnreadBadge,
-} from "@/components/notifications/unread";
+import { NOTIFICATIONS_CHANGED_EVENT, formatUnreadBadge } from "@/components/notifications/unread";
 import { createClient } from "@/lib/supabase/client";
 import type { Portal } from "@/lib/constants";
 
@@ -23,13 +20,7 @@ function isNotificationsHref(href: string) {
   return href.endsWith("/notifications");
 }
 
-function UnreadBadge({
-  count,
-  collapsed,
-}: {
-  count: number;
-  collapsed: boolean;
-}) {
+function UnreadBadge({ count, collapsed }: { count: number; collapsed: boolean }) {
   const label = formatUnreadBadge(count);
   if (!label) return null;
 
@@ -130,9 +121,7 @@ export function Sidebar({ portal, collapsed = false }: { portal: Portal; collaps
                     style={{ width: 18, height: 18 }}
                     aria-hidden
                   />
-                  {collapsed && showUnread ? (
-                    <UnreadBadge count={unreadCount} collapsed />
-                  ) : null}
+                  {collapsed && showUnread ? <UnreadBadge count={unreadCount} collapsed /> : null}
                 </span>
                 {collapsed ? (
                   <span className="sr-only">{item.label}</span>
