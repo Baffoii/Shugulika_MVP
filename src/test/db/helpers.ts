@@ -92,7 +92,7 @@ export async function setupDb(client: Client): Promise<SeedIds> {
   await client.query(RESET);
   // Apply the FULL migration history in order so the harness schema matches
   // production (not a hardcoded subset). pgcrypto/citext live in public, which
-  // RESET dropped — migration 0001 re-creates them. Three files are intentionally
+  // RESET dropped — migration 0001 re-creates them. Four files are intentionally
   // skipped:
   //   0000 — a destructive public-schema reset (RESET above already did that);
   //   0005 — seeds real Supabase auth.users/auth.identities rows using columns
@@ -100,11 +100,16 @@ export async function setupDb(client: Client): Promise<SeedIds> {
   //          users below, so this convenience seed isn't needed (or applicable);
   //   0015 — the same: a demo-data seed that writes real Supabase
   //          auth.users/auth.identities (encrypted_password, identities, …). It
-  //          adds no schema/RLS, so skipping it keeps harness schema parity.
+  //          adds no schema/RLS, so skipping it keeps harness schema parity;
+  //   0030 — the same again: a pure demo seed for employer client accounts +
+  //          submissions. It inserts real auth.users (instance_id,
+  //          encrypted_password, identities) and demo data only — no schema/RLS —
+  //          so skipping it keeps harness schema parity.
   const SKIP = new Set([
     "0000_reset_public_schema.sql",
     "0005_seed_test_users.sql",
     "0015_demo_expansion.sql",
+    "0030_employer_accounts_submissions.sql",
   ]);
   const migrations = readdirSync(MIG)
     .filter((f) => /^\d{4}_.*\.sql$/.test(f) && !SKIP.has(f))

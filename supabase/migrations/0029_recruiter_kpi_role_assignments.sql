@@ -237,7 +237,11 @@ set country_code = 'TZ', recruiter_level = coalesce(recruiter_level, 'generic')
 where user_id = '10000000-0000-0000-0000-000000000004'
   and role = 'recruiter';
 
--- Assign ALL job roles to recruiter@shugulika.test (demo full pipeline access)
+-- Assign ALL job roles to recruiter@shugulika.test (demo full pipeline access).
+-- Guarded on the demo recruiter profile existing: the RLS test harness skips the
+-- 0005/0015 seeds that create it, so this must no-op there (matches the block
+-- below). assigned_by is resolved via subquery so it stays null-safe if the demo
+-- super-admin profile is likewise absent.
 insert into public.recruiter_role_assignments (
   recruiter_id, recruiter_organization_id, job_role_id,
   assigned_by, assigned_region_code, status
@@ -246,11 +250,14 @@ select
   '10000000-0000-0000-0000-000000000004'::uuid,
   '22222222-2222-2222-2222-222222222222'::uuid,
   jr.id,
-  '10000000-0000-0000-0000-000000000001'::uuid,
+  (select p.id from public.profiles p where p.id = '10000000-0000-0000-0000-000000000001'::uuid),
   'TZ',
   'active'
 from public.job_roles jr
 where jr.is_active
+  and exists (
+    select 1 from public.profiles p where p.id = '10000000-0000-0000-0000-000000000004'::uuid
+  )
 on conflict (recruiter_id, job_role_id) do update
   set status = 'active',
       assigned_region_code = excluded.assigned_region_code,
