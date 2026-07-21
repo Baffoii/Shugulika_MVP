@@ -64,7 +64,7 @@ export const PORTAL_ROLES: Record<Portal, Role[]> = {
 };
 
 // ---------------------------------------------------------------------------
-// Recruitment pipeline — the 15-stage "Spine" (job/candidate/accounts classes).
+// Recruitment pipeline — simplified MVP candidate flow.
 // Advertised, Invoiced, and Closed are NOT candidate-application stages.
 // ---------------------------------------------------------------------------
 export type StageClass = "job" | "candidate" | "accounts";
@@ -74,143 +74,239 @@ export interface PipelineStage {
   label: string;
   ordinal: number;
   stageClass: StageClass;
-  phase: ApplicationPhase; // grouping for the UI
-  gated?: "screening_scorecard" | "employer_consent" | "accepted_offer";
+  phase: ApplicationPhase;
+  gated?: "accepted_offer";
+  /** Historical only — not shown in the move-stage dropdown. */
+  legacy?: boolean;
+  /** No further stage changes (except viewing). */
+  terminal?: boolean;
 }
 
 export type ApplicationPhase =
-  | "new"
   | "initial_review"
   | "screening"
-  | "shortlisting"
-  | "consent_pending"
-  | "ready_for_submission"
-  | "submitted"
-  | "employer_review"
   | "interviewing"
+  | "pre_submission"
+  | "submitted"
   | "offer"
   | "placement"
   | "closed";
 
 export const APPLICATION_PHASES: { key: ApplicationPhase; label: string }[] = [
-  { key: "new", label: "New & unreviewed" },
-  { key: "initial_review", label: "Initial review" },
-  { key: "screening", label: "Screening" },
-  { key: "shortlisting", label: "Shortlisting" },
-  { key: "consent_pending", label: "Consent pending" },
-  { key: "ready_for_submission", label: "Ready for submission" },
+  { key: "initial_review", label: "CV review" },
+  { key: "screening", label: "Testing" },
+  { key: "interviewing", label: "Interview" },
+  { key: "pre_submission", label: "Reference checks" },
   { key: "submitted", label: "Submitted to employer" },
-  { key: "employer_review", label: "Employer review" },
-  { key: "interviewing", label: "Interviewing" },
   { key: "offer", label: "Offer" },
   { key: "placement", label: "Placement" },
-  { key: "closed", label: "Rejected / withdrawn / closed" },
+  { key: "closed", label: "Rejected / closed" },
 ];
 
+/**
+ * Active pipeline. Apply → CV Review automatically.
+ * Testing submitted → Test Review automatically.
+ * Interview Screening completed → Interview Review automatically.
+ * Reference Checks are optional; recruiters may skip to Client Submission.
+ * Rejection is permanent and records the stage where it happened.
+ */
 export const PIPELINE_STAGES: PipelineStage[] = [
-  { key: "advertised", label: "Advertised", ordinal: 1, stageClass: "job", phase: "new" },
+  { key: "advertised", label: "Advertised", ordinal: 1, stageClass: "job", phase: "closed" },
   {
-    key: "applied_sourced",
-    label: "Applied / Sourced",
+    key: "cv_review",
+    label: "CV Review",
     ordinal: 2,
     stageClass: "candidate",
-    phase: "new",
-  },
-  {
-    key: "cv_screening",
-    label: "CV Screening",
-    ordinal: 3,
-    stageClass: "candidate",
     phase: "initial_review",
   },
+  { key: "testing", label: "Testing", ordinal: 3, stageClass: "candidate", phase: "screening" },
   {
-    key: "longlisted",
-    label: "Longlisted",
+    key: "test_review",
+    label: "Test Review / Grading",
     ordinal: 4,
     stageClass: "candidate",
-    phase: "initial_review",
+    phase: "screening",
   },
   {
-    key: "ai_interview_screening",
-    label: "AI Interview Screening",
+    key: "interview_screening",
+    label: "Interview Screening",
     ordinal: 5,
     stageClass: "candidate",
-    phase: "screening",
+    phase: "interviewing",
   },
   {
-    key: "shortlisted",
-    label: "Shortlisted",
+    key: "interview_review",
+    label: "Interview Review",
     ordinal: 6,
     stageClass: "candidate",
-    phase: "shortlisting",
-    gated: "screening_scorecard",
+    phase: "interviewing",
   },
-  {
-    key: "screening_interview",
-    label: "Screening Interview",
-    ordinal: 7,
-    stageClass: "candidate",
-    phase: "screening",
-  },
-  { key: "testing", label: "Testing", ordinal: 8, stageClass: "candidate", phase: "screening" },
   {
     key: "reference_checks",
     label: "Reference Checks",
-    ordinal: 9,
+    ordinal: 7,
     stageClass: "candidate",
-    phase: "shortlisting",
+    phase: "pre_submission",
   },
   {
     key: "client_submission",
     label: "Client Submission",
-    ordinal: 10,
+    ordinal: 8,
     stageClass: "candidate",
     phase: "submitted",
-    gated: "employer_consent",
+  },
+  { key: "offer", label: "Offer", ordinal: 9, stageClass: "candidate", phase: "offer" },
+  {
+    key: "hired",
+    label: "Hired",
+    ordinal: 10,
+    stageClass: "candidate",
+    phase: "placement",
+    gated: "accepted_offer",
+    terminal: true,
+  },
+  {
+    key: "rejected",
+    label: "Rejected",
+    ordinal: 11,
+    stageClass: "candidate",
+    phase: "closed",
+    terminal: true,
+  },
+  { key: "invoiced", label: "Invoiced", ordinal: 12, stageClass: "accounts", phase: "placement" },
+  { key: "closed", label: "Closed", ordinal: 13, stageClass: "job", phase: "closed" },
+
+  // Legacy keys retained so historical stage history still resolves labels.
+  {
+    key: "applied_sourced",
+    label: "Applied / Sourced",
+    ordinal: 102,
+    stageClass: "candidate",
+    phase: "initial_review",
+    legacy: true,
+  },
+  {
+    key: "cv_screening",
+    label: "CV Screening",
+    ordinal: 103,
+    stageClass: "candidate",
+    phase: "initial_review",
+    legacy: true,
+  },
+  {
+    key: "longlisted",
+    label: "Longlisted",
+    ordinal: 104,
+    stageClass: "candidate",
+    phase: "initial_review",
+    legacy: true,
+  },
+  {
+    key: "ai_interview_screening",
+    label: "AI Interview Screening",
+    ordinal: 105,
+    stageClass: "candidate",
+    phase: "interviewing",
+    legacy: true,
+  },
+  {
+    key: "shortlisted",
+    label: "Shortlisted",
+    ordinal: 106,
+    stageClass: "candidate",
+    phase: "interviewing",
+    legacy: true,
+  },
+  {
+    key: "screening_interview",
+    label: "Screening Interview",
+    ordinal: 107,
+    stageClass: "candidate",
+    phase: "interviewing",
+    legacy: true,
   },
   {
     key: "client_interview",
     label: "Client Interview",
-    ordinal: 11,
+    ordinal: 108,
     stageClass: "candidate",
-    phase: "interviewing",
+    phase: "submitted",
+    legacy: true,
   },
-  { key: "offer", label: "Offer", ordinal: 12, stageClass: "candidate", phase: "offer" },
-  {
-    key: "hired",
-    label: "Hired",
-    ordinal: 13,
-    stageClass: "candidate",
-    phase: "placement",
-    gated: "accepted_offer",
-  },
-  { key: "invoiced", label: "Invoiced", ordinal: 14, stageClass: "accounts", phase: "placement" },
-  { key: "closed", label: "Closed", ordinal: 15, stageClass: "job", phase: "closed" },
 ];
 
-export const CANDIDATE_STAGES = PIPELINE_STAGES.filter((s) => s.stageClass === "candidate");
+/** Active candidate stages shown in recruiter controls (excludes legacy + terminal rejected). */
+export const CANDIDATE_STAGES = PIPELINE_STAGES.filter(
+  (s) => s.stageClass === "candidate" && !s.legacy && s.key !== "rejected",
+);
 
 export function stageByKey(key: string): PipelineStage | undefined {
   return PIPELINE_STAGES.find((s) => s.key === key);
 }
 
-/** Simplified, candidate-facing status mapping (less internally technical). */
+/** Stages a recruiter may move the candidate to from `current` (forward only). */
+export function allowedNextStages(current: string): PipelineStage[] {
+  const cur = stageByKey(current);
+  if (!cur || cur.stageClass !== "candidate" || cur.terminal || cur.legacy) return [];
+
+  const linear: Record<string, string[]> = {
+    cv_review: ["testing"],
+    // testing → test_review is automatic via "Mark testing submitted"
+    testing: [],
+    test_review: ["interview_screening"],
+    // interview_screening → interview_review is automatic via "Mark interview complete"
+    interview_screening: [],
+    interview_review: ["reference_checks", "client_submission"],
+    reference_checks: ["client_submission"],
+    client_submission: ["offer"],
+    offer: ["hired"],
+  };
+
+  const keys = new Set<string>(linear[current] ?? []);
+
+  // After CV review passes, recruiters may skip ahead to Client Submission.
+  const testing = stageByKey("testing");
+  const clientSubmission = stageByKey("client_submission");
+  if (
+    testing &&
+    clientSubmission &&
+    cur.ordinal >= testing.ordinal &&
+    cur.ordinal < clientSubmission.ordinal
+  ) {
+    keys.add("client_submission");
+  }
+
+  return [...keys]
+    .map((k) => stageByKey(k))
+    .filter((s): s is PipelineStage => !!s && !s.legacy)
+    .sort((a, b) => a.ordinal - b.ordinal);
+}
+
+/** Default stage when a candidate applies. */
+export const APPLICATION_ENTRY_STAGE = "cv_review";
+
+/** Simplified, candidate-facing status mapping. */
 export const CANDIDATE_FACING_STATUS: Record<string, string> = {
-  applied_sourced: "Application received",
-  cv_screening: "Resume under review",
-  longlisted: "Moved forward after resume review",
-  ai_interview_screening: "Video interview stage",
-  shortlisted: "Shortlisted",
-  screening_interview: "Live screening interview",
+  cv_review: "Resume under review",
   testing: "Skills assessment",
+  test_review: "Assessment under review",
+  interview_screening: "Interview scheduled",
+  interview_review: "Interview under review",
   reference_checks: "Reference checks",
   client_submission: "Submitted to employer",
-  client_interview: "Employer interview",
   offer: "Offer stage",
   hired: "Hired",
   rejected: "Not selected",
   withdrawn: "Withdrawn",
   closed: "Position closed",
+  // legacy
+  applied_sourced: "Application received",
+  cv_screening: "Resume under review",
+  longlisted: "Moved forward after resume review",
+  ai_interview_screening: "Interview stage",
+  shortlisted: "Shortlisted",
+  screening_interview: "Interview stage",
+  client_interview: "Employer interview",
 };
 
 // ---------------------------------------------------------------------------

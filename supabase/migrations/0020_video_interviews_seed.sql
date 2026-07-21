@@ -66,7 +66,7 @@ begin
   if v_demo_cand is not null then
     insert into public.applications
       (candidate_id, job_order_id, owning_org_id, recruitment_path, current_stage)
-    values (v_demo_cand, v_job_order, v_franchise, 'B', 'ai_interview_screening')
+    values (v_demo_cand, v_job_order, v_franchise, 'B', 'interview_screening')
     on conflict (candidate_id, job_order_id) do nothing;
     select id into v_app_demo from public.applications
     where candidate_id = v_demo_cand and job_order_id = v_job_order;
@@ -113,7 +113,7 @@ begin
   if exists (select 1 from public.candidate_profiles where id = v_john_cand) then
     insert into public.applications
       (candidate_id, job_order_id, owning_org_id, recruitment_path, current_stage)
-    values (v_john_cand, v_job_order, v_franchise, 'B', 'ai_interview_screening')
+    values (v_john_cand, v_job_order, v_franchise, 'B', 'interview_screening')
     on conflict (candidate_id, job_order_id) do nothing;
     select id into v_app_john from public.applications
     where candidate_id = v_john_cand and job_order_id = v_job_order;

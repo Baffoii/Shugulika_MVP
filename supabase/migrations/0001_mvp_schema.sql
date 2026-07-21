@@ -277,7 +277,7 @@ create table if not exists public.applications (
   owning_org_id uuid not null references public.organizations(id),
   recruitment_path text not null check (recruitment_path in ('A','B')),
   entry_source text not null default 'applied_direct',
-  current_stage text not null default 'applied_sourced' references public.pipeline_stages(key),
+  current_stage text not null default 'cv_review' references public.pipeline_stages(key),
   assigned_recruiter_id uuid references public.profiles(id),
   consent_status text not null default 'not_required' check (consent_status in ('not_required','required','pending','granted','withdrawn')),
   cv_document_id uuid references public.candidate_documents(id),

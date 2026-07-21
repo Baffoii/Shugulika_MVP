@@ -2,7 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { advanceStageAction, addNoteAction, createSubmissionAction } from "@/app/recruiter/actions";
+import {
+  advanceStageAction,
+  addNoteAction,
+  markTestingSubmittedAction,
+  markInterviewCompleteAction,
+} from "@/app/recruiter/actions";
 import { cancelAssignmentAction, createAssignmentAction } from "@/app/recruiter/interview-actions";
 import {
   Card,
@@ -15,59 +20,55 @@ import {
 } from "@/components/ui/primitives";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import {
-  CANDIDATE_STAGES,
   REJECTION_REASONS,
   interviewReviewBadge,
   stageByKey,
+  allowedNextStages,
 } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { InterviewAssignmentRow, InterviewTemplateRow } from "@/lib/database.types";
-import { formatDate } from "@/lib/format";
+import { formatDate, titleCase } from "@/lib/format";
 import Link from "next/link";
 import { PlayCircle } from "lucide-react";
 
 export function StageControl({
   applicationId,
   currentStage,
+  rejectedFromStage,
+  rejectionReason,
 }: {
   applicationId: string;
   currentStage: string;
+  rejectedFromStage?: string | null;
+  rejectionReason?: string | null;
 }) {
   const router = useRouter();
   const [toStage, setToStage] = useState("");
   const [note, setNote] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const isReject = toStage === "rejected";
-  const targetStage = toStage ? stageByKey(toStage) : undefined;
-  const shortlisted = stageByKey("shortlisted");
-  const needsScreeningNote = Boolean(
-    targetStage &&
-    shortlisted &&
-    targetStage.stageClass === "candidate" &&
-    targetStage.ordinal > shortlisted.ordinal,
-  );
+  const nextStages = useMemo(() => allowedNextStages(currentStage), [currentStage]);
+  const isRejected = currentStage === "rejected";
+  const isTesting = currentStage === "testing";
+  const isInterviewScreening = currentStage === "interview_screening";
 
-  function submit() {
+  function run(
+    action: (fd: FormData) => Promise<{ ok: boolean; error?: string; warning?: string }>,
+    extra?: Record<string, string>,
+  ) {
     setError(null);
-    if (!toStage) {
-      setError("Choose a stage.");
-      return;
-    }
-    if (needsScreeningNote && !note.trim()) {
-      setError(
-        "Add an internal screening note before advancing past Shortlisted. Candidates never see this note.",
-      );
-      return;
-    }
+    setWarning(null);
     const fd = new FormData();
     fd.set("application_id", applicationId);
-    fd.set("to_stage", toStage);
     fd.set("note", note);
-    fd.set("rejection_reason", reason);
+    if (extra) {
+      for (const [k, v] of Object.entries(extra)) fd.set(k, v);
+    }
     start(async () => {
-      const res = await advanceStageAction(fd);
+      const res = await action(fd);
       if (!res.ok) {
         setError(res.error ?? "Could not update.");
         return;
@@ -75,8 +76,47 @@ export function StageControl({
       setToStage("");
       setNote("");
       setReason("");
+      if (res.warning) setWarning(res.warning);
       router.refresh();
     });
+  }
+
+  function submit() {
+    if (!toStage) {
+      setError("Choose a stage.");
+      return;
+    }
+    if (isReject && !reason) {
+      setError("A rejection reason is required.");
+      return;
+    }
+    run(advanceStageAction, {
+      to_stage: toStage,
+      rejection_reason: reason,
+    });
+  }
+
+  if (isRejected) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Move candidate</CardTitle>
+          <Badge tone="danger">Rejected</Badge>
+        </CardHeader>
+        <CardBody className="space-y-2">
+          <Alert tone="danger">
+            This candidate was rejected
+            {rejectedFromStage
+              ? ` during ${stageByKey(rejectedFromStage)?.label ?? titleCase(rejectedFromStage)}`
+              : ""}
+            . Rejection is permanent and cannot be undone.
+          </Alert>
+          {rejectionReason ? (
+            <p className="text-sm text-ink-muted">Reason: {rejectionReason}</p>
+          ) : null}
+        </CardBody>
+      </Card>
+    );
   }
 
   return (
@@ -87,10 +127,36 @@ export function StageControl({
       </CardHeader>
       <CardBody className="space-y-3">
         {error ? <Alert tone="danger">{error}</Alert> : null}
+        {warning ? <Alert tone="warn">{warning}</Alert> : null}
+
+        {isTesting ? (
+          <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-3 space-y-2">
+            <p className="text-sm text-ink">
+              When the candidate submits their assessment, mark it submitted to move them to{" "}
+              <span className="font-medium">Test Review / Grading</span> automatically.
+            </p>
+            <Button size="sm" disabled={pending} onClick={() => run(markTestingSubmittedAction)}>
+              {pending ? "Saving…" : "Mark testing submitted"}
+            </Button>
+          </div>
+        ) : null}
+
+        {isInterviewScreening ? (
+          <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-3 space-y-2">
+            <p className="text-sm text-ink">
+              When the interview is finished, mark it complete to move them to{" "}
+              <span className="font-medium">Interview Review</span> automatically.
+            </p>
+            <Button size="sm" disabled={pending} onClick={() => run(markInterviewCompleteAction)}>
+              {pending ? "Saving…" : "Mark interview complete"}
+            </Button>
+          </div>
+        ) : null}
+
         <Field label="Change stage to" htmlFor="to-stage">
           <Select id="to-stage" value={toStage} onChange={(e) => setToStage(e.target.value)}>
             <option value="">Select…</option>
-            {CANDIDATE_STAGES.map((s) => (
+            {nextStages.map((s) => (
               <option key={s.key} value={s.key}>
                 {s.label}
               </option>
@@ -111,10 +177,9 @@ export function StageControl({
           </Field>
         ) : null}
         <Field
-          label={needsScreeningNote ? "Internal screening note" : "Internal note (optional)"}
+          label="Internal note (optional)"
           htmlFor="stage-note"
           hint="Never shown to the candidate. Used for recruiter/franchise records only."
-          required={needsScreeningNote}
         >
           <Textarea
             id="stage-note"
@@ -127,17 +192,15 @@ export function StageControl({
         <div className="flex items-center gap-2">
           <Button
             onClick={submit}
-            disabled={pending}
+            disabled={pending || !toStage}
             variant={isReject ? "danger" : "primary"}
             size="sm"
           >
-            {pending ? "Saving…" : isReject ? "Reject" : "Move forward"}
+            {pending ? "Saving…" : isReject ? "Reject permanently" : "Move forward"}
           </Button>
-          {needsScreeningNote ? (
-            <p className="text-xs text-ink-subtle">
-              Required to advance past Shortlisted — candidates never see this.
-            </p>
-          ) : null}
+          <p className="text-xs text-ink-subtle">
+            Forward only — earlier stages are not available.
+          </p>
         </div>
       </CardBody>
     </Card>
@@ -186,64 +249,6 @@ export function NoteForm({ applicationId }: { applicationId: string }) {
         </Select>
         <Button onClick={submit} disabled={pending || !body.trim()} size="sm">
           {pending ? "Saving…" : "Add note"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-export function SubmissionButton({ applicationId }: { applicationId: string }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [summary, setSummary] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-
-  function submit() {
-    const fd = new FormData();
-    fd.set("application_id", applicationId);
-    fd.set("summary", summary);
-    start(async () => {
-      const res = await createSubmissionAction(fd);
-      if (!res.ok) {
-        setError(res.error ?? "Could not create.");
-        return;
-      }
-      setOpen(false);
-      setError(null);
-      router.refresh();
-    });
-  }
-
-  if (!open)
-    return (
-      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-        Prepare client submission
-      </Button>
-    );
-  return (
-    <div className="space-y-2 rounded-lg border border-surface-border bg-surface-muted p-3">
-      {error ? <Alert tone="danger">{error}</Alert> : null}
-      <Field label="Client-facing summary" htmlFor="sub-summary">
-        <Textarea
-          id="sub-summary"
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-          placeholder="Why this candidate fits the role (employer will see this)."
-          className="min-h-[64px]"
-        />
-      </Field>
-      <p className="text-xs text-ink-subtle">
-        A masked, view-only submission is created. If the candidate hasn&apos;t given
-        employer-specific consent, it stays pending until they approve — the employer cannot see it
-        before then.
-      </p>
-      <div className="flex gap-2">
-        <Button onClick={submit} disabled={pending} size="sm">
-          {pending ? "Creating…" : "Create submission"}
-        </Button>
-        <Button onClick={() => setOpen(false)} variant="ghost" size="sm">
-          Cancel
         </Button>
       </div>
     </div>

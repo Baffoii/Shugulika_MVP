@@ -564,7 +564,7 @@ export async function applyToJobAction(
       .update({
         cv_document_id: cvDocumentId,
         withdrawn_at: null,
-        current_stage: "applied_sourced",
+        current_stage: "cv_review",
         consent_status: "granted",
       })
       .eq("id", applicationId);
@@ -592,7 +592,7 @@ export async function applyToJobAction(
         owning_org_id: jo.responsible_org_id,
         recruitment_path: jo.recruitment_path,
         entry_source: "applied_direct",
-        current_stage: "applied_sourced",
+        current_stage: "cv_review",
         consent_status: "granted",
         cv_document_id: cvDocumentId,
       })
@@ -640,7 +640,7 @@ export async function applyToJobAction(
   await supabase.from("application_stage_history").insert({
     application_id: applicationId,
     from_stage: null,
-    to_stage: "applied_sourced",
+    to_stage: "cv_review",
     actor_role: "candidate",
     source: isResubmit ? "candidate_reapply" : "candidate_apply",
   });
@@ -688,11 +688,17 @@ export async function applyToJobAction(
 
 export async function withdrawApplicationAction(applicationId: string): Promise<ActionResult> {
   const supabase = createClient();
+  const withdrawnAt = new Date().toISOString();
   const { error } = await supabase
     .from("applications")
-    .update({ withdrawn_at: new Date().toISOString(), current_stage: "applied_sourced" })
+    .update({
+      withdrawn_at: withdrawnAt,
+      current_stage: "cv_review",
+      consent_status: "withdrawn",
+    })
     .eq("id", applicationId);
   if (error) return { ok: false, error: error.message };
+
   await supabase.from("application_stage_history").insert({
     application_id: applicationId,
     to_stage: "withdrawn",
@@ -700,5 +706,6 @@ export async function withdrawApplicationAction(applicationId: string): Promise<
     source: "candidate_withdraw",
   });
   revalidatePath("/candidate/applications");
+  revalidatePath("/employer/submissions");
   return { ok: true };
 }

@@ -1,36 +1,39 @@
 import type { Metadata } from "next";
-import { requirePortal, memberOrgIds } from "@/lib/auth";
-import { canAssignRecruiterRoles, assignableRegionCodes } from "@/lib/rbac";
+import Link from "next/link";
+import { requirePortal } from "@/lib/auth";
+import { canAssignRecruiterRoles, assignableRegionCodes, isHqAdmin } from "@/lib/rbac";
 import { getRecruitersWithRoles } from "@/lib/data/recruiter-kpis";
+import { memberOrgIds } from "@/lib/auth";
 import { PageHeader, Badge, ButtonLink } from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Recruiters" };
 
-export default async function FranchiseRecruitersPage() {
-  const ctx = await requirePortal("franchise");
-  if (!canAssignRecruiterRoles(ctx.roles)) {
-    redirect("/unauthorized");
-  }
+export default async function HqRecruitersPage() {
+  const ctx = await requirePortal("hq");
+  if (!canAssignRecruiterRoles(ctx.roles)) redirect("/unauthorized");
 
-  const regions = assignableRegionCodes(ctx.roles, ctx.memberships) ?? [];
+  const regionFilter = isHqAdmin(ctx.roles)
+    ? undefined
+    : (assignableRegionCodes(ctx.roles, ctx.memberships)?.[0] ?? undefined);
+
   const orgIds = memberOrgIds(ctx.memberships);
-
   const recruiters = await getRecruitersWithRoles({
-    organizationId: orgIds[0],
-    regionCode: regions[0],
+    regionCode: regionFilter,
+    // HQ sees all; others scoped by first org if needed
+    organizationId: isHqAdmin(ctx.roles) ? undefined : orgIds[0],
   });
 
   return (
     <div>
       <PageHeader
         title="Recruiters"
-        description="Recruiters in your franchise, their assigned sourcing roles, and KPI summaries."
+        description="Assign sourcing roles and review KPI summaries across the network."
       />
 
       {recruiters.length === 0 ? (
-        <p className="text-sm text-ink-muted">No recruiters found in your region.</p>
+        <p className="text-sm text-ink-muted">No recruiters found for your scope.</p>
       ) : (
         <DataTable>
           <THead>
@@ -60,7 +63,7 @@ export default async function FranchiseRecruitersPage() {
                 <TD>{r.kpisSummary.placementRate > 0 ? `${r.kpisSummary.placementRate}%` : "—"}</TD>
                 <TD>
                   <ButtonLink
-                    href={`/franchise/recruiters/${r.recruiterId}`}
+                    href={`/hq/recruiters/${r.recruiterId}`}
                     variant="secondary"
                     size="sm"
                   >
@@ -72,6 +75,17 @@ export default async function FranchiseRecruitersPage() {
           </tbody>
         </DataTable>
       )}
+
+      <p className="mt-4 text-xs text-ink-subtle">
+        Tip: open a recruiter to assign or revoke job roles. Region-locked admins can only manage
+        their country.
+      </p>
+      <p className="mt-1 text-xs text-ink-subtle">
+        <Link href="/hq/users" className="text-brand-700 hover:underline">
+          Users & roles
+        </Link>{" "}
+        remains the place for membership provisioning.
+      </p>
     </div>
   );
 }

@@ -16,19 +16,19 @@ export default async function EmployerSubmissionsPage() {
   return (
     <div>
       <PageHeader
-        title="Candidates submitted to you"
-        description="Masked, view-only candidate submissions. Recruiter notes and unrelated data are never shown here."
+        title="Candidate CVs from Shugulika"
+        description="The end of the headhunting pipeline: masked, view-only CV packs your recruiters have cleared for you. You never see the wider talent database."
       />
       <div className="mb-4">
         <Alert tone="info">
-          You see a masked profile until the candidate consents to reveal full details. Identity and
-          contact are hidden by default.
+          Profiles stay masked until the candidate consents to share full identity and contact
+          details with your organization. Recruiter-only notes stay inside Shugulika.
         </Alert>
       </div>
       {visible.length === 0 ? (
         <EmptyState
-          title="No submissions yet"
-          description="When a recruiter submits a candidate for one of your roles, they appear here."
+          title="No CVs yet"
+          description="When Shugulika submits a candidate for one of your roles, their CV pack appears here."
         />
       ) : (
         <DataTable>
@@ -37,7 +37,7 @@ export default async function EmployerSubmissionsPage() {
               <TH>Reference</TH>
               <TH>Role</TH>
               <TH>Status</TH>
-              <TH>Submitted</TH>
+              <TH>Sent to you</TH>
               <TH className="text-right">Review</TH>
             </TR>
           </THead>

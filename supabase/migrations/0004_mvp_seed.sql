@@ -16,23 +16,29 @@ insert into public.countries (code, name, currency, is_active, sort_order) value
   ('GH','Ghana','GHS', false, 3)
 on conflict (code) do update set name = excluded.name, currency = excluded.currency, is_active = excluded.is_active;
 
--- ---- Reference: pipeline stages (the 15-stage Spine) ------------------------
+-- ---- Reference: pipeline stages (simplified MVP candidate flow) ------------
 insert into public.pipeline_stages (key, label, ordinal, stage_class) values
   ('advertised','Advertised',1,'job'),
-  ('applied_sourced','Applied / Sourced',2,'candidate'),
-  ('cv_screening','CV Screening',3,'candidate'),
-  ('longlisted','Longlisted',4,'candidate'),
-  ('ai_interview_screening','AI Interview Screening',5,'candidate'),
-  ('shortlisted','Shortlisted',6,'candidate'),
-  ('screening_interview','Screening Interview',7,'candidate'),
-  ('testing','Testing',8,'candidate'),
-  ('reference_checks','Reference Checks',9,'candidate'),
-  ('client_submission','Client Submission',10,'candidate'),
-  ('client_interview','Client Interview',11,'candidate'),
-  ('offer','Offer',12,'candidate'),
-  ('hired','Hired',13,'candidate'),
-  ('invoiced','Invoiced',14,'accounts'),
-  ('closed','Closed',15,'job')
+  ('cv_review','CV Review',2,'candidate'),
+  ('testing','Testing',3,'candidate'),
+  ('test_review','Test Review / Grading',4,'candidate'),
+  ('interview_screening','Interview Screening',5,'candidate'),
+  ('interview_review','Interview Review',6,'candidate'),
+  ('reference_checks','Reference Checks',7,'candidate'),
+  ('client_submission','Client Submission',8,'candidate'),
+  ('offer','Offer',9,'candidate'),
+  ('hired','Hired',10,'candidate'),
+  ('rejected','Rejected',11,'candidate'),
+  ('invoiced','Invoiced',12,'accounts'),
+  ('closed','Closed',13,'job'),
+  -- Legacy keys kept for historical stage history display
+  ('applied_sourced','Applied / Sourced',102,'candidate'),
+  ('cv_screening','CV Screening',103,'candidate'),
+  ('longlisted','Longlisted',104,'candidate'),
+  ('ai_interview_screening','AI Interview Screening',105,'candidate'),
+  ('shortlisted','Shortlisted',106,'candidate'),
+  ('screening_interview','Screening Interview',107,'candidate'),
+  ('client_interview','Client Interview',108,'candidate')
 on conflict (key) do update set label = excluded.label, ordinal = excluded.ordinal, stage_class = excluded.stage_class;
 
 -- ---- Reference: rejection reasons ------------------------------------------

@@ -136,11 +136,11 @@ export function ApplyForm({
           />
           <Checkbox
             name="consent_share"
-            label="I agree to share my selected CV and application profile with the recruitment team handling this role."
+            label="I agree that my selected CV and application profile may be shared with the recruitment team and the employer for this role while my application is active."
           />
           <div className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-ink-subtle">
-            Note: submitting your profile to a specific employer requires a separate,
-            employer-specific consent later — general consent here is not enough for that step.
+            No additional approval is required when Shugulika submits you to the employer. You can
+            stop sharing by withdrawing this application.
           </div>
           <Checkbox
             name="accurate"

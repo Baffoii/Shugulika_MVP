@@ -13,7 +13,7 @@ export default async function PipelinePage() {
   // Group by phase (understandable grouping over the 15 internal stages).
   const byPhase = new Map<string, PipelineApplication[]>();
   for (const a of applications) {
-    const phase = stageByKey(a.current_stage)?.phase ?? "new";
+    const phase = stageByKey(a.current_stage)?.phase ?? "initial_review";
     const arr = byPhase.get(phase) ?? [];
     arr.push(a);
     byPhase.set(phase, arr);
@@ -24,7 +24,7 @@ export default async function PipelinePage() {
     <div>
       <PageHeader
         title="Pipeline"
-        description="Candidate applications grouped into phases. The full 15-stage Spine is preserved; open a candidate to move them stage by stage."
+        description="Candidate applications grouped by phase. Move candidates forward only — earlier stages are locked once passed."
       />
       {applications.length === 0 ? (
         <EmptyState

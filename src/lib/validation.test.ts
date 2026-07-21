@@ -68,7 +68,7 @@ describe("stage change requires a reason to reject", () => {
     expect(r.success).toBe(true);
   });
   it("allows a normal stage move without a reason", () => {
-    const r = stageChangeSchema.safeParse({ application_id: id, to_stage: "shortlisted" });
+    const r = stageChangeSchema.safeParse({ application_id: id, to_stage: "cv_review" });
     expect(r.success).toBe(true);
   });
 });
