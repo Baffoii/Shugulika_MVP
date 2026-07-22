@@ -1,55 +1,64 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Bell } from "lucide-react";
 import { PageHeader, Card, EmptyState, Badge } from "@/components/ui/primitives";
 import { MarkNotificationsRead } from "@/components/notifications/MarkNotificationsRead";
 import { getMyNotifications } from "@/lib/data/recruiter";
 import { formatDateTime, titleCase } from "@/lib/format";
-import { Bell } from "lucide-react";
+import type { Portal } from "@/lib/constants";
 
-export const metadata: Metadata = { title: "Notifications" };
-
-function notificationHref(subjectType: string | null, subjectId: string | null): string | null {
+function notificationHref(
+  portal: Portal,
+  subjectType: string | null,
+  subjectId: string | null,
+): string | null {
   if (!subjectType) return null;
-  if (subjectType === "job_order") return "/recruiter/jobs";
-  if (!subjectId) return null;
-  if (subjectType === "application") return `/recruiter/applications/${subjectId}`;
-  if (subjectType === "interview_assignment") return `/recruiter/interviews/${subjectId}`;
+  if (subjectType === "job_order") {
+    if (portal === "hq") return "/hq/jobs";
+    if (portal === "franchise") return "/franchise/jobs";
+    if (portal === "recruiter") return "/recruiter/jobs";
+  }
+  if (subjectType === "application" && subjectId && portal === "recruiter") {
+    return `/recruiter/applications/${subjectId}`;
+  }
+  if (subjectType === "interview_assignment" && subjectId && portal === "recruiter") {
+    return `/recruiter/interviews/${subjectId}`;
+  }
   return null;
 }
 
-export default async function RecruiterNotificationsPage() {
+export function staffNotificationsMetadata(title = "Notifications"): Metadata {
+  return { title };
+}
+
+export async function StaffNotificationsInbox({
+  portal,
+  description,
+}: {
+  portal: Extract<Portal, "hq" | "franchise" | "recruiter">;
+  description: string;
+}) {
   const notifications = await getMyNotifications();
   return (
     <div>
       <MarkNotificationsRead />
-      <PageHeader
-        title="Notifications"
-        description="New applications and video interview submissions for your pipeline."
-      />
+      <PageHeader title="Notifications" description={description} />
       {notifications.length === 0 ? (
         <EmptyState
           icon={<Bell className="h-8 w-8" />}
           title="No notifications yet"
-          description="You'll be notified when candidates apply or submit video interviews."
+          description="You'll be notified when something needs your attention."
         />
       ) : (
         <Card>
           <ul className="divide-y divide-surface-border">
             {notifications.map((n) => {
-              const href = notificationHref(n.subject_type, n.subject_id);
+              const href = notificationHref(portal, n.subject_type, n.subject_id);
               const content = (
                 <>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-ink">{n.title}</p>
-                    <Badge
-                      tone={
-                        n.category === "interview"
-                          ? "brand"
-                          : n.category === "job_order"
-                            ? "warn"
-                            : "info"
-                      }
-                    >
+                    <Badge tone={n.category === "job_order" ? "warn" : "info"}>
                       {titleCase(n.category)}
                     </Badge>
                     {!n.read_at ? <Badge tone="danger">New</Badge> : null}

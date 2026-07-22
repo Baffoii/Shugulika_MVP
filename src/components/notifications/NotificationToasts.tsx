@@ -37,7 +37,16 @@ function hrefForNotification(
     if (subjectType === "application" && subjectId) {
       return `/recruiter/applications/${subjectId}`;
     }
+    if (subjectType === "job_order") return "/recruiter/jobs";
     return "/recruiter/notifications";
+  }
+  if (portal === "hq") {
+    if (subjectType === "job_order") return "/hq/jobs";
+    return "/hq/notifications";
+  }
+  if (portal === "franchise") {
+    if (subjectType === "job_order") return "/franchise/jobs";
+    return "/franchise/jobs";
   }
   return `/${portal}/dashboard`;
 }
@@ -45,6 +54,7 @@ function hrefForNotification(
 function inboxPath(portal: Portal): string {
   if (portal === "candidate") return "/candidate/notifications";
   if (portal === "recruiter") return "/recruiter/notifications";
+  if (portal === "hq") return "/hq/notifications";
   return `/${portal}/dashboard`;
 }
 

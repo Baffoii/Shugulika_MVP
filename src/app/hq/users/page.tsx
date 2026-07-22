@@ -4,8 +4,8 @@ export default function Page() {
   return (
     <SectionStub
       title="Users & roles"
-      description="Administer users, roles, and organizational memberships."
-      note="Privileged roles (recruiter, franchise admin, operations, accounts, HQ) are provisioned here and via the documented admin procedure — never through public sign-up."
+      description="Create login accounts and set memberships (who can sign in as recruiter, franchise admin, HQ, etc.)."
+      note="This is account provisioning — not job ownership. To put a recruiter on a specific approved role, use Jobs or Assignments."
     />
   );
 }

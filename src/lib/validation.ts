@@ -124,11 +124,16 @@ export const jobOrderSchema = z.object({
   employment_type: z.string().optional().or(z.literal("")),
   work_arrangement: z.string().optional().or(z.literal("")),
   experience_level: z.string().optional().or(z.literal("")),
-  vacancy_count: z.coerce.number().int().min(1).max(999),
+  vacancy_count: z.coerce
+    .number({ invalid_type_error: "Enter at least 1 vacancy" })
+    .int("Vacancies must be a whole number")
+    .min(1, "Enter at least 1 vacancy")
+    .max(999),
   recruitment_path: z.enum(["A", "B"]),
   salary_min: z.coerce.number().nonnegative().optional(),
   salary_max: z.coerce.number().nonnegative().optional(),
   salary_public: z.boolean().optional(),
+  application_deadline: z.string().optional().or(z.literal("")),
 });
 
 /** Recruiter stage change — reason required when rejecting. */

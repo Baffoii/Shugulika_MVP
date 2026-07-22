@@ -343,7 +343,9 @@ scheduler or manual staff action.
   rejected from, recruiter notes, stage history, **AI CV role-fit screening** (OpenAI; metered against
   employer package entitlements when subscribed; cache-aware), and automatic employer CV pack creation on
   Client Submission. Every change writes stage history + audit + a candidate notification.
-- **Employer portal**: dashboard; **masked** submission review (identity/contact hidden); decision workflow
+- **Employer portal**: dashboard; employer job-order submission with scoped HQ/franchise/recruiter
+  approval and atomic public publication; per-order audit history showing the actor and timestamp;
+  **masked** submission review (identity/contact hidden); decision workflow
   (shortlist / request interview / reject-with-reason) with audit; employer comments. Employers only ever see
   candidates submitted to them (enforced by RLS). Client Submission from the recruiter portal creates that pack
   automatically while the application is active.
