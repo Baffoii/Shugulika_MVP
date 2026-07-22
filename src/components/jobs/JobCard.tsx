@@ -8,11 +8,14 @@ export function JobCard({
   job,
   detailBasePath = "/jobs",
   applied = false,
+  withdrawn = false,
 }: {
   job: PublicJobRow;
   detailBasePath?: string;
-  /** Candidate has already submitted an application for this role. */
+  /** Candidate has an active application for this role. */
   applied?: boolean;
+  /** Candidate withdrew their application for this role. */
+  withdrawn?: boolean;
 }) {
   const closing = job.application_deadline;
   const closingSoon = closing ? new Date(closing).getTime() - Date.now() < 5 * 86_400_000 : false;
@@ -27,7 +30,8 @@ export function JobCard({
           <p className="mt-0.5 text-sm text-ink-muted">{job.employer_name}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          {applied ? <Badge tone="neutral">Applied</Badge> : null}
+          {withdrawn ? <Badge tone="neutral">Withdrawn</Badge> : null}
+          {applied && !withdrawn ? <Badge tone="neutral">Applied</Badge> : null}
           {job.recruitment_path === "A" ? (
             <Badge tone="info">Direct employer</Badge>
           ) : (

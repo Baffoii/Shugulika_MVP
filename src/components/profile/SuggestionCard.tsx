@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Check, X, Pencil } from "lucide-react";
 import { acceptSuggestionAction, rejectSuggestionAction } from "@/app/candidate/resume-actions";
 import { Button, Alert } from "@/components/ui/primitives";
 import { Field, Input, Textarea, Select, Checkbox } from "@/components/ui/form";
 import { formatDate } from "@/lib/format";
-import { COUNTRIES } from "@/lib/constants";
+import { COUNTRIES, LANGUAGE_PROFICIENCIES } from "@/lib/constants";
+import { normalizeLanguageProficiency } from "@/lib/validation";
 import { ConfidenceBadge } from "@/components/profile/ConfidenceBadge";
 import type { ResumeFieldSuggestionRow } from "@/lib/database.types";
 
@@ -74,7 +74,6 @@ function cardTitle(s: ResumeFieldSuggestionRow): string {
 
 /** Renders one resume_field_suggestions row with Accept / Edit / Reject actions. */
 export function SuggestionCard({ suggestion }: { suggestion: ResumeFieldSuggestionRow }) {
-  const _router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -82,28 +81,8 @@ export function SuggestionCard({ suggestion }: { suggestion: ResumeFieldSuggesti
 
   function accept() {
     setError(null);
-    const clientStartedAt = Date.now();
     start(async () => {
       const result = await acceptSuggestionAction(suggestion.id);
-      // #region agent log
-      fetch("http://127.0.0.1:7633/ingest/68762b8f-c0ac-48a0-b8c8-d7a4a3ccc345", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "153c53" },
-        body: JSON.stringify({
-          sessionId: "153c53",
-          hypothesisId: "C",
-          location: "SuggestionCard.tsx:accept:done",
-          message: "accept client round-trip",
-          data: {
-            fieldPath: suggestion.field_path,
-            ok: result.ok,
-            durationMs: Date.now() - clientStartedAt,
-            calledRouterRefresh: false,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       if (!result.ok) setError(result.error ?? "Could not accept this suggestion.");
       else if (result.message) setMessage(result.message);
     });
@@ -230,7 +209,8 @@ function displayValue(
   }
   if (entity === "language") {
     const v = value as LanguageValue;
-    return [v.language, v.proficiency].filter(Boolean).join(" · ");
+    const proficiency = normalizeLanguageProficiency(v.proficiency) || v.proficiency;
+    return [v.language, proficiency].filter(Boolean).join(" · ");
   }
   return String(value);
 }
@@ -393,13 +373,21 @@ function SuggestionEditFields({ suggestion }: { suggestion: ResumeFieldSuggestio
 
   if (suggestion.target_entity === "language") {
     const v = suggestion.suggested_value as LanguageValue;
+    const proficiency = normalizeLanguageProficiency(v.proficiency) || v.proficiency || "";
     return (
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Language" htmlFor="language" required>
           <Input id="language" name="language" defaultValue={v.language} />
         </Field>
         <Field label="Proficiency" htmlFor="proficiency">
-          <Input id="proficiency" name="proficiency" defaultValue={v.proficiency ?? ""} />
+          <Select id="proficiency" name="proficiency" defaultValue={proficiency}>
+            <option value="">Select…</option>
+            {LANGUAGE_PROFICIENCIES.map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+          </Select>
         </Field>
       </div>
     );

@@ -24,6 +24,9 @@ export const env = {
   openaiApiKey: () => required("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
   /** Server-only. Never expose to the client. */
   openaiResumeModel: () => process.env.OPENAI_RESUME_MODEL ?? "gpt-4.1-mini",
+  /** Server-only. Model used for AI CV screening (role-fit reviews). */
+  openaiScreeningModel: () =>
+    process.env.OPENAI_SCREENING_MODEL ?? process.env.OPENAI_RESUME_MODEL ?? "gpt-4.1-mini",
 };
 
 /** True when the OpenAI key is configured (used to gracefully disable CV parsing). */

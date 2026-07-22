@@ -357,8 +357,8 @@ export async function addLanguageAction(
   if (!cid) return { ok: false, error: "No candidate profile" };
   const { error } = await supabase.from("candidate_languages").insert({
     candidate_id: cid,
-    language: values.language,
-    proficiency: values.proficiency || null,
+    language: parsed.data.language,
+    proficiency: parsed.data.proficiency || null,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/candidate/profile");
@@ -388,7 +388,10 @@ export async function updateLanguageAction(
   if (!cid) return { ok: false, error: "No candidate profile" };
   const { data, error } = await supabase
     .from("candidate_languages")
-    .update({ language: values.language, proficiency: values.proficiency || null })
+    .update({
+      language: parsed.data.language,
+      proficiency: parsed.data.proficiency || null,
+    })
     .eq("id", id)
     .eq("candidate_id", cid)
     .select("id")
@@ -485,16 +488,24 @@ export async function applyToJobAction(
   // it rather than blocking — candidates confirm in the UI first.
   const { data: existingApp } = await supabase
     .from("applications")
-    .select("id")
+    .select("id, withdrawn_at, current_stage")
     .eq("candidate_id", cid)
     .eq("job_order_id", jobOrderId)
     .maybeSingle();
-  const isResubmit = Boolean(existingApp);
+  const existing = existingApp as {
+    id: string;
+    withdrawn_at: string | null;
+    current_stage: string;
+  } | null;
+  const isResubmit = Boolean(existing);
+  const isReapplyAfterWithdraw = Boolean(existing?.withdrawn_at);
   const confirmedResubmit = formData.get("reapply") === "1";
   if (isResubmit && !confirmedResubmit) {
     return {
       ok: false,
-      error: "You've already applied to this role. Use Apply again if you want to resubmit.",
+      error: isReapplyAfterWithdraw
+        ? "You previously withdrew from this role. Use Apply again to submit a new application."
+        : "You've already applied to this role. Use Apply again if you want to resubmit.",
     };
   }
 
@@ -557,8 +568,8 @@ export async function applyToJobAction(
   }
 
   let applicationId: string;
-  if (isResubmit && existingApp) {
-    applicationId = (existingApp as { id: string }).id;
+  if (isResubmit && existing) {
+    applicationId = existing.id;
     const { error: updErr } = await supabase
       .from("applications")
       .update({
@@ -639,10 +650,14 @@ export async function applyToJobAction(
 
   await supabase.from("application_stage_history").insert({
     application_id: applicationId,
-    from_stage: null,
+    from_stage: isReapplyAfterWithdraw ? "withdrawn" : isResubmit ? existing!.current_stage : null,
     to_stage: "cv_review",
     actor_role: "candidate",
-    source: isResubmit ? "candidate_reapply" : "candidate_apply",
+    source: isReapplyAfterWithdraw
+      ? "candidate_reapply"
+      : isResubmit
+        ? "candidate_update"
+        : "candidate_apply",
   });
 
   const { data: user } = await supabase.auth.getUser();
@@ -658,10 +673,16 @@ export async function applyToJobAction(
     await supabase.from("notifications").insert({
       user_id: user.user.id,
       category: "application_status",
-      title: isResubmit ? "Application updated" : "Application submitted",
-      body: isResubmit
-        ? `Your application for ${roleLabel} was updated. We'll update you as it progresses.`
-        : `Your application for ${roleLabel} was received. We'll update you as it progresses.`,
+      title: isReapplyAfterWithdraw
+        ? "Application resubmitted"
+        : isResubmit
+          ? "Application updated"
+          : "Application submitted",
+      body: isReapplyAfterWithdraw
+        ? `You reapplied for ${roleLabel}. Recruiters can see that you previously withdrew. We'll update you as it progresses.`
+        : isResubmit
+          ? `Your application for ${roleLabel} was updated. We'll update you as it progresses.`
+          : `Your application for ${roleLabel} was received. We'll update you as it progresses.`,
       subject_type: "application",
       subject_id: applicationId,
     });
@@ -669,9 +690,14 @@ export async function applyToJobAction(
 
   // Fan-out to recruiters in the owning org (SECURITY DEFINER RPC — candidates
   // cannot insert notifications for other users via RLS).
+  const staffEvent = isReapplyAfterWithdraw
+    ? "reapplied"
+    : isResubmit
+      ? "updated"
+      : "created";
   const { error: staffNotifyError } = await supabase.rpc("notify_staff_of_application", {
     p_application_id: applicationId,
-    p_event: isResubmit ? "updated" : "created",
+    p_event: staffEvent,
   });
   if (staffNotifyError) {
     console.error("[notify_staff_of_application]", staffNotifyError.message);
@@ -688,24 +714,57 @@ export async function applyToJobAction(
 
 export async function withdrawApplicationAction(applicationId: string): Promise<ActionResult> {
   const supabase = createClient();
+  const cid = await myCandidateId();
+  if (!cid) return { ok: false, error: "No candidate profile" };
+
+  const { data: appRow, error: loadErr } = await supabase
+    .from("applications")
+    .select("id, current_stage, withdrawn_at")
+    .eq("id", applicationId)
+    .eq("candidate_id", cid)
+    .maybeSingle();
+  if (loadErr) return { ok: false, error: loadErr.message };
+  const app = appRow as {
+    id: string;
+    current_stage: string;
+    withdrawn_at: string | null;
+  } | null;
+  if (!app) return { ok: false, error: "Application not found." };
+  if (app.withdrawn_at) return { ok: false, error: "Application is already withdrawn." };
+
   const withdrawnAt = new Date().toISOString();
   const { error } = await supabase
     .from("applications")
     .update({
       withdrawn_at: withdrawnAt,
-      current_stage: "cv_review",
       consent_status: "withdrawn",
     })
-    .eq("id", applicationId);
+    .eq("id", applicationId)
+    .eq("candidate_id", cid);
   if (error) return { ok: false, error: error.message };
 
   await supabase.from("application_stage_history").insert({
     application_id: applicationId,
+    from_stage: app.current_stage,
     to_stage: "withdrawn",
     actor_role: "candidate",
     source: "candidate_withdraw",
   });
+
+  const { error: staffNotifyError } = await supabase.rpc("notify_staff_of_application", {
+    p_application_id: applicationId,
+    p_event: "withdrawn",
+  });
+  if (staffNotifyError) {
+    console.error("[notify_staff_of_application]", staffNotifyError.message);
+  }
+
   revalidatePath("/candidate/applications");
+  revalidatePath("/candidate/jobs");
+  revalidatePath("/candidate/dashboard");
   revalidatePath("/employer/submissions");
+  revalidatePath("/recruiter/notifications");
+  revalidatePath("/recruiter/pipeline");
+  revalidatePath(`/recruiter/applications/${applicationId}`);
   return { ok: true };
 }

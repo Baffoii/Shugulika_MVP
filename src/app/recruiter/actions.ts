@@ -162,6 +162,8 @@ export async function advanceStageAction(formData: FormData): Promise<ActionResu
 export async function markTestingSubmittedAction(formData: FormData): Promise<ActionResult> {
   const applicationId = String(formData.get("application_id") ?? "");
   const note = String(formData.get("note") ?? "").trim();
+  const testName = String(formData.get("test_name") ?? "").trim();
+  const testScore = String(formData.get("test_score") ?? "").trim();
   const app = await loadApplication(applicationId);
   if (!app) return { ok: false, error: "Application not found or not authorized." };
   if (app.current_stage !== "testing") {
@@ -170,11 +172,26 @@ export async function markTestingSubmittedAction(formData: FormData): Promise<Ac
       error: "Testing can only be marked submitted while the candidate is in Testing.",
     };
   }
-  return moveApplicationToStage(app, "test_review", {
-    note,
-    source: "testing_submitted",
-    allowAuto: true,
-  });
+
+  const supabase = createClient();
+  const { error: scoreError } = await supabase
+    .from("applications")
+    .update({
+      test_name: testName || null,
+      test_score: testScore || null,
+    })
+    .eq("id", app.id);
+  if (scoreError) return { ok: false, error: scoreError.message };
+
+  return moveApplicationToStage(
+    { ...app, test_name: testName || null, test_score: testScore || null },
+    "test_review",
+    {
+      note,
+      source: "testing_submitted",
+      allowAuto: true,
+    },
+  );
 }
 
 /** Interview Screening completed → automatically enter Interview Review. */
@@ -315,9 +332,8 @@ export async function addNoteAction(formData: FormData): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Ensure the employer has one active, masked candidate pack for this
- * application. This is called automatically when the recruiter advances the
- * candidate to Client Submission. */
+/** Ensure the employer has one active candidate pack for this application.
+ * Called automatically when the recruiter advances to Client Submission. */
 async function ensureEmployerSubmission(
   app: ApplicationRow,
   summary: string,
@@ -350,14 +366,20 @@ async function ensureEmployerSubmission(
     .eq("id", app.candidate_id)
     .maybeSingle();
   const c = cand as CandidateProfileRow | null;
+  const fullName = [c?.given_name, c?.family_name].filter(Boolean).join(" ").trim() || null;
 
-  // Employer-facing snapshot. Contact and unrelated candidate data remain
-  // protected; withdrawal is enforced at application level before this point.
+  // Employer-facing snapshot at Client Submission: identity, profile, CV, and
+  // skills-test result (null score → N/A in the employer UI).
   const disclosed = {
+    full_name: fullName,
+    given_name: c?.given_name ?? null,
+    family_name: c?.family_name ?? null,
     headline: c?.headline ?? null,
     location: [c?.city, c?.country_code].filter(Boolean).join(", "),
     summary: c?.summary ?? null,
     availability: c?.availability ?? null,
+    test_name: app.test_name ?? null,
+    test_score: app.test_score ?? null,
   };
 
   const { data: sub, error } = await supabase
@@ -371,10 +393,20 @@ async function ensureEmployerSubmission(
       submitting_recruiter_id: await actor(),
       consent_id: null,
       status: "submitted",
-      is_masked: true,
+      is_masked: false,
       summary: summary.trim() || null,
       disclosed_profile: disclosed as never,
-      disclosed_fields: ["headline", "location", "summary", "availability"],
+      disclosed_fields: [
+        "full_name",
+        "given_name",
+        "family_name",
+        "headline",
+        "location",
+        "summary",
+        "availability",
+        "test_name",
+        "test_score",
+      ],
       cv_document_id: app.cv_document_id,
       submitted_at: new Date().toISOString(),
     })
@@ -389,5 +421,6 @@ async function ensureEmployerSubmission(
   });
 
   revalidatePath("/recruiter/clients");
+  revalidatePath("/employer/submissions");
   return { ok: true };
 }

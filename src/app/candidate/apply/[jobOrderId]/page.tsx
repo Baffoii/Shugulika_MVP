@@ -35,20 +35,25 @@ export default async function ApplyPage({
       .order("ordinal"),
     supabase
       .from("applications")
-      .select("id")
+      .select("id, withdrawn_at")
       .eq("candidate_id", candidate.id)
       .eq("job_order_id", params.jobOrderId)
       .maybeSingle(),
   ]);
   const cvs = docs.filter((d) => d.doc_type === "cv");
-  const alreadyApplied = Boolean(existingApp);
+  const existing = existingApp as { id: string; withdrawn_at: string | null } | null;
+  const alreadyApplied = Boolean(existing && !existing.withdrawn_at);
+  const isReapply = Boolean(existing?.withdrawn_at) || searchParams?.reapply === "1";
+  const isResubmit = alreadyApplied || isReapply;
 
   const { ApplyForm } = await import("./ApplyForm");
 
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
-        title={`${alreadyApplied ? "Update application" : "Apply"} — ${jobRow.title}`}
+        title={`${
+          existing?.withdrawn_at ? "Reapply" : alreadyApplied ? "Update application" : "Apply"
+        } — ${jobRow.title}`}
         description={`${jobRow.employer_name} · ${jobRow.city ?? ""} ${jobRow.country_code}`}
       />
       <Card className="mb-4">
@@ -63,7 +68,8 @@ export default async function ApplyPage({
         employerName={jobRow.employer_name}
         cvs={cvs}
         questions={(questions as JobScreeningQuestionRow[] | null) ?? []}
-        alreadyApplied={alreadyApplied || searchParams?.reapply === "1"}
+        alreadyApplied={isResubmit}
+        isReapplyAfterWithdraw={Boolean(existing?.withdrawn_at)}
       />
     </div>
   );

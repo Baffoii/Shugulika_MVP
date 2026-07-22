@@ -72,7 +72,7 @@ export default async function EmployerCompanyPage() {
             <Field label="Service" value="Shugulika-managed headhunting" />
             <Field
               label="What you receive"
-              value="Masked candidate CV packs after recruiter screening and candidate consent — not the full talent database."
+              value="Candidate name, resume, and test score after recruiter Client Submission — not the full talent database."
             />
             <Field label="Signed-in contact" value={session.profile?.full_name || session.email} />
           </CardBody>

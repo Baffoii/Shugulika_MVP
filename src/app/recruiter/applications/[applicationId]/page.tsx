@@ -9,10 +9,12 @@ import {
   CardBody,
   Badge,
   EmptyState,
+  Alert,
 } from "@/components/ui/primitives";
 import { StageBadge, StatusBadge } from "@/components/StatusBadge";
 import { getApplicationDetail } from "@/lib/data/recruiter";
 import { StageControl, NoteForm, ViewCvButton } from "./Workspace";
+import { AiScreeningPanel } from "./AiScreening";
 import { stageByKey } from "@/lib/constants";
 import { formatDate, formatDateTime, titleCase, initials } from "@/lib/format";
 import { FileText, MapPin } from "lucide-react";
@@ -26,7 +28,18 @@ export default async function ApplicationWorkspace({
 }) {
   const detail = await getApplicationDetail(params.applicationId);
   if (!detail) notFound();
-  const { application, candidate, job, history, notes, documents, submissions } = detail;
+  const {
+    application,
+    candidate,
+    job,
+    history,
+    notes,
+    documents,
+    submissions,
+    aiReview,
+    aiReviewItems,
+  } = detail;
+  const primaryCv = documents.find((d) => d.is_primary) ?? documents[0] ?? null;
   const name = `${candidate?.given_name ?? "Candidate"} ${candidate?.family_name ?? ""}`.trim();
 
   return (
@@ -41,9 +54,30 @@ export default async function ApplicationWorkspace({
             ? `${job.title} · ${application.recruitment_path === "A" ? "Direct employer" : "Shugulika-managed"}`
             : undefined
         }
-        actions={<StageBadge stageKey={application.current_stage} />}
+        actions={
+          application.withdrawn_at ? (
+            <Badge tone="neutral">Withdrawn</Badge>
+          ) : (
+            <StageBadge stageKey={application.current_stage} />
+          )
+        }
       />
 
+      {application.withdrawn_at ? (
+        <div className="mb-4">
+          <Alert tone="warn" title="Candidate withdrew">
+            This application was withdrawn on {formatDate(application.withdrawn_at)}. It stays out of
+            the active pipeline until they reapply — stage history below keeps the full record.
+          </Alert>
+        </div>
+      ) : history.some((h) => h.source === "candidate_reapply") ? (
+        <div className="mb-4">
+          <Alert tone="info" title="Candidate reapplied">
+            This candidate previously withdrew and has reapplied. See stage history for the full
+            timeline.
+          </Alert>
+        </div>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card>
@@ -102,6 +136,13 @@ export default async function ApplicationWorkspace({
             </CardBody>
           </Card>
 
+          <AiScreeningPanel
+            applicationId={application.id}
+            hasCv={!!application.cv_document_id || !!primaryCv}
+            review={aiReview}
+            items={aiReviewItems}
+          />
+
           <Card>
             <CardHeader>
               <CardTitle>Stage history</CardTitle>
@@ -122,7 +163,7 @@ export default async function ApplicationWorkspace({
                         <span className="font-medium">{stageLabel(h.to_stage)}</span>
                       </p>
                       <p className="text-xs text-ink-subtle">
-                        {formatDateTime(h.created_at)} · {titleCase(h.actor_role ?? h.source)}
+                        {formatDateTime(h.created_at)} · {historyActorLabel(h)}
                         {h.reason ? ` · ${h.reason}` : ""}
                       </p>
                       {h.note ? <p className="mt-0.5 text-sm text-ink-muted">{h.note}</p> : null}
@@ -140,6 +181,7 @@ export default async function ApplicationWorkspace({
             currentStage={application.current_stage}
             rejectedFromStage={application.rejected_from_stage}
             rejectionReason={application.rejection_reason}
+            withdrawnAt={application.withdrawn_at}
           />
 
           <Card>
@@ -199,4 +241,22 @@ export default async function ApplicationWorkspace({
 
 function stageLabel(key: string): string {
   return stageByKey(key)?.label ?? titleCase(key);
+}
+
+function historyActorLabel(h: {
+  actor_role: string | null;
+  source: string | null;
+}): string {
+  switch (h.source) {
+    case "candidate_withdraw":
+      return "Candidate withdrew";
+    case "candidate_reapply":
+      return "Candidate reapplied";
+    case "candidate_apply":
+      return "Candidate applied";
+    case "candidate_update":
+      return "Candidate updated application";
+    default:
+      return titleCase(h.actor_role ?? h.source);
+  }
 }

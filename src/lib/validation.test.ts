@@ -150,6 +150,25 @@ describe("language validation", () => {
       true,
     );
   });
+
+  it("normalizes proficiency casing and aliases to Title Case", () => {
+    const lower = languageSchema.safeParse({ language: "English", proficiency: "professional" });
+    expect(lower.success).toBe(true);
+    if (lower.success) expect(lower.data.proficiency).toBe("Professional");
+
+    const alias = languageSchema.safeParse({ language: "Swahili", proficiency: "mother tongue" });
+    expect(alias.success).toBe(true);
+    if (alias.success) expect(alias.data.proficiency).toBe("Native");
+
+    const upper = languageSchema.safeParse({ language: "French", proficiency: "FLUENT" });
+    expect(upper.success).toBe(true);
+    if (upper.success) expect(upper.data.proficiency).toBe("Fluent");
+  });
+
+  it("rejects unknown proficiency values", () => {
+    const r = languageSchema.safeParse({ language: "English", proficiency: "kinda ok" });
+    expect(r.success).toBe(false);
+  });
 });
 
 describe("fieldErrors normalizes Zod issues for forms", () => {

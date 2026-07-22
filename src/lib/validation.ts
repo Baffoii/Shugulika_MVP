@@ -1,5 +1,39 @@
 import { z } from "zod";
-import { INTERVIEW_LIMITS, PUBLIC_SIGNUP_ROLES } from "@/lib/constants";
+import {
+  INTERVIEW_LIMITS,
+  LANGUAGE_PROFICIENCIES,
+  PUBLIC_SIGNUP_ROLES,
+  type LanguageProficiency,
+} from "@/lib/constants";
+
+/** Maps CV / form casing and common aliases to the Title Case DB enum. */
+const PROFICIENCY_ALIASES: Record<string, LanguageProficiency> = {
+  basic: "Basic",
+  beginner: "Basic",
+  elementary: "Basic",
+  conversational: "Conversational",
+  intermediate: "Conversational",
+  professional: "Professional",
+  working: "Professional",
+  "working proficiency": "Professional",
+  business: "Professional",
+  proficient: "Professional",
+  fluent: "Fluent",
+  advanced: "Fluent",
+  native: "Native",
+  "mother tongue": "Native",
+  "native speaker": "Native",
+};
+
+/** Empty → ""; known value (any case) → Title Case; unknown → null (invalid). */
+export function normalizeLanguageProficiency(
+  raw: string | null | undefined,
+): LanguageProficiency | "" | null {
+  if (raw == null) return "";
+  const key = String(raw).trim().toLowerCase().replace(/\s+/g, " ");
+  if (!key) return "";
+  return PROFICIENCY_ALIASES[key] ?? null;
+}
 
 export const signUpSchema = z.object({
   fullName: z.string().min(2, "Please enter your name").max(120),
@@ -62,7 +96,19 @@ export const certificationSchema = z.object({
 
 export const languageSchema = z.object({
   language: z.string().min(1, "Required").max(80),
-  proficiency: z.string().max(80).optional().or(z.literal("")),
+  proficiency: z.preprocess((val) => {
+    if (val == null || val === "") return "";
+    const normalized = normalizeLanguageProficiency(String(val));
+    // Keep an invalid token so z.enum fails with a clear message.
+    return normalized === null ? "__invalid__" : normalized;
+  }, z.union([
+    z.literal(""),
+    z.enum(LANGUAGE_PROFICIENCIES, {
+      errorMap: () => ({
+        message: "Use Basic, Conversational, Professional, Fluent, or Native",
+      }),
+    }),
+  ])),
 });
 
 export const jobOrderSchema = z.object({

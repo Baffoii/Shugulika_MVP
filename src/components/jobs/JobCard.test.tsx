@@ -40,4 +40,10 @@ describe("JobCard", () => {
     render(<JobCard job={makePublicJob()} applied />);
     expect(screen.getByText(/^Applied$/i)).toBeInTheDocument();
   });
+
+  it("shows a Withdrawn badge when the candidate withdrew", () => {
+    render(<JobCard job={makePublicJob()} withdrawn />);
+    expect(screen.getByText(/^Withdrawn$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Applied$/i)).not.toBeInTheDocument();
+  });
 });

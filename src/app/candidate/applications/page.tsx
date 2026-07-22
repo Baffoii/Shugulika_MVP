@@ -62,7 +62,13 @@ export default async function CandidateApplicationsPage() {
                   </TD>
                   <TD className="text-right">
                     {a.withdrawn_at ? (
-                      <span className="text-xs text-ink-subtle">—</span>
+                      <ButtonLink
+                        href={`/candidate/apply/${a.job_order_id}?reapply=1`}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Apply again
+                      </ButtonLink>
                     ) : (
                       <WithdrawButton applicationId={a.id} />
                     )}

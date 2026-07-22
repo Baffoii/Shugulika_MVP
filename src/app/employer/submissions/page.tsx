@@ -8,21 +8,35 @@ import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Submissions" };
 
+type DisclosedName = {
+  full_name?: string | null;
+  given_name?: string | null;
+  family_name?: string | null;
+};
+
+function candidateLabel(disclosed: unknown, fallbackId: string): string {
+  const d = (disclosed ?? {}) as DisclosedName;
+  const name =
+    d.full_name?.trim() ||
+    [d.given_name, d.family_name].filter(Boolean).join(" ").trim() ||
+    null;
+  return name ?? `Candidate ${fallbackId.slice(0, 8)}`;
+}
+
 export default async function EmployerSubmissionsPage() {
   const submissions = await getEmployerSubmissions();
-  // Employers see only submissions actually shared with them (consent-gated); pending ones aren't visible via RLS.
   const visible = submissions.filter((s) => s.status !== "consent_pending");
 
   return (
     <div>
       <PageHeader
         title="Candidate CVs from Shugulika"
-        description="The end of the headhunting pipeline: masked, view-only CV packs your recruiters have cleared for you. You never see the wider talent database."
+        description="Candidates cleared to Client Submission for your roles — name, resume, and test score included."
       />
       <div className="mb-4">
         <Alert tone="info">
-          Profiles stay masked until the candidate consents to share full identity and contact
-          details with your organization. Recruiter-only notes stay inside Shugulika.
+          Packs appear when Shugulika moves a candidate to Client Submission. Contact details stay
+          inside Shugulika; withdrawal removes the pack from your view.
         </Alert>
       </div>
       {visible.length === 0 ? (
@@ -34,7 +48,7 @@ export default async function EmployerSubmissionsPage() {
         <DataTable>
           <THead>
             <TR>
-              <TH>Reference</TH>
+              <TH>Candidate</TH>
               <TH>Role</TH>
               <TH>Status</TH>
               <TH>Sent to you</TH>
@@ -45,7 +59,9 @@ export default async function EmployerSubmissionsPage() {
             {visible.map((s) => (
               <TR key={s.id}>
                 <TD>
-                  <span className="font-medium text-ink">Candidate {s.id.slice(0, 8)}</span>
+                  <span className="font-medium text-ink">
+                    {candidateLabel(s.disclosed_profile, s.id)}
+                  </span>
                 </TD>
                 <TD className="text-ink-muted">{s.job_orders?.title ?? "Role"}</TD>
                 <TD>

@@ -9,6 +9,8 @@ import type {
   EmployerSubmissionRow,
   InterviewRow,
   NotificationRow,
+  ApplicationAiReviewRow,
+  ApplicationAiReviewItemRow,
 } from "@/lib/database.types";
 
 export interface PipelineApplication extends ApplicationRow {
@@ -127,6 +129,8 @@ export interface ApplicationDetail {
   documents: CandidateDocumentRow[];
   submissions: EmployerSubmissionRow[];
   interviews: InterviewRow[];
+  aiReview: ApplicationAiReviewRow | null;
+  aiReviewItems: ApplicationAiReviewItemRow[];
 }
 
 export async function getApplicationDetail(id: string): Promise<ApplicationDetail | null> {
@@ -135,40 +139,62 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
   const application = app as ApplicationRow | null;
   if (!application) return null;
 
-  const [candidate, job, history, notes, documents, submissions, interviews] = await Promise.all([
-    supabase
-      .from("candidate_profiles")
-      .select("*")
-      .eq("id", application.candidate_id)
-      .maybeSingle(),
-    supabase.from("job_orders").select("*").eq("id", application.job_order_id).maybeSingle(),
-    supabase
-      .from("application_stage_history")
-      .select("*")
-      .eq("application_id", id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("recruiter_notes")
-      .select("*")
-      .eq("subject_type", "application")
-      .eq("subject_id", id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("candidate_documents")
-      .select("*")
-      .eq("candidate_id", application.candidate_id)
-      .eq("status", "active"),
-    supabase
-      .from("employer_submissions")
-      .select("*")
-      .eq("application_id", id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("interviews")
-      .select("*")
-      .eq("application_id", id)
-      .order("created_at", { ascending: false }),
-  ]);
+  const [candidate, job, history, notes, documents, submissions, interviews, aiReviewRes] =
+    await Promise.all([
+      supabase
+        .from("candidate_profiles")
+        .select("*")
+        .eq("id", application.candidate_id)
+        .maybeSingle(),
+      supabase.from("job_orders").select("*").eq("id", application.job_order_id).maybeSingle(),
+      supabase
+        .from("application_stage_history")
+        .select("*")
+        .eq("application_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("recruiter_notes")
+        .select("*")
+        .eq("subject_type", "application")
+        .eq("subject_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("candidate_documents")
+        .select("*")
+        .eq("candidate_id", application.candidate_id)
+        .eq("status", "active"),
+      supabase
+        .from("employer_submissions")
+        .select("*")
+        .eq("application_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("interviews")
+        .select("*")
+        .eq("application_id", id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("application_ai_reviews")
+        .select("*")
+        .eq("application_id", id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  const aiReviewRaw = (aiReviewRes.data as ApplicationAiReviewRow | null) ?? null;
+  // Don't ship the full model reasoning trace to the browser — staff UI doesn't
+  // render it, and it can contain lengthy CV paraphrases.
+  const aiReview = aiReviewRaw
+    ? ({ ...aiReviewRaw, model_reasoning: null } satisfies ApplicationAiReviewRow)
+    : null;
+  const { data: aiItemsData } = aiReview
+    ? await supabase
+        .from("application_ai_review_items")
+        .select("*")
+        .eq("review_id", aiReview.id)
+        .order("ordinal", { ascending: true })
+    : { data: null };
 
   return {
     application,
@@ -179,6 +205,8 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
     documents: (documents.data as CandidateDocumentRow[] | null) ?? [],
     submissions: (submissions.data as EmployerSubmissionRow[] | null) ?? [],
     interviews: (interviews.data as InterviewRow[] | null) ?? [],
+    aiReview,
+    aiReviewItems: (aiItemsData as ApplicationAiReviewItemRow[] | null) ?? [],
   };
 }
 
