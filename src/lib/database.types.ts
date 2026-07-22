@@ -986,6 +986,18 @@ export type Database = {
         Args: { p_employer_org: string; p_since: string };
         Returns: number;
       };
+      approve_and_publish_job_order: {
+        Args: { p_job_order_id: string };
+        Returns: string;
+      };
+      withdraw_job_order: {
+        Args: { p_job_order_id: string };
+        Returns: undefined;
+      };
+      assign_job_order_recruiter: {
+        Args: { p_job_order_id: string; p_recruiter_user_id: string };
+        Returns: undefined;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

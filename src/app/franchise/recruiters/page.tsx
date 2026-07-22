@@ -1,77 +1,65 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { requirePortal, memberOrgIds } from "@/lib/auth";
 import { canAssignRecruiterRoles, assignableRegionCodes } from "@/lib/rbac";
 import { getRecruitersWithRoles } from "@/lib/data/recruiter-kpis";
-import { PageHeader, Badge, ButtonLink } from "@/components/ui/primitives";
-import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
-import { redirect } from "next/navigation";
+import { listOwnedJobAssignments } from "@/lib/data/staff";
+import { createClient } from "@/lib/supabase/server";
+import { AssignmentsOverview } from "@/components/recruiters/AssignmentsOverview";
+import type { CountryRow } from "@/lib/database.types";
 
-export const metadata: Metadata = { title: "Recruiters" };
+export const metadata: Metadata = { title: "Assignments" };
 
-export default async function FranchiseRecruitersPage() {
+export default async function FranchiseRecruitersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>;
+}) {
   const ctx = await requirePortal("franchise");
-  if (!canAssignRecruiterRoles(ctx.roles)) {
-    redirect("/unauthorized");
-  }
+  if (!canAssignRecruiterRoles(ctx.roles)) redirect("/unauthorized");
 
-  const regions = assignableRegionCodes(ctx.roles, ctx.memberships) ?? [];
+  const params = await Promise.resolve(searchParams ?? {});
+  const recruiterFilter = typeof params.recruiter === "string" ? params.recruiter : undefined;
+  const regionFilter = typeof params.region === "string" ? params.region : undefined;
+
+  const allowedRegions = assignableRegionCodes(ctx.roles, ctx.memberships) ?? [];
   const orgIds = memberOrgIds(ctx.memberships);
 
-  const recruiters = await getRecruitersWithRoles({
-    organizationId: orgIds[0],
-    regionCode: regions[0],
-  });
+  const [recruiters, assignments, countriesResult] = await Promise.all([
+    getRecruitersWithRoles({
+      organizationId: orgIds[0],
+      regionCode: allowedRegions[0],
+    }),
+    listOwnedJobAssignments(),
+    createClient().from("countries").select("code,name").eq("is_active", true).order("sort_order"),
+  ]);
+
+  const countries = ((countriesResult.data as Pick<CountryRow, "code" | "name">[] | null) ?? []).map(
+    (c) => ({ code: c.code, name: c.name }),
+  );
+  const regions = countries.filter((c) => allowedRegions.includes(c.code));
+
+  const scopedRecruiterIds = new Set(recruiters.map((r) => r.recruiterId));
+  const scopedAssignments = assignments.filter((row) =>
+    scopedRecruiterIds.has(row.recruiter_user_id),
+  );
 
   return (
-    <div>
-      <PageHeader
-        title="Recruiters"
-        description="Recruiters in your franchise, their assigned sourcing roles, and KPI summaries."
-      />
-
-      {recruiters.length === 0 ? (
-        <p className="text-sm text-ink-muted">No recruiters found in your region.</p>
-      ) : (
-        <DataTable>
-          <THead>
-            <TR>
-              <TH>Name</TH>
-              <TH>Level</TH>
-              <TH>Region</TH>
-              <TH>Roles</TH>
-              <TH>Time to fill</TH>
-              <TH>Placement</TH>
-              <TH>Actions</TH>
-            </TR>
-          </THead>
-          <tbody>
-            {recruiters.map((r) => (
-              <TR key={r.recruiterId}>
-                <TD>
-                  <div className="font-medium text-ink">{r.name}</div>
-                  <div className="text-xs text-ink-subtle">{r.email}</div>
-                </TD>
-                <TD>
-                  <Badge tone="neutral">{r.level}</Badge>
-                </TD>
-                <TD>{r.regionCode ?? "—"}</TD>
-                <TD>{r.assignedRoles.length}</TD>
-                <TD>{r.kpisSummary.timeToFill > 0 ? `${r.kpisSummary.timeToFill}d` : "—"}</TD>
-                <TD>{r.kpisSummary.placementRate > 0 ? `${r.kpisSummary.placementRate}%` : "—"}</TD>
-                <TD>
-                  <ButtonLink
-                    href={`/franchise/recruiters/${r.recruiterId}`}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    Edit roles
-                  </ButtonLink>
-                </TD>
-              </TR>
-            ))}
-          </tbody>
-        </DataTable>
-      )}
-    </div>
+    <AssignmentsOverview
+      title="Assignments"
+      description="Jobs owned by recruiters in your franchise. Filter by person or region, then open Manage to hand work over."
+      manageBasePath="/franchise/recruiters"
+      jobsBasePath="/franchise/jobs"
+      assignments={scopedAssignments}
+      recruiterFilter={recruiterFilter}
+      regionFilter={regionFilter}
+      recruiters={recruiters.map((r) => ({ id: r.recruiterId, name: r.name }))}
+      regions={
+        regions.length
+          ? regions
+          : allowedRegions.map((code) => ({ code, name: code }))
+      }
+      tip={null}
+    />
   );
 }

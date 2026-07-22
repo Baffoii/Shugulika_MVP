@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Client } from "pg";
-import { connect, setupDb, queryAs, hasDb, type SeedIds } from "./helpers";
+import { connect, setupDb, queryAs, commitAs, hasDb, type SeedIds } from "./helpers";
 
 // Opt-in: runs only when DATABASE_URL points at an ephemeral test Postgres.
 const d = hasDb ? describe : describe.skip;
@@ -125,6 +125,193 @@ d("Row-Level Security & tenant isolation", () => {
       "select count(*)::int c from public.employer_submissions",
     );
     expect(cand.rows[0]?.c).toBe(0);
+  });
+
+  it("employer submits a job order and scoped staff atomically approve, publish, and audit it", async () => {
+    const jobOrderId = (
+      await commitAs(
+        client,
+        ids.employerUserA,
+        `insert into public.job_orders (
+           employer_org_id, responsible_org_id, title, description, country_code,
+           vacancy_count, recruitment_path, status, created_by
+         ) values ($1, $2, 'Treasury Analyst', 'Manage treasury operations.', 'TZ', 1, 'B', 'submitted', $3)
+         returning id`,
+        [ids.employerA, ids.franchiseA, ids.employerUserA],
+      )
+    ).rows[0]?.id as string;
+
+    expect(jobOrderId).toBeTruthy();
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.employerUserA,
+          `select count(*)::int c from public.audit_logs
+           where entity_id = $1 and action = 'job_order.submitted'`,
+          [jobOrderId],
+        )
+      ).rows[0]?.c,
+    ).toBe(1);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.recruiterA,
+          `select count(*)::int c from public.notifications
+           where user_id = $1 and subject_type = 'job_order' and subject_id = $2`,
+          [ids.recruiterA, jobOrderId],
+        )
+      ).rows[0]?.c,
+    ).toBe(1);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.hqAdmin,
+          `select count(*)::int c from public.notifications
+           where user_id = $1 and subject_type = 'job_order' and subject_id = $2`,
+          [ids.hqAdmin, jobOrderId],
+        )
+      ).rows[0]?.c,
+    ).toBe(1);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.recruiterB,
+          `select count(*)::int c from public.notifications
+           where user_id = $1 and subject_id = $2`,
+          [ids.recruiterB, jobOrderId],
+        )
+      ).rows[0]?.c,
+    ).toBe(0);
+
+    await commitAs(client, ids.recruiterA, "select public.approve_and_publish_job_order($1)", [
+      jobOrderId,
+    ]);
+
+    const published = await queryAs(
+      client,
+      ids.recruiterA,
+      `select jo.status job_order_status, j.status publication_status
+       from public.job_orders jo join public.jobs j on j.job_order_id = jo.id
+       where jo.id = $1`,
+      [jobOrderId],
+    );
+    expect(published.rows[0]).toMatchObject({
+      job_order_status: "active",
+      publication_status: "advertised",
+    });
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.recruiterA,
+          `select count(*)::int c from public.audit_logs
+           where entity_id = $1 and action = 'job_order.approved_and_published' and actor_id = $2`,
+          [jobOrderId, ids.recruiterA],
+        )
+      ).rows[0]?.c,
+    ).toBe(1);
+  });
+
+  it("rejects cross-tenant job submission and publication", async () => {
+    await expect(
+      queryAs(
+        client,
+        ids.employerUserA,
+        `insert into public.job_orders (
+           employer_org_id, responsible_org_id, title, country_code,
+           vacancy_count, recruitment_path, status, created_by
+         ) values ($1, $2, 'Forged Role', 'TZ', 1, 'B', 'submitted', $3)`,
+        [ids.employerA, ids.franchiseB, ids.employerUserA],
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      queryAs(client, ids.recruiterB, "select public.approve_and_publish_job_order($1)", [
+        ids.jobOrderA,
+      ]),
+    ).rejects.toThrow();
+  });
+
+  it("rejects vacancy counts below 1", async () => {
+    await expect(
+      queryAs(
+        client,
+        ids.employerUserA,
+        `insert into public.job_orders (
+           employer_org_id, responsible_org_id, title, country_code,
+           vacancy_count, recruitment_path, status, created_by
+         ) values ($1, $2, 'Zero Vacancy Role', 'TZ', 0, 'B', 'submitted', $3)`,
+        [ids.employerA, ids.franchiseA, ids.employerUserA],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("employer can withdraw a submitted job order with audit", async () => {
+    const jobOrderId = (
+      await commitAs(
+        client,
+        ids.employerUserA,
+        `insert into public.job_orders (
+           employer_org_id, responsible_org_id, title, description, country_code,
+           vacancy_count, recruitment_path, status, created_by
+         ) values ($1, $2, 'Withdraw Me', 'Temp role.', 'TZ', 2, 'B', 'submitted', $3)
+         returning id`,
+        [ids.employerA, ids.franchiseA, ids.employerUserA],
+      )
+    ).rows[0]?.id as string;
+
+    await commitAs(client, ids.employerUserA, "select public.withdraw_job_order($1)", [
+      jobOrderId,
+    ]);
+
+    const withdrawn = await queryAs(
+      client,
+      ids.employerUserA,
+      `select status, closed_reason from public.job_orders where id = $1`,
+      [jobOrderId],
+    );
+    expect(withdrawn.rows[0]).toMatchObject({
+      status: "cancelled",
+      closed_reason: "Withdrawn by employer",
+    });
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.employerUserA,
+          `select count(*)::int c from public.audit_logs
+           where entity_id = $1 and action = 'job_order.withdrawn' and actor_id = $2`,
+          [jobOrderId, ids.employerUserA],
+        )
+      ).rows[0]?.c,
+    ).toBe(1);
+
+    await expect(
+      queryAs(client, ids.employerUserA, "select public.withdraw_job_order($1)", [jobOrderId]),
+    ).rejects.toThrow();
+  });
+
+  it("rejects cross-tenant job order withdrawal", async () => {
+    const jobOrderId = (
+      await commitAs(
+        client,
+        ids.employerUserA,
+        `insert into public.job_orders (
+           employer_org_id, responsible_org_id, title, country_code,
+           vacancy_count, recruitment_path, status, created_by
+         ) values ($1, $2, 'Stay Put', 'TZ', 1, 'B', 'submitted', $3)
+         returning id`,
+        [ids.employerA, ids.franchiseA, ids.employerUserA],
+      )
+    ).rows[0]?.id as string;
+
+    await expect(
+      queryAs(client, ids.employerUserB, "select public.withdraw_job_order($1)", [jobOrderId]),
+    ).rejects.toThrow();
   });
 
   it("a candidate cannot forge an application for someone else (WITH CHECK)", async () => {

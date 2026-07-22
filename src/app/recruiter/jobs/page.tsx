@@ -5,6 +5,7 @@ export default function Page() {
     <JobOrdersPage
       title="Jobs & orders"
       description="Job orders you are assigned to or authorized to manage."
+      canPublish
     />
   );
 }

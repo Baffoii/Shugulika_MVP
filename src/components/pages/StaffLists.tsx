@@ -1,20 +1,61 @@
 import { PageHeader, EmptyState, Badge } from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
-import { getJobOrders, getInvoices, getPlacements, getOrganizations } from "@/lib/data/staff";
-import { formatDate, formatMoney, titleCase } from "@/lib/format";
+import {
+  getJobOrders,
+  getJobOrderAudits,
+  getJobOwnerAssignments,
+  listRecruitersForOrgs,
+  getInvoices,
+  getPlacements,
+  getOrganizations,
+} from "@/lib/data/staff";
+import { formatDate, formatDateTime, formatMoney, titleCase } from "@/lib/format";
+import { PublishJobButton } from "@/components/jobs/PublishJobButton";
+import { WithdrawJobOrderButton } from "@/components/jobs/WithdrawJobOrderButton";
+import { AssignJobRecruiterControl } from "@/components/jobs/AssignJobRecruiterControl";
+import { JobOrderListRow } from "@/components/jobs/JobOrderDetails";
+
+const WITHDRAWABLE_STATUSES = new Set(["submitted", "approved", "active", "on_hold"]);
+const ASSIGNABLE_STATUSES = new Set(["approved", "active", "on_hold"]);
 
 export async function JobOrdersPage({
   title,
   description,
+  canPublish = false,
+  canWithdraw = false,
+  canAssignRecruiter = false,
+  beforeList,
 }: {
   title: string;
   description?: string;
+  canPublish?: boolean;
+  canWithdraw?: boolean;
+  canAssignRecruiter?: boolean;
+  beforeList?: React.ReactNode;
 }) {
   const jobs = await getJobOrders();
+  const jobIds = jobs.map((job) => job.id);
+  const [audits, owners, recruiters] = await Promise.all([
+    getJobOrderAudits(jobIds),
+    canAssignRecruiter ? getJobOwnerAssignments(jobIds) : Promise.resolve([]),
+    canAssignRecruiter
+      ? listRecruitersForOrgs([...new Set(jobs.map((job) => job.responsible_org_id))])
+      : Promise.resolve([]),
+  ]);
+  const auditsByOrder = new Map<string, typeof audits>();
+  for (const audit of audits) {
+    if (!audit.entity_id) continue;
+    const entries = auditsByOrder.get(audit.entity_id) ?? [];
+    entries.push(audit);
+    auditsByOrder.set(audit.entity_id, entries);
+  }
+  const ownerByJob = new Map(owners.map((owner) => [owner.job_order_id, owner]));
+
   return (
     <div>
       <PageHeader title={title} description={description} />
+      {beforeList}
       {jobs.length === 0 ? (
         <EmptyState
           title="No job orders"
@@ -30,27 +71,58 @@ export async function JobOrdersPage({
               <TH>Status</TH>
               <TH>Vacancies</TH>
               <TH>Created</TH>
+              <TH>Workflow</TH>
             </TR>
           </THead>
           <tbody>
-            {jobs.map((j) => (
-              <TR key={j.id}>
-                <TD className="font-medium text-ink">{j.title}</TD>
-                <TD className="text-ink-muted">
-                  {[j.city, j.country_code].filter(Boolean).join(", ")}
-                </TD>
-                <TD>
-                  <Badge tone={j.recruitment_path === "A" ? "info" : "success"}>
-                    {j.recruitment_path === "A" ? "Direct" : "Managed"}
-                  </Badge>
-                </TD>
-                <TD>
-                  <StatusBadge status={j.status} />
-                </TD>
-                <TD className="text-ink-muted">{j.vacancy_count}</TD>
-                <TD className="text-ink-muted">{formatDate(j.created_at)}</TD>
-              </TR>
-            ))}
+            {jobs.map((j) => {
+              const owner = ownerByJob.get(j.id);
+              return (
+                <JobOrderListRow
+                  key={j.id}
+                  job={j}
+                  workflow={
+                    <>
+                      <div className="flex flex-wrap items-start gap-2">
+                        {canPublish && j.status === "submitted" ? (
+                          <PublishJobButton jobOrderId={j.id} />
+                        ) : null}
+                        {canWithdraw && WITHDRAWABLE_STATUSES.has(j.status) ? (
+                          <WithdrawJobOrderButton jobOrderId={j.id} jobTitle={j.title} />
+                        ) : null}
+                      </div>
+                      {canAssignRecruiter && ASSIGNABLE_STATUSES.has(j.status) ? (
+                        <div className="mt-2">
+                          <AssignJobRecruiterControl
+                            jobOrderId={j.id}
+                            responsibleOrgId={j.responsible_org_id}
+                            currentRecruiterId={owner?.recruiter_user_id}
+                            currentRecruiterName={owner?.recruiter_name}
+                            recruiters={recruiters}
+                          />
+                        </div>
+                      ) : null}
+                      <details className="mt-2 text-xs">
+                        <summary className="cursor-pointer font-medium text-brand-700">
+                          Audit history ({auditsByOrder.get(j.id)?.length ?? 0})
+                        </summary>
+                        <ol className="mt-2 space-y-2 text-ink-muted">
+                          {(auditsByOrder.get(j.id) ?? []).map((audit) => (
+                            <li key={audit.id}>
+                              <span className="font-medium text-ink">
+                                {titleCase(audit.action)}
+                              </span>
+                              <br />
+                              by {audit.actor_name} · {formatDateTime(audit.created_at)}
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    </>
+                  }
+                />
+              );
+            })}
           </tbody>
         </DataTable>
       )}

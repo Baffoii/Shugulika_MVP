@@ -38,6 +38,14 @@ export function TR({ children, className }: { children: React.ReactNode; classNa
   return <tr className={cn("border-t border-surface-border", className)}>{children}</tr>;
 }
 
-export function TD({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <td className={cn("px-4 py-3 align-middle text-ink", className)}>{children}</td>;
+export function TD({
+  children,
+  className,
+  ...props
+}: React.TdHTMLAttributes<HTMLTableCellElement>) {
+  return (
+    <td className={cn("px-4 py-3 align-middle text-ink", className)} {...props}>
+      {children}
+    </td>
+  );
 }
