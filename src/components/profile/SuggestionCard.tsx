@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/format";
 import { COUNTRIES, LANGUAGE_PROFICIENCIES } from "@/lib/constants";
 import { normalizeLanguageProficiency } from "@/lib/validation";
 import { ConfidenceBadge } from "@/components/profile/ConfidenceBadge";
+import { AI_DRAFTED_EVIDENCE } from "@/lib/resume/professional-copy-constants";
 import type { ResumeFieldSuggestionRow } from "@/lib/database.types";
 
 type ExperienceValue = {
@@ -126,7 +127,11 @@ export function SuggestionCard({ suggestion }: { suggestion: ResumeFieldSuggesti
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">{cardTitle(suggestion)}</p>
-          {suggestion.evidence_text ? (
+          {suggestion.evidence_text === AI_DRAFTED_EVIDENCE ? (
+            <p className="mt-0.5 text-xs text-ink-subtle">
+              Drafted by AI because your CV had no professional summary — review before accepting.
+            </p>
+          ) : suggestion.evidence_text ? (
             <p
               className="mt-0.5 truncate text-xs italic text-ink-subtle"
               title={suggestion.evidence_text}
