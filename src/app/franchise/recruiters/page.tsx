@@ -13,7 +13,9 @@ export const metadata: Metadata = { title: "Assignments" };
 export default async function FranchiseRecruitersPage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>;
+  searchParams?:
+    | Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>;
 }) {
   const ctx = await requirePortal("franchise");
   if (!canAssignRecruiterRoles(ctx.roles)) redirect("/unauthorized");
@@ -34,9 +36,9 @@ export default async function FranchiseRecruitersPage({
     createClient().from("countries").select("code,name").eq("is_active", true).order("sort_order"),
   ]);
 
-  const countries = ((countriesResult.data as Pick<CountryRow, "code" | "name">[] | null) ?? []).map(
-    (c) => ({ code: c.code, name: c.name }),
-  );
+  const countries = (
+    (countriesResult.data as Pick<CountryRow, "code" | "name">[] | null) ?? []
+  ).map((c) => ({ code: c.code, name: c.name }));
   const regions = countries.filter((c) => allowedRegions.includes(c.code));
 
   const scopedRecruiterIds = new Set(recruiters.map((r) => r.recruiterId));
@@ -54,11 +56,7 @@ export default async function FranchiseRecruitersPage({
       recruiterFilter={recruiterFilter}
       regionFilter={regionFilter}
       recruiters={recruiters.map((r) => ({ id: r.recruiterId, name: r.name }))}
-      regions={
-        regions.length
-          ? regions
-          : allowedRegions.map((code) => ({ code, name: code }))
-      }
+      regions={regions.length ? regions : allowedRegions.map((code) => ({ code, name: code }))}
       tip={null}
     />
   );

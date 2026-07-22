@@ -14,7 +14,9 @@ export const metadata: Metadata = { title: "Assignments" };
 export default async function HqRecruitersPage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>;
+  searchParams?:
+    | Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>;
 }) {
   const ctx = await requirePortal("hq");
   if (!canAssignRecruiterRoles(ctx.roles)) redirect("/unauthorized");
@@ -37,12 +39,11 @@ export default async function HqRecruitersPage({
     createClient().from("countries").select("code,name").eq("is_active", true).order("sort_order"),
   ]);
 
-  const countries = ((countriesResult.data as Pick<CountryRow, "code" | "name">[] | null) ?? []).map(
-    (c) => ({ code: c.code, name: c.name }),
-  );
+  const countries = (
+    (countriesResult.data as Pick<CountryRow, "code" | "name">[] | null) ?? []
+  ).map((c) => ({ code: c.code, name: c.name }));
   const allowed = assignableRegionCodes(ctx.roles, ctx.memberships);
-  const regions =
-    allowed === null ? countries : countries.filter((c) => allowed.includes(c.code));
+  const regions = allowed === null ? countries : countries.filter((c) => allowed.includes(c.code));
 
   const scopedRecruiterIds = new Set(recruiters.map((r) => r.recruiterId));
   const scopedAssignments = assignments.filter((row) =>

@@ -147,9 +147,7 @@ export interface ScopedRecruiter {
 }
 
 /** Owner assignments for the given job orders. */
-export async function getJobOwnerAssignments(
-  jobOrderIds: string[],
-): Promise<JobOwnerAssignment[]> {
+export async function getJobOwnerAssignments(jobOrderIds: string[]): Promise<JobOwnerAssignment[]> {
   if (jobOrderIds.length === 0) return [];
   const supabase = createClient();
   const { data } = await supabase
@@ -157,8 +155,7 @@ export async function getJobOwnerAssignments(
     .select("job_order_id,recruiter_user_id")
     .in("job_order_id", jobOrderIds)
     .eq("role", "owner");
-  const rows =
-    (data as { job_order_id: string; recruiter_user_id: string }[] | null) ?? [];
+  const rows = (data as { job_order_id: string; recruiter_user_id: string }[] | null) ?? [];
   if (rows.length === 0) return [];
 
   const recruiterIds = [...new Set(rows.map((row) => row.recruiter_user_id))];
@@ -180,9 +177,7 @@ export async function getJobOwnerAssignments(
 }
 
 /** Active recruiters in the given franchise org ids (RLS-scoped). */
-export async function listRecruitersForOrgs(
-  organizationIds: string[],
-): Promise<ScopedRecruiter[]> {
+export async function listRecruitersForOrgs(organizationIds: string[]): Promise<ScopedRecruiter[]> {
   if (organizationIds.length === 0) return [];
   const supabase = createClient();
   const { data: memberships } = await supabase
@@ -191,8 +186,7 @@ export async function listRecruitersForOrgs(
     .in("organization_id", organizationIds)
     .eq("role", "recruiter")
     .eq("status", "active");
-  const mems =
-    (memberships as { user_id: string; organization_id: string }[] | null) ?? [];
+  const mems = (memberships as { user_id: string; organization_id: string }[] | null) ?? [];
   if (mems.length === 0) return [];
 
   const userIds = [...new Set(mems.map((m) => m.user_id))];
@@ -227,9 +221,9 @@ export async function getJobsOwnedByRecruiter(recruiterId: string): Promise<JobO
     .select("job_order_id")
     .eq("recruiter_user_id", recruiterId)
     .eq("role", "owner");
-  const jobIds = (
-    (assignments as { job_order_id: string }[] | null) ?? []
-  ).map((row) => row.job_order_id);
+  const jobIds = ((assignments as { job_order_id: string }[] | null) ?? []).map(
+    (row) => row.job_order_id,
+  );
   if (jobIds.length === 0) return [];
 
   const { data } = await supabase
@@ -277,9 +271,7 @@ export async function listOwnedJobAssignments(): Promise<OwnedJobAssignmentView[
       .eq("status", "active"),
   ]);
 
-  const jobById = new Map(
-    ((jobs as JobOrderRow[] | null) ?? []).map((job) => [job.id, job]),
-  );
+  const jobById = new Map(((jobs as JobOrderRow[] | null) ?? []).map((job) => [job.id, job]));
   const nameById = new Map(
     ((profiles as ProfileRow[] | null) ?? []).map((profile) => [
       profile.id,

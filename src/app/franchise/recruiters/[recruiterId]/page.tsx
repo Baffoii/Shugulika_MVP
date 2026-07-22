@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requirePortal } from "@/lib/auth";
-import {
-  canAssignRecruiterRoles,
-  assignableRegionCodes,
-  canAssignInRegion,
-} from "@/lib/rbac";
+import { canAssignRecruiterRoles, assignableRegionCodes, canAssignInRegion } from "@/lib/rbac";
 import {
   getRecruiterProfile,
   getRecruiterAssignedRoles,
@@ -18,7 +14,15 @@ import {
   listRecruitersForOrgs,
 } from "@/lib/data/staff";
 import { createClient } from "@/lib/supabase/server";
-import { PageHeader, Badge, ButtonLink, Card, CardBody, CardHeader, CardTitle } from "@/components/ui/primitives";
+import {
+  PageHeader,
+  Badge,
+  ButtonLink,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AssignRolesPanel } from "@/components/recruiters/AssignRolesPanel";
@@ -59,9 +63,7 @@ export default async function AssignRecruiterJobsPage({
   );
   const [owners, recruiters] = await Promise.all([
     getJobOwnerAssignments(franchiseOpenJobs.map((job) => job.id)),
-    listRecruitersForOrgs(
-      profile.organizationId ? [profile.organizationId] : [],
-    ),
+    listRecruitersForOrgs(profile.organizationId ? [profile.organizationId] : []),
   ]);
   const ownerByJob = new Map(owners.map((owner) => [owner.job_order_id, owner]));
   const unassignedJobs = franchiseOpenJobs.filter((job) => !ownerByJob.has(job.id));
@@ -76,8 +78,7 @@ export default async function AssignRecruiterJobsPage({
     (c) => ({ code: c.code, name: c.name }),
   );
   const allowed = assignableRegionCodes(ctx.roles, ctx.memberships);
-  const regions =
-    allCountries.filter((c) => (allowed ?? []).includes(c.code));
+  const regions = allCountries.filter((c) => (allowed ?? []).includes(c.code));
   const defaultRegion =
     profile.regionCode && regions.some((r) => r.code === profile.regionCode)
       ? profile.regionCode

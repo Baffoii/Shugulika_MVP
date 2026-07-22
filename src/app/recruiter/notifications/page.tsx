@@ -41,7 +41,15 @@ export default async function RecruiterNotificationsPage() {
                 <>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-ink">{n.title}</p>
-                    <Badge tone={n.category === "interview" ? "brand" : n.category === "job_order" ? "warn" : "info"}>
+                    <Badge
+                      tone={
+                        n.category === "interview"
+                          ? "brand"
+                          : n.category === "job_order"
+                            ? "warn"
+                            : "info"
+                      }
+                    >
                       {titleCase(n.category)}
                     </Badge>
                     {!n.read_at ? <Badge tone="danger">New</Badge> : null}

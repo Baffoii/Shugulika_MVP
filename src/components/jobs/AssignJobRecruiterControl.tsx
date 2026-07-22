@@ -24,9 +24,7 @@ export function AssignJobRecruiterControl({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [selected, setSelected] = useState(
-    currentRecruiterId || preferredRecruiterId || "",
-  );
+  const [selected, setSelected] = useState(currentRecruiterId || preferredRecruiterId || "");
   const [error, setError] = useState<string | null>(null);
   const options = recruiters.filter((r) => r.organization_id === responsibleOrgId);
 
@@ -42,9 +40,7 @@ export function AssignJobRecruiterControl({
     <div className="space-y-1.5">
       <p className="text-xs text-ink-muted">
         Owner:{" "}
-        <span className="font-medium text-ink">
-          {currentRecruiterName?.trim() || "Unassigned"}
-        </span>
+        <span className="font-medium text-ink">{currentRecruiterName?.trim() || "Unassigned"}</span>
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <select
@@ -75,11 +71,7 @@ export function AssignJobRecruiterControl({
             });
           }}
         >
-          {pending
-            ? "Saving…"
-            : currentRecruiterId
-              ? "Reassign"
-              : "Assign"}
+          {pending ? "Saving…" : currentRecruiterId ? "Reassign" : "Assign"}
         </Button>
       </div>
       {error ? <p className="text-xs text-status-danger">{error}</p> : null}

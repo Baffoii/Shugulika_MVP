@@ -264,9 +264,7 @@ d("Row-Level Security & tenant isolation", () => {
       )
     ).rows[0]?.id as string;
 
-    await commitAs(client, ids.employerUserA, "select public.withdraw_job_order($1)", [
-      jobOrderId,
-    ]);
+    await commitAs(client, ids.employerUserA, "select public.withdraw_job_order($1)", [jobOrderId]);
 
     const withdrawn = await queryAs(
       client,

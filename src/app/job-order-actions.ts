@@ -86,9 +86,7 @@ export async function submitJobOrderAction(
   return { ok: true, message: "Job order submitted to Shugulika for approval." };
 }
 
-export async function withdrawJobOrderAction(
-  jobOrderId: string,
-): Promise<JobOrderActionResult> {
+export async function withdrawJobOrderAction(jobOrderId: string): Promise<JobOrderActionResult> {
   await requirePortal("employer");
 
   const supabase = createClient();

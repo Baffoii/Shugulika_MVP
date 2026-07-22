@@ -19,7 +19,15 @@ import {
   listRecruitersForOrgs,
 } from "@/lib/data/staff";
 import { createClient } from "@/lib/supabase/server";
-import { PageHeader, Badge, ButtonLink, Card, CardBody, CardHeader, CardTitle } from "@/components/ui/primitives";
+import {
+  PageHeader,
+  Badge,
+  ButtonLink,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AssignRolesPanel } from "@/components/recruiters/AssignRolesPanel";
@@ -60,9 +68,7 @@ export default async function AssignRecruiterJobsPage({
   );
   const [owners, recruiters] = await Promise.all([
     getJobOwnerAssignments(franchiseOpenJobs.map((job) => job.id)),
-    listRecruitersForOrgs(
-      profile.organizationId ? [profile.organizationId] : [],
-    ),
+    listRecruitersForOrgs(profile.organizationId ? [profile.organizationId] : []),
   ]);
   const ownerByJob = new Map(owners.map((owner) => [owner.job_order_id, owner]));
   const unassignedJobs = franchiseOpenJobs.filter((job) => !ownerByJob.has(job.id));

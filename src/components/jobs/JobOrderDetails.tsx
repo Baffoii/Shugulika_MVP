@@ -30,7 +30,9 @@ function JobOrderDetailsPanel({ job }: { job: JobOrderRow }) {
 
   return (
     <div className="space-y-3 rounded-lg border border-surface-border bg-surface-muted/60 p-4">
-      <DetailBlock label="Description">{job.description?.trim() || "No description provided."}</DetailBlock>
+      <DetailBlock label="Description">
+        {job.description?.trim() || "No description provided."}
+      </DetailBlock>
       <DetailBlock label="Requirements">
         {job.requirements?.trim() || "No requirements provided."}
       </DetailBlock>
