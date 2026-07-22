@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, Badge, ButtonLink, Alert } from "@/components/ui/primitives";
 import { getPublicJob } from "@/lib/data/jobs";
 import { getSessionContext } from "@/lib/auth";
-import { getMyCandidate, getMyAppliedJobOrderIds } from "@/lib/data/candidate";
+import { getMyCandidate, getMyApplicationStatusesByJobOrder } from "@/lib/data/candidate";
 import { salaryRange, formatDate, titleCase } from "@/lib/format";
 import { MapPin, Briefcase, CalendarClock, Users } from "lucide-react";
 import { ApplyAgainButton } from "@/components/jobs/ApplyAgainButton";
@@ -25,14 +25,16 @@ export async function JobDetailView({
       : "/candidate/dashboard"
     : `/auth/sign-in?redirectTo=/candidate/apply/${job.job_order_id}`;
 
-  let alreadyApplied = false;
+  let applicationStatus: "active" | "withdrawn" | null = null;
   if (isCandidate) {
     const candidate = await getMyCandidate();
     if (candidate) {
-      const applied = await getMyAppliedJobOrderIds(candidate.id);
-      alreadyApplied = applied.has(job.job_order_id);
+      const statuses = await getMyApplicationStatusesByJobOrder(candidate.id);
+      applicationStatus = statuses.get(job.job_order_id) ?? null;
     }
   }
+  const alreadyApplied = applicationStatus === "active";
+  const withdrawn = applicationStatus === "withdrawn";
 
   return (
     <div className={jobsBasePath.startsWith("/candidate") ? "" : "mx-auto max-w-4xl"}>
@@ -47,6 +49,7 @@ export async function JobDetailView({
             <p className="mt-1 text-ink-muted">{job.employer_name}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {withdrawn ? <Badge tone="neutral">Withdrawn</Badge> : null}
             {alreadyApplied ? <Badge tone="neutral">Applied</Badge> : null}
             {job.recruitment_path === "A" ? (
               <Badge tone="info">Direct employer</Badge>
@@ -83,21 +86,27 @@ export async function JobDetailView({
           {job.salary_min == null && job.salary_max == null ? " (not disclosed by employer)" : null}
         </div>
 
-        {alreadyApplied ? (
+        {withdrawn ? (
+          <div className="mt-4">
+            <Alert tone="info" title="You withdrew your application">
+              You can apply again. Recruiters will see that you previously withdrew from this role.
+            </Alert>
+          </div>
+        ) : alreadyApplied ? (
           <div className="mt-4">
             <Alert tone="info" title="You've already applied">
-              You can submit again if you want to update your CV or answers — we&apos;ll ask you to
-              confirm first.
+              You can update your CV or answers — we&apos;ll ask you to confirm first.
             </Alert>
           </div>
         ) : null}
 
         <div className="mt-6 flex flex-wrap gap-3">
-          {alreadyApplied ? (
+          {withdrawn || alreadyApplied ? (
             <ApplyAgainButton
               href={`${applyHref}?reapply=1`}
               jobTitle={job.title}
               employerName={job.employer_name}
+              mode={withdrawn ? "reapply" : "update"}
             />
           ) : (
             <ButtonLink href={applyHref} size="md">

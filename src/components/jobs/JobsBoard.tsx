@@ -2,7 +2,7 @@ import { JobFilters } from "@/components/jobs/JobFilters";
 import { JobCard } from "@/components/jobs/JobCard";
 import { EmptyState, Alert } from "@/components/ui/primitives";
 import { listPublicJobs } from "@/lib/data/jobs";
-import { getMyCandidate, getMyAppliedJobOrderIds } from "@/lib/data/candidate";
+import { getMyCandidate, getMyApplicationStatusesByJobOrder } from "@/lib/data/candidate";
 import { Briefcase } from "lucide-react";
 
 export async function JobsBoard({
@@ -20,10 +20,10 @@ export async function JobsBoard({
 }) {
   const { jobs, configured, error } = await listPublicJobs(searchParams);
 
-  let appliedOrderIds = new Set<string>();
+  let applicationStatuses = new Map<string, "active" | "withdrawn">();
   if (jobsBasePath.startsWith("/candidate")) {
     const candidate = await getMyCandidate();
-    if (candidate) appliedOrderIds = await getMyAppliedJobOrderIds(candidate.id);
+    if (candidate) applicationStatuses = await getMyApplicationStatusesByJobOrder(candidate.id);
   }
 
   return (
@@ -58,14 +58,18 @@ export async function JobsBoard({
               {jobs.length} role{jobs.length === 1 ? "" : "s"}
             </p>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {jobs.map((job) => (
-                <JobCard
-                  key={job.job_id}
-                  job={job}
-                  detailBasePath={jobsBasePath}
-                  applied={appliedOrderIds.has(job.job_order_id)}
-                />
-              ))}
+              {jobs.map((job) => {
+                const status = applicationStatuses.get(job.job_order_id);
+                return (
+                  <JobCard
+                    key={job.job_id}
+                    job={job}
+                    detailBasePath={jobsBasePath}
+                    applied={status === "active"}
+                    withdrawn={status === "withdrawn"}
+                  />
+                );
+              })}
             </div>
           </>
         )}

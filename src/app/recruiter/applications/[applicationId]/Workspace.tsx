@@ -25,27 +25,33 @@ import {
   stageByKey,
   allowedNextStages,
 } from "@/lib/constants";
-import { createClient } from "@/lib/supabase/client";
 import type { InterviewAssignmentRow, InterviewTemplateRow } from "@/lib/database.types";
 import { formatDate, titleCase } from "@/lib/format";
 import Link from "next/link";
 import { PlayCircle } from "lucide-react";
+import { ViewCvButton } from "@/components/documents/ViewCvButton";
+
+export { ViewCvButton };
 
 export function StageControl({
   applicationId,
   currentStage,
   rejectedFromStage,
   rejectionReason,
+  withdrawnAt,
 }: {
   applicationId: string;
   currentStage: string;
   rejectedFromStage?: string | null;
   rejectionReason?: string | null;
+  withdrawnAt?: string | null;
 }) {
   const router = useRouter();
   const [toStage, setToStage] = useState("");
   const [note, setNote] = useState("");
   const [reason, setReason] = useState("");
+  const [testName, setTestName] = useState("Skills assessment");
+  const [testScore, setTestScore] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -54,7 +60,23 @@ export function StageControl({
   const isRejected = currentStage === "rejected";
   const isTesting = currentStage === "testing";
   const isInterviewScreening = currentStage === "interview_screening";
+  const isWithdrawn = Boolean(withdrawnAt);
 
+  if (isWithdrawn) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Pipeline stage</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <Alert tone="warn" title="Application withdrawn">
+            Stage changes are paused while the candidate&apos;s application is withdrawn. If they
+            reapply, it returns to CV Review.
+          </Alert>
+        </CardBody>
+      </Card>
+    );
+  }
   function run(
     action: (fd: FormData) => Promise<{ ok: boolean; error?: string; warning?: string }>,
     extra?: Record<string, string>,
@@ -130,12 +152,38 @@ export function StageControl({
         {warning ? <Alert tone="warn">{warning}</Alert> : null}
 
         {isTesting ? (
-          <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-3 space-y-2">
+          <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-3 space-y-3">
             <p className="text-sm text-ink">
-              When the candidate submits their assessment, mark it submitted to move them to{" "}
-              <span className="font-medium">Test Review / Grading</span> automatically.
+              When the candidate submits their assessment, record the score (optional) and mark it
+              submitted to move them to <span className="font-medium">Test Review / Grading</span>.
+              Leave the score blank if no test was taken — employers will see N/A.
             </p>
-            <Button size="sm" disabled={pending} onClick={() => run(markTestingSubmittedAction)}>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="Test name">
+                <Input
+                  value={testName}
+                  onChange={(e) => setTestName(e.target.value)}
+                  placeholder="Skills assessment"
+                />
+              </Field>
+              <Field label="Test score">
+                <Input
+                  value={testScore}
+                  onChange={(e) => setTestScore(e.target.value)}
+                  placeholder="e.g. 78 or Pass"
+                />
+              </Field>
+            </div>
+            <Button
+              size="sm"
+              disabled={pending}
+              onClick={() =>
+                run(markTestingSubmittedAction, {
+                  test_name: testName.trim(),
+                  test_score: testScore.trim(),
+                })
+              }
+            >
               {pending ? "Saving…" : "Mark testing submitted"}
             </Button>
           </div>
@@ -252,30 +300,6 @@ export function NoteForm({ applicationId }: { applicationId: string }) {
         </Button>
       </div>
     </div>
-  );
-}
-
-export function ViewCvButton({
-  bucketId,
-  objectPath,
-  label,
-}: {
-  bucketId: string;
-  objectPath: string;
-  label: string;
-}) {
-  const [pending, start] = useTransition();
-  function open() {
-    start(async () => {
-      const supabase = createClient();
-      const { data } = await supabase.storage.from(bucketId).createSignedUrl(objectPath, 120);
-      if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener");
-    });
-  }
-  return (
-    <Button variant="ghost" size="sm" onClick={open} disabled={pending}>
-      {pending ? "Opening…" : label}
-    </Button>
   );
 }
 

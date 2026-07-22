@@ -534,6 +534,18 @@ export type DocumentTypeKey = (typeof DOCUMENT_TYPES)[number]["key"];
 export const CANDIDATE_DOC_BUCKET = "candidate-documents";
 
 // ---------------------------------------------------------------------------
+// Language proficiency (Title Case — matches candidate_languages check constraint)
+// ---------------------------------------------------------------------------
+export const LANGUAGE_PROFICIENCIES = [
+  "Basic",
+  "Conversational",
+  "Professional",
+  "Fluent",
+  "Native",
+] as const;
+export type LanguageProficiency = (typeof LANGUAGE_PROFICIENCIES)[number];
+
+// ---------------------------------------------------------------------------
 // Consent purposes (granular, timestamped — never one vague checkbox)
 // ---------------------------------------------------------------------------
 export const CONSENT_PURPOSES = [

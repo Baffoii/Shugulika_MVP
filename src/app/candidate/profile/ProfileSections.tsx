@@ -16,9 +16,10 @@ import {
   updateLanguageAction,
   type ActionResult,
 } from "@/app/candidate/actions";
-import { Field, Input, Textarea, Checkbox } from "@/components/ui/form";
+import { Field, Input, Textarea, Select, Checkbox } from "@/components/ui/form";
 import { Button, Badge } from "@/components/ui/primitives";
 import { formatDate } from "@/lib/format";
+import { LANGUAGE_PROFICIENCIES } from "@/lib/constants";
 import type {
   CandidateEducationRow,
   CandidateExperienceRow,
@@ -608,12 +609,18 @@ function LanguageEditForm({
           <Input id={`lang-name-${language.id}`} name="language" defaultValue={language.language} />
         </Field>
         <Field label="Proficiency" htmlFor={`lang-prof-${language.id}`} error={fe.proficiency}>
-          <Input
+          <Select
             id={`lang-prof-${language.id}`}
             name="proficiency"
             defaultValue={language.proficiency ?? ""}
-            placeholder="e.g. Fluent, Conversational"
-          />
+          >
+            <option value="">Select…</option>
+            {LANGUAGE_PROFICIENCIES.map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+          </Select>
         </Field>
       </div>
       {state.error ? <p className="text-sm text-status-danger">{state.error}</p> : null}
@@ -647,7 +654,14 @@ export function LanguageAddForm() {
           <Input id="lang-name" name="language" />
         </Field>
         <Field label="Proficiency" htmlFor="lang-prof" error={fe.proficiency}>
-          <Input id="lang-prof" name="proficiency" placeholder="e.g. Fluent, Conversational" />
+          <Select id="lang-prof" name="proficiency" defaultValue="">
+            <option value="">Select…</option>
+            {LANGUAGE_PROFICIENCIES.map((level) => (
+              <option key={level} value={level}>
+                {level}
+              </option>
+            ))}
+          </Select>
         </Field>
       </div>
       <div className="flex gap-2">

@@ -221,6 +221,65 @@ export type ResumeFieldSuggestionRow = {
   resolved_at: string | null;
   created_at: string;
 };
+export type JobRequirementCategory =
+  "skill" | "experience" | "education" | "language" | "certification" | "responsibility" | "other";
+export type JobRequirementImportance = "must_have" | "nice_to_have";
+export type JobRequirementRow = {
+  id: string;
+  job_order_id: string;
+  category: JobRequirementCategory;
+  label: string;
+  detail: string | null;
+  importance: JobRequirementImportance;
+  min_years: number | null;
+  ordinal: number;
+  source: "manual" | "ai_parsed";
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type ApplicationAiReviewStatus = "queued" | "processing" | "succeeded" | "failed";
+export type ApplicationAiReviewVerdict =
+  "strong_fit" | "possible_fit" | "weak_fit" | "insufficient_evidence";
+export type ApplicationAiReviewRow = {
+  id: string;
+  application_id: string;
+  job_order_id: string;
+  status: ApplicationAiReviewStatus;
+  provider: string;
+  model: string | null;
+  overall_score: number | null;
+  fit_verdict: ApplicationAiReviewVerdict | null;
+  summary: string | null;
+  strengths: string | null;
+  concerns: string | null;
+  recommended_questions: Json | null;
+  model_reasoning: string | null;
+  cv_document_id: string | null;
+  requirements_fingerprint: string | null;
+  error_message: string | null;
+  created_by: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type ApplicationAiReviewItemType =
+  "requirement_match" | "strength" | "gap" | "concern" | "question";
+export type ApplicationAiReviewItemAssessment = "met" | "partial" | "missing" | "unclear";
+export type ApplicationAiReviewItemRow = {
+  id: string;
+  review_id: string;
+  requirement_id: string | null;
+  item_type: ApplicationAiReviewItemType;
+  label: string;
+  assessment: ApplicationAiReviewItemAssessment | null;
+  explanation: string;
+  evidence_text: string | null;
+  confidence: number | null;
+  ordinal: number;
+  created_at: string;
+};
 export type CandidateConsentRow = {
   id: string;
   candidate_id: string;
@@ -308,6 +367,8 @@ export type ApplicationRow = {
   rejected_from_stage: string | null;
   rejected_at: string | null;
   rejection_reason: string | null;
+  test_name: string | null;
+  test_score: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -787,6 +848,9 @@ export type Database = {
       candidate_consents: Tbl<CandidateConsentRow>;
       resume_parse_runs: Tbl<ResumeParseRunRow>;
       resume_field_suggestions: Tbl<ResumeFieldSuggestionRow>;
+      job_requirements: Tbl<JobRequirementRow>;
+      application_ai_reviews: Tbl<ApplicationAiReviewRow>;
+      application_ai_review_items: Tbl<ApplicationAiReviewItemRow>;
       job_orders: Tbl<JobOrderRow>;
       jobs: Tbl<JobRow>;
       job_screening_questions: Tbl<JobScreeningQuestionRow>;
@@ -902,6 +966,10 @@ export type Database = {
           p_category?: string;
         };
         Returns: string;
+      };
+      ai_cv_screens_used: {
+        Args: { p_employer_org: string; p_since: string };
+        Returns: number;
       };
     };
     Enums: Record<string, never>;

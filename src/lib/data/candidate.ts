@@ -95,16 +95,31 @@ export async function getMyApplications(candidateId: string): Promise<Applicatio
 
 /** Job order IDs the candidate already has an application for (incl. withdrawn). */
 export async function getMyAppliedJobOrderIds(candidateId: string): Promise<Set<string>> {
+  const statuses = await getMyApplicationStatusesByJobOrder(candidateId);
+  return new Set(statuses.keys());
+}
+
+export type ApplicationBoardStatus = "active" | "withdrawn";
+
+/** Per job-order application status for board/detail badges (incl. withdrawn). */
+export async function getMyApplicationStatusesByJobOrder(
+  candidateId: string,
+): Promise<Map<string, ApplicationBoardStatus>> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("applications")
-    .select("job_order_id")
+    .select("job_order_id, withdrawn_at")
     .eq("candidate_id", candidateId);
   if (error) {
-    console.error("[getMyAppliedJobOrderIds]", error.message);
-    return new Set();
+    console.error("[getMyApplicationStatusesByJobOrder]", error.message);
+    return new Map();
   }
-  return new Set(((data as { job_order_id: string }[] | null) ?? []).map((r) => r.job_order_id));
+  const map = new Map<string, ApplicationBoardStatus>();
+  for (const row of (data as { job_order_id: string; withdrawn_at: string | null }[] | null) ??
+    []) {
+    map.set(row.job_order_id, row.withdrawn_at ? "withdrawn" : "active");
+  }
+  return map;
 }
 
 /** Display label for an application row: "Title at Employer". */

@@ -4,6 +4,15 @@ import { zodResponseFormat } from "openai/helpers/zod";
 import { env } from "@/lib/env";
 import { COUNTRIES } from "@/lib/constants";
 import { resumeExtractionSchema, type ResumeExtraction } from "@/lib/resume/extraction-schema";
+import {
+  aiError,
+  aiLog,
+  aiLogOpenAiCall,
+  aiWarn,
+  estimateTokensFromChars,
+  estimateUsd,
+  formatUsd,
+} from "@/lib/ai-cost-log";
 
 /** Thrown on any OpenAI/provider failure — never propagate the raw provider error to the client. */
 export class ResumeExtractionError extends Error {}
@@ -15,20 +24,84 @@ const SYSTEM_PROMPT = `You are an information-extraction assistant for a recruit
  * profile fields from raw CV text. Never logs the raw API key or CV bytes.
  */
 export async function extractResumeFields(resumeText: string): Promise<ResumeExtraction> {
+  const model = env.openaiResumeModel();
+  const cvChars = resumeText.length;
+  const cvCharsSent = Math.min(cvChars, 60_000);
+  const userContent = `CV text:\n\n${resumeText.slice(0, 60_000)}`;
+  const promptChars = SYSTEM_PROMPT.length + userContent.length;
+  const estInTokens = estimateTokensFromChars(promptChars);
+  const roughPreUsd = estimateUsd({
+    prompt_tokens: estInTokens,
+    completion_tokens: 2_000,
+  });
+
+  aiLog("resume", "OPENAI_REQUEST_PREPARE", {
+    purpose: "cv_field_extraction",
+    model,
+    cvChars,
+    cvCharsSent,
+    cvTruncated: cvChars > 60_000,
+    promptChars,
+    estPromptTokens: estInTokens,
+    roughEstimatedUsdIfTypicalOutput: formatUsd(roughPreUsd),
+    billed: true,
+    tip: "This is a PAID call — rule-based stub is free when OPENAI_API_KEY is unset",
+  });
+
   const client = new OpenAI({ apiKey: env.openaiApiKey() });
+  const started = Date.now();
   try {
+    aiLog("openai", "CALL_START", {
+      feature: "resume",
+      purpose: "cv_field_extraction",
+      model,
+    });
     const completion = await client.chat.completions.parse({
-      model: env.openaiResumeModel(),
+      model,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `CV text:\n\n${resumeText.slice(0, 60_000)}` },
+        { role: "user", content: userContent },
       ],
       response_format: zodResponseFormat(resumeExtractionSchema, "resume_extraction"),
     });
+    const durationMs = Date.now() - started;
+    const usage = completion.usage
+      ? {
+          prompt_tokens: completion.usage.prompt_tokens,
+          completion_tokens: completion.usage.completion_tokens,
+          total_tokens: completion.usage.total_tokens,
+        }
+      : null;
+    aiLogOpenAiCall({
+      feature: "resume",
+      purpose: "cv_field_extraction",
+      model,
+      durationMs,
+      usage,
+    });
+
     const parsed = completion.choices[0]?.message.parsed;
-    if (!parsed) throw new ResumeExtractionError("The AI provider returned no structured result.");
+    if (!parsed) {
+      aiWarn("resume", "OPENAI_NO_PARSED_RESULT", { durationMs, model });
+      throw new ResumeExtractionError("The AI provider returned no structured result.");
+    }
+
+    aiLog("resume", "OPENAI_RESULT_SUMMARY", {
+      experienceCount: parsed.experience?.length ?? 0,
+      educationCount: parsed.education?.length ?? 0,
+      skillCount: parsed.skills?.length ?? 0,
+      certificationCount: parsed.certifications?.length ?? 0,
+      languageCount: parsed.languages?.length ?? 0,
+      personalNonNull: Object.values(parsed.personal ?? {}).filter((v) => v != null).length,
+      estimatedUsd: formatUsd(estimateUsd(usage)),
+    });
     return parsed;
   } catch (error) {
+    aiError("resume", "OPENAI_CALL_FAILED", error, {
+      model,
+      durationMs: Date.now() - started,
+      billedMaybe: true,
+    });
     if (error instanceof ResumeExtractionError) throw error;
     throw new ResumeExtractionError("The AI provider could not process this CV. Please try again.");
   }

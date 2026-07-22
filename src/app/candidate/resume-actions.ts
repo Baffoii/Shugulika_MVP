@@ -18,10 +18,12 @@ import {
   educationSchema,
   certificationSchema,
   languageSchema,
+  normalizeLanguageProficiency,
 } from "@/lib/validation";
 import { extractResumeText, UnsupportedResumeFileError } from "@/lib/resume/extract-text";
 import { extractResumeFields, ResumeExtractionError } from "@/lib/resume/extract-fields";
 import { extractResumeFieldsStub } from "@/lib/resume/extract-fields-stub";
+import { aiError, aiLog, aiWarn } from "@/lib/ai-cost-log";
 import type { ResumeExtraction } from "@/lib/resume/extraction-schema";
 import {
   matchExperience,
@@ -249,7 +251,10 @@ function buildLanguageSuggestions(
         target_entity: "language" as const,
         target_entity_id: matchId,
         field_path: "item",
-        suggested_value: { language: item.language, proficiency: item.proficiency },
+        suggested_value: {
+          language: item.language,
+          proficiency: normalizeLanguageProficiency(item.proficiency) || item.proficiency,
+        },
         current_value: matched
           ? { language: matched.language, proficiency: matched.proficiency }
           : null,
@@ -292,6 +297,15 @@ async function startResumeParse(
   // When no OpenAI key is configured, fall back to a free, deterministic,
   // regex-based extractor so the review workflow works with zero setup/cost.
   const usingAi = isResumeParsingConfigured();
+  aiLog("resume", "PARSE_START", {
+    documentId,
+    candidateId: cid,
+    usingAi,
+    billed: usingAi,
+    tip: usingAi
+      ? "OPENAI_API_KEY set — field extraction will bill OpenAI"
+      : "No OpenAI key — free rule-based stub only",
+  });
 
   const { data: runData, error: runErr } = await supabase
     .from("resume_parse_runs")
@@ -304,7 +318,7 @@ async function startResumeParse(
     .select("id")
     .single();
   if (runErr || !runData) {
-    console.error("[resume-actions] failed to create resume_parse_runs row", runErr);
+    aiError("resume", "PARSE_RUN_INSERT_FAILED", runErr, { documentId });
     return {
       ok: false,
       error: runErr?.message.includes("does not exist")
@@ -341,6 +355,7 @@ async function failRun(
   message: string,
 ): Promise<void> {
   console.error(`[resume-actions] run ${runId} failed: ${message}`);
+  aiError("resume", "PARSE_RUN_FAILED", undefined, { runId, documentId, message });
   await supabase
     .from("resume_parse_runs")
     .update({ status: "failed", error_message: message, completed_at: new Date().toISOString() })
@@ -365,24 +380,18 @@ async function continueResumeParse(
 ): Promise<void> {
   const supabase = createClient();
   const cid = await myCandidateId(supabase);
-  if (!cid) return;
+  if (!cid) {
+    aiWarn("resume", "BACKGROUND_ABORT", { runId, reason: "no_candidate_id" });
+    return;
+  }
 
   const parseStartedAt = Date.now();
-  // #region agent log
-  fetch("http://127.0.0.1:7633/ingest/68762b8f-c0ac-48a0-b8c8-d7a4a3ccc345", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "153c53" },
-    body: JSON.stringify({
-      sessionId: "153c53",
-      runId,
-      hypothesisId: "B",
-      location: "resume-actions.ts:continueResumeParse:start",
-      message: "parse background started",
-      data: { usingAi },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
+  aiLog("resume", "BACKGROUND_START", {
+    runId,
+    documentId: document.id,
+    usingAi,
+    billed: usingAi,
+  });
 
   const fail = (message: string) => failRun(supabase, runId, document.id, message);
 
@@ -400,16 +409,24 @@ async function continueResumeParse(
       .from(document.bucket_id)
       .download(document.object_path);
     if (downloadErr || !fileBlob) {
-      console.error("[resume-actions] download failed", downloadErr);
+      aiError("resume", "CV_DOWNLOAD_FAILED", downloadErr, { runId });
       return await fail("Could not read the uploaded CV file. Please try re-uploading it.");
     }
+    aiLog("resume", "CV_DOWNLOAD_OK", { runId, blobBytes: fileBlob.size });
 
     let resumeText: string;
     try {
       const buffer = Buffer.from(await fileBlob.arrayBuffer());
+      const extractStarted = Date.now();
       resumeText = await extractResumeText(buffer, document.object_path);
+      aiLog("resume", "CV_TEXT_EXTRACTED", {
+        runId,
+        cvChars: resumeText.length,
+        extractMs: Date.now() - extractStarted,
+        freeLocalStep: true,
+      });
     } catch (error) {
-      console.error("[resume-actions] text extraction failed", error);
+      aiError("resume", "CV_TEXT_EXTRACT_FAILED", error, { runId });
       if (error instanceof UnsupportedResumeFileError) {
         return await fail(
           `Unsupported file type for CV analysis. Please upload ${CV_CONFIG.accept.replaceAll(",", ", ")}.`,
@@ -421,6 +438,7 @@ async function continueResumeParse(
     }
 
     if (resumeText.length < 30) {
+      aiWarn("resume", "CV_TEXT_TOO_SHORT", { runId, cvChars: resumeText.length });
       return await fail(
         "This file doesn't appear to contain readable text (it may be a scanned image). Try a text-based PDF or DOCX.",
       );
@@ -428,11 +446,18 @@ async function continueResumeParse(
 
     let extraction: ResumeExtraction;
     try {
-      extraction = usingAi
-        ? await extractResumeFields(resumeText)
-        : extractResumeFieldsStub(resumeText);
+      if (usingAi) {
+        aiLog("resume", "ABOUT_TO_BILL_OPENAI", {
+          runId,
+          tip: "Next logs are OPENAI_REQUEST_PREPARE / CALL_START — credits will be used",
+        });
+        extraction = await extractResumeFields(resumeText);
+      } else {
+        aiLog("resume", "USING_FREE_STUB", { runId, billed: false });
+        extraction = extractResumeFieldsStub(resumeText);
+      }
     } catch (error) {
-      console.error("[resume-actions] field extraction failed", error);
+      aiError("resume", "FIELD_EXTRACTION_FAILED", error, { runId, usingAi });
       if (error instanceof ResumeExtractionError) return await fail(error.message);
       return await fail(
         usingAi
@@ -493,7 +518,8 @@ async function continueResumeParse(
     // Diagnostic only — logs field NAMES and counts, never PII/values, so
     // it's safe to leave on and is invaluable when a candidate's resume
     // layout doesn't match the free extractor's heuristics.
-    console.log("[resume-actions] extraction summary", {
+    aiLog("resume", "EXTRACTION_SUMMARY", {
+      runId,
       usingAi,
       personalFieldsExtracted: Object.entries(extraction.personal)
         .filter(([, v]) => v !== null)
@@ -514,6 +540,7 @@ async function continueResumeParse(
       experienceCount: extraction.experience.length,
       educationCount: extraction.education.length,
       skillCount: extraction.skills.length,
+      suggestionCount: suggestions.length,
     });
 
     if (suggestions.length > 0) {
@@ -521,7 +548,7 @@ async function continueResumeParse(
         .from("resume_field_suggestions")
         .insert(suggestions.map((s) => ({ ...s, parse_run_id: runId, candidate_id: cid })));
       if (insertErr) {
-        console.error("[resume-actions] suggestion insert failed", insertErr);
+        aiError("resume", "SUGGESTION_INSERT_FAILED", insertErr, { runId });
         return await fail(
           "We analyzed your CV but couldn't save the suggestions. Please try again.",
         );
@@ -541,25 +568,17 @@ async function continueResumeParse(
       .update({ parse_status: "succeeded" })
       .eq("id", document.id);
 
-    // #region agent log
-    fetch("http://127.0.0.1:7633/ingest/68762b8f-c0ac-48a0-b8c8-d7a4a3ccc345", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "153c53" },
-      body: JSON.stringify({
-        sessionId: "153c53",
-        runId,
-        hypothesisId: "B",
-        location: "resume-actions.ts:continueResumeParse:done",
-        message: "parse background finished",
-        data: { durationMs: Date.now() - parseStartedAt, suggestionCount: suggestions.length },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
+    aiLog("resume", "PARSE_SUCCEEDED", {
+      runId,
+      usingAi,
+      suggestionCount: suggestions.length,
+      totalBackgroundMs: Date.now() - parseStartedAt,
+      billed: usingAi,
+    });
 
     revalidatePath("/candidate/profile");
   } catch (error) {
-    console.error("[resume-actions] unexpected error during CV analysis", error);
+    aiError("resume", "BACKGROUND_UNEXPECTED", error, { runId });
     await fail("Something unexpected went wrong while analyzing your CV. Please try again.");
   }
 }
@@ -602,7 +621,6 @@ export async function acceptSuggestionAction(
   id: string,
   formData?: FormData,
 ): Promise<ActionResult> {
-  const acceptStartedAt = Date.now();
   const supabase = createClient();
   const cid = await myCandidateId(supabase);
   if (!cid) return { ok: false, error: "No candidate profile" };
@@ -612,21 +630,6 @@ export async function acceptSuggestionAction(
   if (suggestion.status !== "pending")
     return { ok: false, error: "This suggestion has already been resolved." };
 
-  // #region agent log
-  fetch("http://127.0.0.1:7633/ingest/68762b8f-c0ac-48a0-b8c8-d7a4a3ccc345", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "153c53" },
-    body: JSON.stringify({
-      sessionId: "153c53",
-      hypothesisId: "C",
-      location: "resume-actions.ts:acceptSuggestionAction:start",
-      message: "accept started",
-      data: { fieldPath: suggestion.field_path, targetEntity: suggestion.target_entity },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   const edited = !!formData;
   const resolvedAt = new Date().toISOString();
   const markResolved = async (status: "accepted" | "edited") => {
@@ -635,24 +638,6 @@ export async function acceptSuggestionAction(
       .update({ status, resolved_at: resolvedAt })
       .eq("id", id);
     revalidatePath("/candidate/profile");
-    // #region agent log
-    fetch("http://127.0.0.1:7633/ingest/68762b8f-c0ac-48a0-b8c8-d7a4a3ccc345", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "153c53" },
-      body: JSON.stringify({
-        sessionId: "153c53",
-        hypothesisId: "C",
-        location: "resume-actions.ts:acceptSuggestionAction:resolved",
-        message: "accept resolved in DB",
-        data: {
-          fieldPath: suggestion.field_path,
-          durationMs: Date.now() - acceptStartedAt,
-          status,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
   };
 
   if (suggestion.target_entity === "profile") {
@@ -895,12 +880,23 @@ export async function acceptSuggestionAction(
           {},
         ),
       };
-    const payload = { language: values.language, proficiency: values.proficiency || null };
-    const { error } = suggestion.target_entity_id
+    const payload = {
+      language: parsed.data.language,
+      proficiency: parsed.data.proficiency || null,
+    };
+    let targetId = suggestion.target_entity_id;
+    if (!targetId) {
+      const { data: existingLangs } = await supabase
+        .from("candidate_languages")
+        .select("id, language")
+        .eq("candidate_id", cid);
+      targetId = matchLanguage(existingLangs ?? [], { language: payload.language });
+    }
+    const { error } = targetId
       ? await supabase
           .from("candidate_languages")
           .update(payload)
-          .eq("id", suggestion.target_entity_id)
+          .eq("id", targetId)
           .eq("candidate_id", cid)
       : await supabase.from("candidate_languages").insert({ ...payload, candidate_id: cid });
     if (error) return { ok: false, error: error.message };

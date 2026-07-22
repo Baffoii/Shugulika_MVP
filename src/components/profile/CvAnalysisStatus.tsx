@@ -29,39 +29,11 @@ export function CvAnalysisStatus({
 
   useEffect(() => {
     if (!isRunning) return;
-    // #region agent log
-    fetch("http://127.0.0.1:7633/ingest/68762b8f-c0ac-48a0-b8c8-d7a4a3ccc345", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "153c53" },
-      body: JSON.stringify({
-        sessionId: "153c53",
-        hypothesisId: "A",
-        location: "CvAnalysisStatus.tsx:poll:start",
-        message: "poll interval armed",
-        data: { status, intervalMs: 3000 },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     const timer = setInterval(() => {
-      // #region agent log
-      fetch("http://127.0.0.1:7633/ingest/68762b8f-c0ac-48a0-b8c8-d7a4a3ccc345", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "153c53" },
-        body: JSON.stringify({
-          sessionId: "153c53",
-          hypothesisId: "A",
-          location: "CvAnalysisStatus.tsx:poll:tick",
-          message: "poll router.refresh",
-          data: { status },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       router.refresh();
     }, 3000);
     return () => clearInterval(timer);
-  }, [isRunning, router, status]);
+  }, [isRunning, router]);
 
   if (!document) return null;
   const documentId = document.id;

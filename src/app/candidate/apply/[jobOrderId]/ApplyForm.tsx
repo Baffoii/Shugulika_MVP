@@ -19,11 +19,22 @@ import type { CandidateDocumentRow, JobScreeningQuestionRow } from "@/lib/databa
 
 const initial: ActionResult = { ok: false };
 
-function SubmitButton({ isResubmit }: { isResubmit: boolean }) {
+function SubmitButton({
+  isResubmit,
+  isReapplyAfterWithdraw,
+}: {
+  isResubmit: boolean;
+  isReapplyAfterWithdraw: boolean;
+}) {
   const { pending } = useFormStatus();
+  const label = isReapplyAfterWithdraw
+    ? "Submit application again"
+    : isResubmit
+      ? "Update application"
+      : "Submit application";
   return (
     <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-      {pending ? "Submitting…" : isResubmit ? "Update application" : "Submit application"}
+      {pending ? "Submitting…" : label}
     </Button>
   );
 }
@@ -35,6 +46,7 @@ export function ApplyForm({
   cvs,
   questions,
   alreadyApplied = false,
+  isReapplyAfterWithdraw = false,
 }: {
   jobOrderId: string;
   jobTitle: string;
@@ -42,6 +54,7 @@ export function ApplyForm({
   cvs: CandidateDocumentRow[];
   questions: JobScreeningQuestionRow[];
   alreadyApplied?: boolean;
+  isReapplyAfterWithdraw?: boolean;
 }) {
   const [state, action] = useFormState(applyToJobAction, initial);
 
@@ -52,7 +65,11 @@ export function ApplyForm({
           <CheckCircle2 className="h-6 w-6" aria-hidden />
         </div>
         <h2 className="text-lg font-semibold text-ink">
-          {alreadyApplied ? "Application updated" : "Application submitted"}
+          {isReapplyAfterWithdraw
+            ? "Application resubmitted"
+            : alreadyApplied
+              ? "Application updated"
+              : "Application submitted"}
         </h2>
         <p className="mt-1 text-sm text-ink-muted">
           {jobTitle} · {employerName}
@@ -74,7 +91,12 @@ export function ApplyForm({
       <input type="hidden" name="job_order_id" value={jobOrderId} />
       {alreadyApplied ? <input type="hidden" name="reapply" value="1" /> : null}
       {state.error ? <Alert tone="danger">{state.error}</Alert> : null}
-      {alreadyApplied ? (
+      {isReapplyAfterWithdraw ? (
+        <Alert tone="info" title="Reapplying after withdrawal">
+          You previously withdrew from {jobTitle} at {employerName}. Submitting will reopen your
+          application. Recruiters will see that you withdrew and reapplied.
+        </Alert>
+      ) : alreadyApplied ? (
         <Alert tone="info" title="Updating your existing application">
           You already applied for {jobTitle} at {employerName}. Submitting again will update your CV
           and answers for this role.
@@ -150,7 +172,7 @@ export function ApplyForm({
       </Card>
 
       <div className="flex items-center gap-3">
-        <SubmitButton isResubmit={alreadyApplied} />
+        <SubmitButton isResubmit={alreadyApplied} isReapplyAfterWithdraw={isReapplyAfterWithdraw} />
         <ButtonLink href="/candidate/jobs" variant="ghost" size="sm">
           Cancel
         </ButtonLink>
