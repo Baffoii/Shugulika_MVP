@@ -23,6 +23,11 @@ import {
 import { extractResumeText, UnsupportedResumeFileError } from "@/lib/resume/extract-text";
 import { extractResumeFields, ResumeExtractionError } from "@/lib/resume/extract-fields";
 import { extractResumeFieldsStub } from "@/lib/resume/extract-fields-stub";
+import {
+  generateProfessionalCopy,
+  mergeProfessionalCopyIntoPersonal,
+  resumeLacksProfessionalSummary,
+} from "@/lib/resume/generate-professional-copy";
 import { aiError, aiLog, aiWarn } from "@/lib/ai-cost-log";
 import type { ResumeExtraction } from "@/lib/resume/extraction-schema";
 import {
@@ -492,6 +497,44 @@ async function continueResumeParse(
       .eq("id", profile.user_id)
       .maybeSingle();
     const currentPhone = (accountData as { phone: string | null } | null)?.phone ?? null;
+
+    // Second OpenAI call (same resume model): draft headline + summary only
+    // when the CV itself had no professional summary. Failures are non-fatal —
+    // other extracted suggestions still save.
+    if (usingAi && resumeLacksProfessionalSummary(extraction.personal.summary)) {
+      aiLog("resume", "PROFESSIONAL_COPY_NEEDED", {
+        runId,
+        tip: "CV had no summary — drafting headline/summary via OpenAI",
+      });
+      try {
+        const drafted = await generateProfessionalCopy(resumeText);
+        const merged = mergeProfessionalCopyIntoPersonal({
+          personal: extraction.personal,
+          profileHeadline: profile.headline,
+          profileSummary: profile.summary,
+          drafted,
+        });
+        extraction.personal.headline = merged.headline;
+        extraction.personal.summary = merged.summary;
+        aiLog("resume", "PROFESSIONAL_COPY_APPLIED", {
+          runId,
+          filled: merged.filled,
+          billed: true,
+        });
+      } catch (error) {
+        aiWarn("resume", "PROFESSIONAL_COPY_SKIPPED", {
+          runId,
+          reason: error instanceof Error ? error.message : "unknown",
+          tip: "Parse continues without AI-drafted summary/headline",
+        });
+      }
+    } else {
+      aiLog("resume", "PROFESSIONAL_COPY_SKIPPED", {
+        runId,
+        reason: usingAi ? "cv_already_has_summary" : "openai_not_configured",
+        billed: false,
+      });
+    }
 
     const profileSuggestions = buildProfileSuggestions(profile, extraction.personal, currentPhone);
     const suggestions: SuggestionInsert[] = [

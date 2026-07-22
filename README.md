@@ -23,7 +23,15 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
-> Never put a Supabase service-role/secret key in this app. Nothing here needs it.
+Server-only (never prefix with `NEXT_PUBLIC_`):
+```
+OPENAI_API_KEY=...                 # enables AI CV parse + screening; omit for free rule-based CV stub
+OPENAI_RESUME_MODEL=gpt-4.1-mini   # optional
+OPENAI_SCREENING_MODEL=gpt-4.1-mini # optional
+OPENAI_PREPAID_BALANCE_USD=10      # optional — HQ AI credits “remaining” estimate
+SUPABASE_SERVICE_ROLE_KEY=...      # only for npm run seed:users (never used by the Next.js app)
+```
+> Never put a Supabase service-role/secret key or OpenAI key in any `NEXT_PUBLIC_*` variable.
 
 ## 3. Apply the database (Supabase SQL editor)
 
@@ -42,10 +50,15 @@ Then run these in order in the Supabase **SQL Editor** (or via the Supabase CLI)
 3. `supabase/migrations/0003_mvp_storage.sql` — `candidate-documents` private bucket + storage policies
 4. `supabase/migrations/0004_mvp_seed.sql` — reference data + demo orgs and **3 advertised jobs** (so the public board works immediately)
 
-Continue with every later numbered migration in filename order through `0024`. In particular,
-`0016`–`0024` add asynchronous video interview tables, RLS, the private recording bucket,
-analytics views, demo metadata, and security hardening. Migrations are additive; do not replace or
-edit already-applied production migrations.
+Continue with every later numbered migration in filename order (including dated `20260721…` /
+`20260722…` files). In particular:
+- `0016`–`0024` — asynchronous video interview tables, RLS, private recording bucket, analytics,
+  demo metadata, and security hardening
+- `20260721140000` / `20260721160000` — AI CV screening tables + metering security
+- `20260722093000_ai_usage_events.sql` — HQ OpenAI usage ledger (`ai_usage_events`) + HQ read on
+  resume parse runs
+
+Migrations are additive; do not replace or edit already-applied production migrations.
 
 These were validated end-to-end on PostgreSQL 15 with a Supabase-compatible shim (auth/storage/roles):
 the reset + all four apply cleanly (including on top of the conflicting draft), and RLS isolation, the
@@ -315,8 +328,11 @@ scheduler or manual staff action.
   view (anonymous-safe).
 - **Candidate portal**: dashboard with profile-completion checklist; modular profile (personal, experience,
   education, skills); document library with **Supabase Storage** upload, primary-CV selection, signed-URL view,
-  archive; job apply flow with **granular, timestamped consent**; applications list with candidate-friendly
-  statuses + withdraw; saved jobs; interviews; notifications; settings with **search-visibility** controls.
+  archive; **CV autofill** (OpenAI when `OPENAI_API_KEY` is set, otherwise a free rule-based stub) that writes
+  reviewable suggestions only — never auto-applies to the profile; if the CV has no professional summary,
+  OpenAI can draft a summary + headline for the candidate to accept/edit/reject; job apply flow with
+  **granular, timestamped consent**; applications list with candidate-friendly statuses + withdraw/reapply;
+  saved jobs; interviews; notifications; settings with **search-visibility** controls.
 - **Asynchronous video interviews**: recruiter templates/assignments, immutable question snapshots,
   candidate device test + timed recorder + retry/upload/review flow, private Storage, signed recruiter
   playback, deterministic analytics, internal review notes/ratings, audit events, and notifications.
@@ -324,14 +340,17 @@ scheduler or manual staff action.
   flow (CV Review → Testing → Test Review → Interview Screening → Interview Review → optional Reference
   Checks → Client Submission → Offer → Hired); application workspace with forward-only stage moves,
   automatic Test Review / Interview Review transitions, permanent rejection that records the stage
-  rejected from, recruiter notes, stage history, and automatic employer CV pack creation on Client
-  Submission. Every change writes stage history + audit + a candidate notification.
+  rejected from, recruiter notes, stage history, **AI CV role-fit screening** (OpenAI; metered against
+  employer package entitlements when subscribed; cache-aware), and automatic employer CV pack creation on
+  Client Submission. Every change writes stage history + audit + a candidate notification.
 - **Employer portal**: dashboard; **masked** submission review (identity/contact hidden); decision workflow
   (shortlist / request interview / reject-with-reason) with audit; employer comments. Employers only ever see
   candidates submitted to them (enforced by RLS). Client Submission from the recruiter portal creates that pack
   automatically while the application is active.
 - **Franchise & HQ**: metrics dashboards (RLS-scoped), franchise/employer/job/placement/invoice lists, **audit log**
-  viewer (append-only, HQ-only).
+  viewer (append-only, HQ-only), and HQ **AI credits** (`/hq/ai-usage`) — estimated OpenAI spend by purpose
+  (CV extraction, summary/headline drafts, role-fit screens) with links to the official OpenAI usage dashboard.
+  Requires migration `20260722093000_ai_usage_events.sql`.
 - **Cross-cutting**: notifications, activity events, append-only audit log, integration placeholders.
 - **Design system**: brand tokens (green on white), reusable UI kit (buttons, cards, badges, tables, forms,
   empty/loading/error states), role-aware sidebar + responsive shell.
@@ -345,11 +364,16 @@ scheduler or manual staff action.
   **Files are not falsely labelled as watermarked** — server-side watermarking is integration-pending.
 
 ## 9. Placeholders (clearly labelled, no fake results)
-AI question generation / analysis · assessments (TestGorilla/Central Test) · AI CV parsing ·
-AI matching · candidate intro videos · WhatsApp (applications/notifications/chat) · SMS OTP · live payments ·
+AI interview question generation / analysis · assessments (TestGorilla/Central Test) · AI candidate matching ·
+candidate intro videos · WhatsApp (applications/notifications/chat) · SMS OTP · live payments ·
 mobile money · recurring billing · accounting sync · social/external job publishing · advanced analytics ·
 whistleblowing case management · automated document watermarking. Each has a reserved nav location and a
 "Coming soon / Integration pending / Not enabled" card with disabled actions.
+
+> **Not placeholders:** CV autofill (AI or rule-based stub), candidate suggestion review, professional
+> summary/headline drafting when a CV has no summary, recruiter AI CV screening, and HQ AI usage reporting
+> are implemented (OpenAI features need `OPENAI_API_KEY`; without it, CV parse falls back to the free stub
+> and screening is unavailable).
 
 ## 10. Security notes
 - **RLS on every table**; access via non-recursive `SECURITY DEFINER` helper functions. Franchise A cannot see

@@ -172,7 +172,7 @@ export async function scoreApplication(input: ScreeningInput): Promise<Screening
           total_tokens: completion.usage.total_tokens,
         }
       : null;
-    aiLogOpenAiCall({
+    await aiLogOpenAiCall({
       feature: "screening",
       purpose: "cv_role_fit_screen",
       model,

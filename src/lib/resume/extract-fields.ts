@@ -72,7 +72,7 @@ export async function extractResumeFields(resumeText: string): Promise<ResumeExt
           total_tokens: completion.usage.total_tokens,
         }
       : null;
-    aiLogOpenAiCall({
+    await aiLogOpenAiCall({
       feature: "resume",
       purpose: "cv_field_extraction",
       model,

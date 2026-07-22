@@ -7,6 +7,8 @@
  */
 import "server-only";
 
+import { recordAiUsageEvent } from "@/lib/ai-usage-record";
+
 const TAG = {
   screening: "[ai:screening]",
   resume: "[ai:resume-parse]",
@@ -83,15 +85,15 @@ export function aiError(
   console.error(`${TAG[feature]} ${step}`, { t: stamp(), ...data, err });
 }
 
-/** Log a completed OpenAI call with token usage + rough USD. */
-export function aiLogOpenAiCall(opts: {
+/** Log a completed OpenAI call with token usage + rough USD, and persist for HQ. */
+export async function aiLogOpenAiCall(opts: {
   feature: AiFeature;
   purpose: string;
   model: string;
   durationMs: number;
   usage?: TokenUsage | null;
   extra?: Record<string, unknown>;
-}): void {
+}): Promise<void> {
   const usd = estimateUsd(opts.usage ?? null);
   aiLog("openai", "CALL_COMPLETE", {
     feature: opts.feature,
@@ -113,4 +115,5 @@ export function aiLogOpenAiCall(opts: {
       tip: "Re-screen / re-parse burns credits — prefer cache hits for demos",
     });
   }
+  await recordAiUsageEvent(opts);
 }

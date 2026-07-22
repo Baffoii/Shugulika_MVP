@@ -280,6 +280,20 @@ export type ApplicationAiReviewItemRow = {
   ordinal: number;
   created_at: string;
 };
+export type AiUsageFeature = "resume" | "screening";
+export type AiUsageEventRow = {
+  id: string;
+  feature: AiUsageFeature;
+  purpose: string;
+  model: string;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  estimated_usd: number | null;
+  duration_ms: number | null;
+  actor_id: string | null;
+  created_at: string;
+};
 export type CandidateConsentRow = {
   id: string;
   candidate_id: string;
@@ -851,6 +865,7 @@ export type Database = {
       job_requirements: Tbl<JobRequirementRow>;
       application_ai_reviews: Tbl<ApplicationAiReviewRow>;
       application_ai_review_items: Tbl<ApplicationAiReviewItemRow>;
+      ai_usage_events: Tbl<AiUsageEventRow>;
       job_orders: Tbl<JobOrderRow>;
       jobs: Tbl<JobRow>;
       job_screening_questions: Tbl<JobScreeningQuestionRow>;

@@ -20,6 +20,7 @@ import {
   Plug,
   ScrollText,
   Target,
+  Cpu,
   type LucideIcon,
 } from "lucide-react";
 
@@ -93,6 +94,7 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
     { href: "/hq/candidates", label: "Candidates", icon: User },
     { href: "/hq/placements", label: "Placements", icon: BadgeDollarSign },
     { href: "/hq/billing", label: "Billing", icon: ScrollText },
+    { href: "/hq/ai-usage", label: "AI credits", icon: Cpu },
     { href: "/hq/audit-log", label: "Audit log", icon: ShieldCheck },
     { href: "/hq/integrations", label: "Integrations", icon: Plug, placeholder: true },
     { href: "/hq/settings", label: "Settings", icon: Settings },
