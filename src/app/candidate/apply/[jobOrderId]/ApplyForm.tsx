@@ -172,10 +172,7 @@ export function ApplyForm({
       </Card>
 
       <div className="flex items-center gap-3">
-        <SubmitButton
-          isResubmit={alreadyApplied}
-          isReapplyAfterWithdraw={isReapplyAfterWithdraw}
-        />
+        <SubmitButton isResubmit={alreadyApplied} isReapplyAfterWithdraw={isReapplyAfterWithdraw} />
         <ButtonLink href="/candidate/jobs" variant="ghost" size="sm">
           Cancel
         </ButtonLink>

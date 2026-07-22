@@ -32,7 +32,9 @@ export function estimateUsd(usage: TokenUsage | null | undefined): number | null
   const inTok = usage.prompt_tokens ?? 0;
   const outTok = usage.completion_tokens ?? 0;
   if (!inTok && !outTok) return null;
-  return (inTok / 1_000_000) * RATE_USD_PER_1M.input + (outTok / 1_000_000) * RATE_USD_PER_1M.output;
+  return (
+    (inTok / 1_000_000) * RATE_USD_PER_1M.input + (outTok / 1_000_000) * RATE_USD_PER_1M.output
+  );
 }
 
 export function formatUsd(usd: number | null | undefined): string {

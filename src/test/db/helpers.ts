@@ -111,8 +111,12 @@ export async function setupDb(client: Client): Promise<SeedIds> {
     "0015_demo_expansion.sql",
     "0030_employer_accounts_submissions.sql",
   ]);
+  // Match both the legacy 4-digit (`0001_…`) and the newer timestamp
+  // (`20260721140000_…`) migration prefixes. `.sort()` orders them correctly:
+  // every `00xx_` name sorts before every `2026…` name, and timestamps sort
+  // chronologically among themselves.
   const migrations = readdirSync(MIG)
-    .filter((f) => /^\d{4}_.*\.sql$/.test(f) && !SKIP.has(f))
+    .filter((f) => /^\d+_.*\.sql$/.test(f) && !SKIP.has(f))
     .sort();
   for (const f of migrations) {
     await client.query(readSql(f));

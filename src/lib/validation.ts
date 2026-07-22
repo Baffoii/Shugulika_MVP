@@ -96,19 +96,22 @@ export const certificationSchema = z.object({
 
 export const languageSchema = z.object({
   language: z.string().min(1, "Required").max(80),
-  proficiency: z.preprocess((val) => {
-    if (val == null || val === "") return "";
-    const normalized = normalizeLanguageProficiency(String(val));
-    // Keep an invalid token so z.enum fails with a clear message.
-    return normalized === null ? "__invalid__" : normalized;
-  }, z.union([
-    z.literal(""),
-    z.enum(LANGUAGE_PROFICIENCIES, {
-      errorMap: () => ({
-        message: "Use Basic, Conversational, Professional, Fluent, or Native",
+  proficiency: z.preprocess(
+    (val) => {
+      if (val == null || val === "") return "";
+      const normalized = normalizeLanguageProficiency(String(val));
+      // Keep an invalid token so z.enum fails with a clear message.
+      return normalized === null ? "__invalid__" : normalized;
+    },
+    z.union([
+      z.literal(""),
+      z.enum(LANGUAGE_PROFICIENCIES, {
+        errorMap: () => ({
+          message: "Use Basic, Conversational, Professional, Fluent, or Native",
+        }),
       }),
-    }),
-  ])),
+    ]),
+  ),
 });
 
 export const jobOrderSchema = z.object({

@@ -17,9 +17,7 @@ type DisclosedName = {
 function candidateLabel(disclosed: unknown, fallbackId: string): string {
   const d = (disclosed ?? {}) as DisclosedName;
   const name =
-    d.full_name?.trim() ||
-    [d.given_name, d.family_name].filter(Boolean).join(" ").trim() ||
-    null;
+    d.full_name?.trim() || [d.given_name, d.family_name].filter(Boolean).join(" ").trim() || null;
   return name ?? `Candidate ${fallbackId.slice(0, 8)}`;
 }
 

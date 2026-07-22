@@ -66,8 +66,8 @@ export default async function ApplicationWorkspace({
       {application.withdrawn_at ? (
         <div className="mb-4">
           <Alert tone="warn" title="Candidate withdrew">
-            This application was withdrawn on {formatDate(application.withdrawn_at)}. It stays out of
-            the active pipeline until they reapply — stage history below keeps the full record.
+            This application was withdrawn on {formatDate(application.withdrawn_at)}. It stays out
+            of the active pipeline until they reapply — stage history below keeps the full record.
           </Alert>
         </div>
       ) : history.some((h) => h.source === "candidate_reapply") ? (
@@ -243,10 +243,7 @@ function stageLabel(key: string): string {
   return stageByKey(key)?.label ?? titleCase(key);
 }
 
-function historyActorLabel(h: {
-  actor_role: string | null;
-  source: string | null;
-}): string {
+function historyActorLabel(h: { actor_role: string | null; source: string | null }): string {
   switch (h.source) {
     case "candidate_withdraw":
       return "Candidate withdrew";

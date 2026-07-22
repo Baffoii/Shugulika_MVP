@@ -690,11 +690,7 @@ export async function applyToJobAction(
 
   // Fan-out to recruiters in the owning org (SECURITY DEFINER RPC — candidates
   // cannot insert notifications for other users via RLS).
-  const staffEvent = isReapplyAfterWithdraw
-    ? "reapplied"
-    : isResubmit
-      ? "updated"
-      : "created";
+  const staffEvent = isReapplyAfterWithdraw ? "reapplied" : isResubmit ? "updated" : "created";
   const { error: staffNotifyError } = await supabase.rpc("notify_staff_of_application", {
     p_application_id: applicationId,
     p_event: staffEvent,

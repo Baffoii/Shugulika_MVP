@@ -86,7 +86,9 @@ export default async function SubmissionDetailPage({
               <Field label="Summary" value={disclosed.summary} />
               <Field label={testLabel} value={testScore} />
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">Resume</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Resume
+                </p>
                 {cv ? (
                   <div className="mt-1 flex items-center justify-between gap-3 rounded-lg border border-surface-border px-3 py-2">
                     <span className="flex items-center gap-2 text-sm text-ink">
@@ -110,8 +112,8 @@ export default async function SubmissionDetailPage({
                 </div>
               ) : null}
               <Alert tone="info">
-                Contact details and internal recruiter notes stay inside Shugulika. Withdrawal of the
-                application removes this pack from your view.
+                Contact details and internal recruiter notes stay inside Shugulika. Withdrawal of
+                the application removes this pack from your view.
               </Alert>
             </CardBody>
           </Card>
