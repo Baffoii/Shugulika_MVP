@@ -34,6 +34,11 @@ export function isResumeParsingConfigured(): boolean {
   return !!process.env.OPENAI_API_KEY;
 }
 
+/** Alias for assessment/screening callers — same gate as resume parsing. */
+export function isOpenAiConfigured(): boolean {
+  return isResumeParsingConfigured();
+}
+
 /** True when both required Supabase values are present (used for graceful degradation). */
 export function isSupabaseConfigured(): boolean {
   return (

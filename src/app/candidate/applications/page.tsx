@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHeader, Card, EmptyState, Badge, ButtonLink } from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
 import { getMyCandidate, getMyApplications, applicationRoleLabel } from "@/lib/data/candidate";
@@ -53,9 +54,20 @@ export default async function CandidateApplicationsPage() {
                   </TD>
                   <TD className="text-ink-muted">{formatDate(a.created_at)}</TD>
                   <TD>
-                    <Badge tone={a.withdrawn_at ? "neutral" : statusTone(a.current_stage)}>
-                      {label}
-                    </Badge>
+                    {a.current_stage === "testing" && !a.withdrawn_at ? (
+                      <Link
+                        href="/candidate/assessments"
+                        className="inline-flex rounded-badge focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                      >
+                        <Badge tone={statusTone(a.current_stage)} className="hover:opacity-80">
+                          {label}
+                        </Badge>
+                      </Link>
+                    ) : (
+                      <Badge tone={a.withdrawn_at ? "neutral" : statusTone(a.current_stage)}>
+                        {label}
+                      </Badge>
+                    )}
                   </TD>
                   <TD className="text-ink-muted">
                     {a.recruitment_path === "A" ? "Direct employer" : "Shugulika-managed"}

@@ -20,6 +20,11 @@ import type {
   AssessmentSeniority,
   BankFreeResponseQuestion,
 } from "@/lib/assessments/question-bank-types";
+import {
+  gradeShugulikaAssessment,
+  type StoredAssessmentResponses,
+} from "@/lib/assessments/grade-shugulika";
+import { isOpenAiConfigured } from "@/lib/env";
 
 export interface ActionResult {
   ok: boolean;
@@ -311,6 +316,309 @@ export async function assignAssessmentAction(formData: FormData): Promise<Action
   const app = await loadApplication(applicationId);
   if (!app) return { ok: false, error: "Application not found or not authorized." };
   return assignAssessmentForApplication(app);
+}
+
+function parseStoredResponses(value: Json): StoredAssessmentResponses | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const root = value as Record<string, unknown>;
+  const mcqRaw = Array.isArray(root.mcq) ? root.mcq : [];
+  const frRaw = Array.isArray(root.freeResponse) ? root.freeResponse : [];
+  const mcq: StoredAssessmentResponses["mcq"] = [];
+  const freeResponse: StoredAssessmentResponses["freeResponse"] = [];
+  for (const item of mcqRaw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    if (typeof row.questionId !== "string") continue;
+    const selected = Array.isArray(row.selectedChoiceIds)
+      ? row.selectedChoiceIds.filter((id): id is string => typeof id === "string")
+      : [];
+    mcq.push({ questionId: row.questionId, selectedChoiceIds: selected });
+  }
+  for (const item of frRaw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    if (typeof row.questionId !== "string") continue;
+    freeResponse.push({
+      questionId: row.questionId,
+      text: typeof row.text === "string" ? row.text : "",
+    });
+  }
+  if (mcq.length === 0 && freeResponse.length === 0) return null;
+  return { mcq, freeResponse };
+}
+
+async function syncPipelineTestScore(
+  applicationId: string,
+  scorePercent: number,
+): Promise<string | null> {
+  const app = await loadApplication(applicationId);
+  if (!app) return "Application not found while syncing Test score.";
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("applications")
+    .update({
+      test_name: app.test_name?.trim() || "Skills assessment",
+      test_score: String(scorePercent),
+    })
+    .eq("id", app.id);
+  return error?.message ?? null;
+}
+
+/**
+ * Re-run OpenAI free-response grading on stored answers (e.g. after enabling
+ * OPENAI_API_KEY, or to refresh explanations). MCQs stay deterministic.
+ */
+export async function regradeAssessmentWithAiAction(formData: FormData): Promise<ActionResult> {
+  const assignmentId = String(formData.get("assignment_id") ?? "");
+  if (!assignmentId) return { ok: false, error: "Assignment id is required." };
+  if (!isOpenAiConfigured()) {
+    return {
+      ok: false,
+      error: "OpenAI is not configured. Set OPENAI_API_KEY on the server and retry.",
+    };
+  }
+
+  const supabase = createClient();
+  const { data: assignmentData } = await supabase
+    .from("assessment_assignments")
+    .select("*")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  const assignment = assignmentData as AssessmentAssignmentRow | null;
+  if (!assignment) {
+    return { ok: false, error: "Assessment assignment not found or not authorized." };
+  }
+  if (!["submitted", "graded"].includes(assignment.status)) {
+    return { ok: false, error: "Only submitted or graded assessments can be re-graded." };
+  }
+  if (assignment.assessment_mode === "employer") {
+    return { ok: false, error: "Employer-only assignments have no Shugulika free-response grading." };
+  }
+
+  const responses = parseStoredResponses(assignment.responses);
+  if (!responses?.freeResponse.length) {
+    return { ok: false, error: "No free-response answers are stored for this assignment." };
+  }
+
+  const seniority = assignment.assessment_seniority as AssessmentSeniority;
+  const bank = getQuestionBank(seniority);
+  const passThreshold = Number(assignment.pass_threshold ?? bank.passThresholdPercent);
+
+  let grade;
+  try {
+    grade = await gradeShugulikaAssessment({
+      seniority,
+      responses,
+      passThresholdPercent: passThreshold,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "AI re-grade failed.",
+    };
+  }
+
+  const actorId = await actor();
+  const { error } = await supabase
+    .from("assessment_assignments")
+    .update({
+      status: grade.humanReviewRequired ? "submitted" : "graded",
+      score: grade.scorePercent,
+      mcq_score: grade.mcqScorePercent,
+      free_response_score: grade.freeResponseScorePercent,
+      result_band: grade.resultBand,
+      human_review_required: grade.humanReviewRequired,
+      ai_confidence: grade.aiConfidence,
+      grading_payload: grade.gradingPayload as never,
+      grading_notes: grade.humanReviewRequired
+        ? grade.gradingNotes
+        : `AI free-response re-grade completed. Overall ${grade.scorePercent}% (${grade.resultBand}).`,
+      grader_id: grade.humanReviewRequired ? null : actorId,
+      graded_at: grade.humanReviewRequired ? null : new Date().toISOString(),
+    })
+    .eq("id", assignment.id);
+  if (error) return { ok: false, error: error.message };
+
+  let warning: string | undefined;
+  if (!grade.humanReviewRequired) {
+    const syncError = await syncPipelineTestScore(assignment.application_id, grade.scorePercent);
+    if (syncError) warning = `AI grades saved, but the pipeline Test score could not be updated: ${syncError}`;
+  }
+
+  await writeAudit(
+    "assessment.ai_regraded",
+    assignment.application_id,
+    (await loadApplication(assignment.application_id))?.owning_org_id ?? null,
+    {
+      score: assignment.score,
+      result_band: assignment.result_band,
+      human_review_required: assignment.human_review_required,
+    },
+    {
+      score: grade.scorePercent,
+      result_band: grade.resultBand,
+      human_review_required: grade.humanReviewRequired,
+      free_response_score: grade.freeResponseScorePercent,
+    },
+  );
+
+  revalidatePath(`/recruiter/applications/${assignment.application_id}`);
+  revalidatePath("/candidate/assessments");
+  revalidatePath(`/candidate/assessments/${assignment.id}`);
+  return warning ? { ok: true, warning } : { ok: true };
+}
+
+/**
+ * Accept existing AI free-response scores without retyping (clears human-review hold).
+ */
+export async function acceptAiAssessmentGradesAction(formData: FormData): Promise<ActionResult> {
+  const assignmentId = String(formData.get("assignment_id") ?? "");
+  if (!assignmentId) return { ok: false, error: "Assignment id is required." };
+
+  const supabase = createClient();
+  const { data: assignmentData } = await supabase
+    .from("assessment_assignments")
+    .select("*")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  const assignment = assignmentData as AssessmentAssignmentRow | null;
+  if (!assignment) {
+    return { ok: false, error: "Assessment assignment not found or not authorized." };
+  }
+  if (!assignment.human_review_required && assignment.status === "graded") {
+    return { ok: true };
+  }
+
+  const payload =
+    assignment.grading_payload &&
+    typeof assignment.grading_payload === "object" &&
+    !Array.isArray(assignment.grading_payload)
+      ? ({ ...(assignment.grading_payload as Record<string, unknown>) } as Record<string, unknown>)
+      : null;
+  if (!payload) return { ok: false, error: "No AI grading payload to accept." };
+
+  const freeResponse =
+    payload.freeResponse &&
+    typeof payload.freeResponse === "object" &&
+    !Array.isArray(payload.freeResponse)
+      ? (payload.freeResponse as Record<string, unknown>)
+      : null;
+  const results = Array.isArray(freeResponse?.results) ? freeResponse.results : [];
+  if (results.length === 0) return { ok: false, error: "No AI free-response scores to accept." };
+
+  const hasAiScores = results.some((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const model = (item as { model?: string }).model;
+    return typeof model === "string" && model !== "none";
+  });
+  if (!hasAiScores) {
+    return {
+      ok: false,
+      error: "AI has not graded these answers yet. Use “Re-grade with AI” first.",
+    };
+  }
+
+  const seniority = assignment.assessment_seniority as AssessmentSeniority;
+  const bank = getQuestionBank(seniority);
+  const mcq =
+    payload.mcq && typeof payload.mcq === "object" && !Array.isArray(payload.mcq)
+      ? (payload.mcq as { pointsAwarded?: number; pointsPossible?: number })
+      : {};
+  const mcqAwarded = typeof mcq.pointsAwarded === "number" ? mcq.pointsAwarded : 0;
+  const mcqPossible = typeof mcq.pointsPossible === "number" ? mcq.pointsPossible : 0;
+  let frAwarded = 0;
+  let frPossible = 0;
+  for (const item of results) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const row = item as { score?: number; maxScore?: number };
+    if (typeof row.score === "number") frAwarded += row.score;
+    if (typeof row.maxScore === "number") frPossible += row.maxScore;
+  }
+  const pointsPossible = mcqPossible + frPossible;
+  const pointsAwarded = mcqAwarded + frAwarded;
+  const scorePercent =
+    pointsPossible === 0 ? 0 : Math.round((pointsAwarded / pointsPossible) * 10000) / 100;
+  const freeResponseScorePercent =
+    frPossible === 0 ? null : Math.round((frAwarded / frPossible) * 10000) / 100;
+  const passThreshold = Number(assignment.pass_threshold ?? bank.passThresholdPercent);
+  const resultBand: "pass" | "fail" = scorePercent >= passThreshold ? "pass" : "fail";
+  const actorId = await actor();
+  if (!actorId) return { ok: false, error: "Not signed in." };
+
+  const nextResults = results.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    return {
+      ...(item as Record<string, unknown>),
+      humanReviewRequired: false,
+      acceptedBy: actorId,
+      acceptedAt: new Date().toISOString(),
+    };
+  });
+
+  const nextPayload = {
+    ...payload,
+    freeResponse: {
+      ...(freeResponse ?? {}),
+      version: 1,
+      kind: "free_response",
+      humanReviewRequired: false,
+      results: nextResults,
+      recruiterReview: {
+        reviewedBy: actorId,
+        reviewedAt: new Date().toISOString(),
+        notes: "Accepted AI free-response grades.",
+        acceptedAi: true,
+      },
+    },
+    scorePercent,
+    passThresholdPercent: passThreshold,
+    humanReviewCompleted: true,
+  } as Json;
+
+  const { error } = await supabase
+    .from("assessment_assignments")
+    .update({
+      status: "graded",
+      score: scorePercent,
+      free_response_score: freeResponseScorePercent,
+      result_band: resultBand,
+      human_review_required: false,
+      grading_payload: nextPayload,
+      grading_notes: `Recruiter accepted AI free-response grades. Overall ${scorePercent}% (${resultBand}).`,
+      grader_id: actorId,
+      graded_at: new Date().toISOString(),
+    })
+    .eq("id", assignment.id);
+  if (error) return { ok: false, error: error.message };
+
+  const syncError = await syncPipelineTestScore(assignment.application_id, scorePercent);
+  await writeAudit(
+    "assessment.ai_grades_accepted",
+    assignment.application_id,
+    (await loadApplication(assignment.application_id))?.owning_org_id ?? null,
+    {
+      score: assignment.score,
+      result_band: assignment.result_band,
+      human_review_required: assignment.human_review_required,
+    },
+    {
+      score: scorePercent,
+      result_band: resultBand,
+      human_review_required: false,
+      free_response_score: freeResponseScorePercent,
+    },
+  );
+
+  revalidatePath(`/recruiter/applications/${assignment.application_id}`);
+  revalidatePath("/candidate/assessments");
+  revalidatePath(`/candidate/assessments/${assignment.id}`);
+  if (syncError) {
+    return {
+      ok: true,
+      warning: `AI grades accepted, but the pipeline Test score could not be updated: ${syncError}`,
+    };
+  }
+  return { ok: true };
 }
 
 /**

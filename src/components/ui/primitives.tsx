@@ -85,11 +85,12 @@ export function CardBody({ className, ...props }: React.HTMLAttributes<HTMLDivEl
 // ---------------------------------------------------------------------------
 // Badge
 // ---------------------------------------------------------------------------
-export type BadgeTone = "success" | "info" | "warn" | "danger" | "neutral" | "brand";
+export type BadgeTone = "success" | "info" | "warn" | "orange" | "danger" | "neutral" | "brand";
 const badgeTones: Record<BadgeTone, string> = {
   success: "bg-emerald-50 text-emerald-700 border-emerald-100",
   info: "bg-blue-50 text-blue-700 border-blue-100",
   warn: "bg-amber-50 text-amber-700 border-amber-100",
+  orange: "bg-orange-50 text-orange-700 border-orange-100",
   danger: "bg-red-50 text-red-700 border-red-100",
   neutral: "bg-slate-100 text-slate-600 border-slate-200",
   brand: "bg-brand-600 text-white border-brand-700",
@@ -159,6 +160,7 @@ export function StatCard({
     success: "text-emerald-700",
     info: "text-blue-700",
     warn: "text-amber-700",
+    orange: "text-orange-700",
     danger: "text-red-700",
     neutral: "text-ink",
     brand: "text-brand-700",
@@ -209,6 +211,7 @@ export function Alert({
     success: "border-emerald-100 bg-emerald-50 text-emerald-800",
     info: "border-blue-100 bg-blue-50 text-blue-800",
     warn: "border-amber-100 bg-amber-50 text-amber-800",
+    orange: "border-orange-100 bg-orange-50 text-orange-800",
     danger: "border-red-100 bg-red-50 text-red-800",
     neutral: "border-surface-border bg-surface-muted text-ink-muted",
     brand: "border-brand-100 bg-brand-50 text-brand-800",

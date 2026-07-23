@@ -187,7 +187,27 @@ export async function submitShugulikaAssessmentAction(
     };
   }
 
+  // When AI free-response grades finalize without human review, mirror the score
+  // onto the pipeline Test score field (same as recruiter review completion).
+  if (!grade.humanReviewRequired) {
+    const { data: app } = await supabase
+      .from("applications")
+      .select("id, test_name")
+      .eq("id", assignment.application_id)
+      .maybeSingle();
+    if (app) {
+      await supabase
+        .from("applications")
+        .update({
+          test_name: app.test_name?.trim() || "Skills assessment",
+          test_score: String(grade.scorePercent),
+        })
+        .eq("id", app.id);
+    }
+  }
+
   revalidatePath("/candidate/assessments");
   revalidatePath(`/candidate/assessments/${assignment.id}`);
+  revalidatePath(`/recruiter/applications/${assignment.application_id}`);
   return { ok: true };
 }

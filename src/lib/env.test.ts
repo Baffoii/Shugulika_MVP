@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { env, isSupabaseConfigured, isResumeParsingConfigured } from "@/lib/env";
+import { env, isSupabaseConfigured, isResumeParsingConfigured, isOpenAiConfigured } from "@/lib/env";
 
 const KEYS = [
   "NEXT_PUBLIC_SUPABASE_URL",
@@ -42,11 +42,13 @@ describe("env access", () => {
   it("reports configuration state", () => {
     expect(isSupabaseConfigured()).toBe(false);
     expect(isResumeParsingConfigured()).toBe(false);
+    expect(isOpenAiConfigured()).toBe(false);
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://x.supabase.co";
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_x";
     process.env.OPENAI_API_KEY = "sk-test";
     expect(isSupabaseConfigured()).toBe(true);
     expect(isResumeParsingConfigured()).toBe(true);
+    expect(isOpenAiConfigured()).toBe(true);
   });
 
   it("defaults the resume model but never treats it as public", () => {

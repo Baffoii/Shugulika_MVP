@@ -86,4 +86,17 @@ describe("requiresHumanReview", () => {
       }),
     ).toBe(false);
   });
+
+  it("flags high AI-writing authenticity likelihood", () => {
+    expect(
+      requiresHumanReview({
+        percent: 85,
+        passThresholdPercent: 65,
+        confidence: 0.95,
+        minConfidenceForAutoAccept: 0.7,
+        borderlineMarginPercent: 5,
+        authenticityFlagged: true,
+      }),
+    ).toBe(true);
+  });
 });

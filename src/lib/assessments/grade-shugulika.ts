@@ -2,7 +2,7 @@ import "server-only";
 import OpenAI from "openai";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { env, isResumeParsingConfigured } from "@/lib/env";
+import { env, isOpenAiConfigured } from "@/lib/env";
 import {
   aiError,
   aiLog,
@@ -16,6 +16,7 @@ import {
   requiresHumanReview,
   type FreeResponseGradeResult,
 } from "@/lib/assessments/free-response-grading";
+import { detectAnswerAuthenticity } from "@/lib/assessments/ai-authenticity";
 import { getQuestionBank } from "@/lib/assessments/question-banks";
 import type { AssessmentSeniority } from "@/lib/assessments/question-bank-types";
 import type {
@@ -36,6 +37,7 @@ const freeResponseModelSchema = z.object({
   evidence: z.array(
     z.object({
       criterion_id: z.string(),
+      points_awarded: z.number(),
       quote: z.string().nullable(),
       note: z.string(),
     }),
@@ -44,6 +46,11 @@ const freeResponseModelSchema = z.object({
 });
 
 export class AssessmentGradingError extends Error {}
+
+/** Avoid float noise like 1.2999999999999998 from summing rubric points. */
+function roundToHundredths(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 function toMcqQuestions(questions: BankMcqQuestion[]): McqQuestion[] {
   return questions.map((question) => ({
@@ -70,7 +77,16 @@ async function gradeOneFreeResponse(
     .join("\n");
   const system = `You grade a free-response aptitude answer against a fixed rubric.
 Return structured JSON only. Be strict and evidence-based. Do not invent facts from the answer.
-score must be between 0 and max_score. confidence is 0-1.
+
+For EVERY rubric criterion, include an evidence item with:
+- criterion_id matching the rubric id
+- points_awarded between 0 and that criterion's max
+- quote: a short verbatim snippet from the answer that supports the award, or null if nothing relevant
+- note: 1-2 sentences explaining why those points were awarded (or withheld)
+
+score must equal the sum of points_awarded, clamped to max_score.
+explanation must be 2–4 sentences summarizing the overall score: what the answer did well, what it missed against the rubric, and why the total was awarded.
+confidence is 0–1 reflecting how clearly the answer maps to the rubric (use lower confidence when the answer is vague, off-topic, or borderline).
 Never recommend rejecting a candidate yourself — only score the answer.`;
   const user = [
     `QUESTION: ${question.prompt}`,
@@ -90,6 +106,10 @@ Never recommend rejecting a candidate yourself — only score the answer.`;
     model,
     est_input_tokens: estimateTokensFromChars(system.length + user.length),
   });
+
+  // Run rubric grading and authenticity check in parallel.
+  const authenticityPromise = detectAnswerAuthenticity(answerText);
+
   try {
     const completion = await client.chat.completions.parse({
       model,
@@ -104,7 +124,7 @@ Never recommend rejecting a candidate yourself — only score the answer.`;
     if (!parsed) throw new AssessmentGradingError("Empty grading response from model.");
     const usage = completion.usage;
     const durationMs = Date.now() - started;
-    aiLogOpenAiCall({
+    void aiLogOpenAiCall({
       feature: "assessment",
       purpose: "assessment_free_response",
       model,
@@ -112,9 +132,31 @@ Never recommend rejecting a candidate yourself — only score the answer.`;
       usage,
     });
 
+    const authenticity = await authenticityPromise;
+
     const maxScore = question.points;
-    const score = Math.max(0, Math.min(maxScore, parsed.score));
-    const percent = maxScore === 0 ? 0 : (score / maxScore) * 100;
+    const criterionMax = new Map(
+      question.rubric.criteria.map((criterion) => [criterion.id, criterion.maxPoints]),
+    );
+    const evidence = parsed.evidence.map((item) => {
+      const maxForCriterion = criterionMax.get(item.criterion_id) ?? 0;
+      const pointsAwarded = roundToHundredths(
+        Math.max(0, Math.min(maxForCriterion, item.points_awarded)),
+      );
+      return {
+        criterionId: item.criterion_id,
+        pointsAwarded,
+        quote: item.quote,
+        note: item.note,
+      };
+    });
+
+    // Prefer summing criterion awards when the model returned a full evidence set.
+    const evidenceSum = evidence.reduce((sum, item) => sum + item.pointsAwarded, 0);
+    const rawScore =
+      evidence.length >= question.rubric.criteria.length ? evidenceSum : parsed.score;
+    const score = roundToHundredths(Math.max(0, Math.min(maxScore, rawScore)));
+    const percent = maxScore === 0 ? 0 : roundToHundredths((score / maxScore) * 100);
     const confidence = Math.max(0, Math.min(1, parsed.confidence));
     const humanReviewRequired = requiresHumanReview({
       percent,
@@ -122,6 +164,7 @@ Never recommend rejecting a candidate yourself — only score the answer.`;
       confidence,
       minConfidenceForAutoAccept: question.rubric.minConfidenceForAutoAccept,
       borderlineMarginPercent: question.rubric.borderlineMarginPercent,
+      authenticityFlagged: authenticity.flaggedForReview,
     });
 
     return {
@@ -131,17 +174,14 @@ Never recommend rejecting a candidate yourself — only score the answer.`;
       maxScore,
       percent,
       explanation: parsed.explanation,
-      evidence: parsed.evidence.map((item) => ({
-        criterionId: item.criterion_id,
-        quote: item.quote,
-        note: item.note,
-      })),
+      evidence,
       confidence,
       humanReviewRequired,
       model,
       promptTokens: usage?.prompt_tokens ?? null,
       completionTokens: usage?.completion_tokens ?? null,
       estimatedUsd: estimateUsd(usage),
+      authenticity,
     };
   } catch (error) {
     aiError("openai", "CALL_FAILED", error, { purpose: "assessment_free_response" });
@@ -182,7 +222,7 @@ export async function gradeShugulikaAssessment(opts: {
 
   const frResults: FreeResponseGradeResult[] = [];
   if (frBank.length > 0) {
-    if (!isResumeParsingConfigured()) {
+    if (!isOpenAiConfigured()) {
       for (const question of frBank) {
         frResults.push({
           questionId: question.id,
@@ -198,6 +238,7 @@ export async function gradeShugulikaAssessment(opts: {
           promptTokens: null,
           completionTokens: null,
           estimatedUsd: null,
+          authenticity: null,
         });
       }
     } else {
@@ -221,6 +262,7 @@ export async function gradeShugulikaAssessment(opts: {
     frPointsPossible === 0 ? null : (frPointsAwarded / frPointsPossible) * 100;
 
   const humanReviewRequired = frResults.some((item) => item.humanReviewRequired);
+  const authenticityFlagged = frResults.some((item) => item.authenticity?.flaggedForReview);
   const confidences = frResults.map((item) => item.confidence).filter((c) => c > 0);
   const aiConfidence =
     confidences.length === 0
@@ -230,6 +272,16 @@ export async function gradeShugulikaAssessment(opts: {
   let resultBand: "pass" | "fail" | "review" = "fail";
   if (humanReviewRequired) resultBand = "review";
   else if (scorePercent >= opts.passThresholdPercent) resultBand = "pass";
+
+  let gradingNotes: string;
+  if (humanReviewRequired && authenticityFlagged) {
+    gradingNotes =
+      "Free-response grading needs recruiter review (AI-writing likelihood and/or low confidence).";
+  } else if (humanReviewRequired) {
+    gradingNotes = "Free-response grading needs recruiter review before a reject decision.";
+  } else {
+    gradingNotes = `Deterministic MCQ + AI free-response graded against ${bank.id}.`;
+  }
 
   return {
     scorePercent: Math.round(scorePercent * 100) / 100,
@@ -248,8 +300,6 @@ export async function gradeShugulikaAssessment(opts: {
       scorePercent,
       passThresholdPercent: opts.passThresholdPercent,
     },
-    gradingNotes: humanReviewRequired
-      ? "Free-response grading needs recruiter review before a reject decision."
-      : `Deterministic MCQ + AI free-response graded against ${bank.id}.`,
+    gradingNotes,
   };
 }

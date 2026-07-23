@@ -356,7 +356,7 @@ scheduler or manual staff action.
   mandatory written reason. Moving a candidate to Testing delivers the assessment; candidates take
   the in-app Shugulika bank at `/candidate/assessments/[id]` (absolute MCQ keys + free-response rubrics for
   OpenAI grading). Staff can view Shugulika answer keys/rubrics and employer answer-key files.
-  Low-confidence free-response scores require human review before reject.
+  Low-confidence free-response scores or high AI-writing likelihood require human review before reject.
 - **Employer portal**: dashboard; employer job-order submission with scoped HQ/franchise/recruiter
   approval and atomic public publication; per-order audit history showing the actor and timestamp;
   aptitude-test choice (Shugulika, employer-provided, or both) with private PDF/DOC/DOCX/XLS/XLSX/CSV
@@ -390,27 +390,27 @@ mobile money · recurring billing · accounting sync · social/external job publ
 whistleblowing case management · automated document watermarking. Each has a reserved nav location and a
 "Coming soon / Integration pending / Not enabled" card with disabled actions where applicable.
 
-> **Assessment grading cost estimate (before enabling AI free-response grading)**
+> **Assessment grading cost estimate**
 >
 > OpenAI bills by **tokens**, not a fixed “credit per test.” Official standard rates from
 > [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) (as of this write-up):
 > **gpt-4.1-mini** at **$0.40 / 1M input tokens** and **$1.60 / 1M output tokens**.
 >
 > Assumptions for a typical ~7-question aptitude set with **2 free-response** answers (~150–250 words
-> each), plus rubric + answer text in the prompt:
-> - Recommended model: `gpt-4.1-mini` (structured JSON score/explanation/confidence)
-> - Estimated tokens per candidate: ~2,500 input + ~600 output
-> - Estimated cost per candidate: `(2500/1e6)*0.40 + (600/1e6)*1.60` ≈ **$0.0020**
-> - 100 candidates ≈ **$0.20** · 1,000 ≈ **$2.00** · 10,000 ≈ **$20**
+> each). Each FR answer runs **two** OpenAI calls (rubric grade + AI-writing authenticity heuristic):
+> - Model: `gpt-4.1-mini`
+> - Grading: ~2,500 in + ~600 out ≈ **$0.0020**
+> - Authenticity (heuristic, not a dedicated detector API): ~800 in + ~250 out ≈ **$0.0007**
+> - **Total ≈ $0.0027 / candidate** · 100 ≈ **$0.27** · 1,000 ≈ **$2.70**
 >
-> MCQs must be graded deterministically from stored answers (no OpenAI). Low-confidence or borderline
-> free-response results must set `human_review_required`; AI alone must not reject a candidate.
-> Token/estimated-cost logging should reuse `ai_usage_events` when AI grading is wired.
+> MCQs are graded deterministically (no OpenAI). Low-confidence, borderline, or high AI-writing
+> likelihood results set `human_review_required` (review-only — never auto-reject). Usage logs to
+> `ai_usage_events` (`assessment_free_response`, `assessment_ai_authenticity`).
 
 > **Not placeholders:** CV autofill (AI or rule-based stub), candidate suggestion review, professional
 > summary/headline drafting when a CV has no summary, recruiter AI CV screening, HQ AI usage reporting,
 > and **assessment configuration + assignment delivery + Shugulika junior/senior banks with MCQ keys,
-> free-response rubrics, and OpenAI free-response grading** (employer upload, auto-deliver on move to Testing,
+> free-response rubrics, OpenAI free-response grading, and AI-writing authenticity checks** (employer upload, auto-deliver on move to Testing,
 > candidate take/submit, staff answer-key view, job denial with reason) are implemented. OpenAI features need
 > `OPENAI_API_KEY`; without it, CV parse falls back to the free stub, screening is unavailable, and
 > free-response aptitude answers are flagged for recruiter review.

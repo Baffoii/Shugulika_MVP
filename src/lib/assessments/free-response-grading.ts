@@ -1,13 +1,13 @@
 /**
- * Future-compatible free-response grading boundary.
+ * Free-response grading types and helpers.
  *
- * Do not call OpenAI from here yet. When AI grading is enabled:
- * - MCQs stay deterministic (see mcq-grade.ts)
- * - Free-response uses a stored rubric + structured JSON output
- * - Low confidence / borderline scores must set humanReviewRequired
- * - AI alone must never reject a candidate
- * - Token usage and estimated cost must be logged via ai_usage_events
+ * MCQs stay deterministic (see mcq-grade.ts). Free-response uses a stored rubric
+ * + OpenAI structured JSON (see grade-shugulika.ts). Low confidence / borderline
+ * scores / high AI-writing likelihood set humanReviewRequired. AI alone must never
+ * reject a candidate. Token usage and estimated cost are logged via ai_usage_events.
  */
+
+import type { AnswerAuthenticityResult } from "@/lib/assessments/ai-authenticity";
 
 export type FreeResponseRubricCriterion = {
   id: string;
@@ -29,11 +29,13 @@ export type FreeResponseRubric = {
 
 export type FreeResponseGradeEvidence = {
   criterionId: string;
+  /** Points awarded for this criterion (0–criterion max). */
+  pointsAwarded: number;
   quote: string | null;
   note: string;
 };
 
-/** Structured model output contract for a future OpenAI (or other) grader. */
+/** Structured model output contract for the OpenAI free-response grader. */
 export type FreeResponseGradeOutput = {
   score: number;
   maxScore: number;
@@ -46,6 +48,8 @@ export type FreeResponseGradeOutput = {
   promptTokens: number | null;
   completionTokens: number | null;
   estimatedUsd: number | null;
+  /** Optional AI-writing authenticity signal (review-only). */
+  authenticity?: AnswerAuthenticityResult | null;
 };
 
 export type FreeResponseGradeResult = FreeResponseGradeOutput & {
@@ -59,7 +63,9 @@ export function requiresHumanReview(opts: {
   confidence: number;
   minConfidenceForAutoAccept: number;
   borderlineMarginPercent: number;
+  authenticityFlagged?: boolean;
 }): boolean {
+  if (opts.authenticityFlagged) return true;
   if (opts.confidence < opts.minConfidenceForAutoAccept) return true;
   const distance = Math.abs(opts.percent - opts.passThresholdPercent);
   return distance <= opts.borderlineMarginPercent;
