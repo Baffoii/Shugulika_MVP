@@ -60,6 +60,10 @@ const TONE_BY_STATUS: Record<string, BadgeTone> = {
   in_progress: "warn",
   graded: "success",
   denied: "danger",
+  // sourced contact disposition
+  not_contacted: "neutral",
+  contacted: "info",
+  interested: "success",
 };
 
 export function statusTone(status: string): BadgeTone {

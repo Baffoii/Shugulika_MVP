@@ -5,16 +5,9 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Checkbox } from "@/components/ui/form";
 import { Alert } from "@/components/ui/primitives";
+import { SEARCH_APPROVED_FIELDS } from "@/lib/constants";
 
-const APPROVED_FIELDS = [
-  { key: "desired_roles", label: "Desired roles" },
-  { key: "country_city", label: "Country & city" },
-  { key: "skills", label: "Skills" },
-  { key: "education_level", label: "Education level" },
-  { key: "experience_summary", label: "Experience summary" },
-  { key: "languages", label: "Languages" },
-  { key: "availability", label: "Availability" },
-];
+const APPROVED_FIELDS = SEARCH_APPROVED_FIELDS;
 
 export function VisibilityForm({
   candidateId,

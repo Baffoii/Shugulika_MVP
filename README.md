@@ -210,7 +210,8 @@ immediately, and (assigned via `job_assignments`) in each recruiter's **Jobs & o
 
 - **Public board** (no login): browse the 10 new jobs at `/jobs`.
 - **Recruiter** (`recruiter2` / `recruiter3`): sign in → `/recruiter/dashboard`; their assigned jobs show under
-  **Jobs & orders**. Candidates opted into recruiter discovery (search-visibility on).
+  **Jobs & orders**. Candidates opted into recruiter discovery appear under **Candidates**
+  (`/recruiter/candidates`) — search approved fields, open a profile (audited), and source onto a job.
 - **Candidate** (any of the 10 above): sign in → `/candidate/dashboard` to see a populated profile, then
   browse/apply to jobs.
 - **Employer** (`employer@shugulika.test`): the Bahari Financial Group jobs are visible under its org scope.
@@ -342,11 +343,14 @@ scheduler or manual staff action.
 - **Asynchronous video interviews**: recruiter templates/assignments, immutable question snapshots,
   candidate device test + timed recorder + retry/upload/review flow, private Storage, signed recruiter
   playback, deterministic analytics, internal review notes/ratings, audit events, and notifications.
-- **Recruiter portal**: dashboard/KPIs; phase-grouped **pipeline board** over the simplified candidate
-  flow (CV Review → Testing → Test Review → Interview Screening → Interview Review → optional Reference
-  Checks → Client Submission → Offer → Hired); application workspace with forward-only stage moves,
-  automatic Test Review / Interview Review transitions, permanent rejection that records the stage
-  rejected from, recruiter notes, stage history, **AI CV role-fit screening** (OpenAI; metered against
+- **Recruiter portal**: dashboard/KPIs; **candidate directory** (`/recruiter/candidates`) — talent-pool
+  search over candidate-approved fields only (skills, location, experience, availability filters),
+  audited profile opens, source-to-job with duplicate/reopen handling, and sourced contact states
+  (not contacted / contacted / interested / declined); phase-grouped **pipeline board** over the
+  simplified candidate flow (CV Review → Testing → Test Review → Interview Screening → Interview Review →
+  optional Reference Checks → Client Submission → Offer → Hired); application workspace with forward-only
+  stage moves, automatic Test Review / Interview Review transitions, permanent rejection that records the
+  stage rejected from, recruiter notes, stage history, **AI CV role-fit screening** (OpenAI; metered against
   employer package entitlements when subscribed; cache-aware), and automatic employer CV pack creation on
   Client Submission. Every change writes stage history + audit + a candidate notification.
 - **Assessment delivery**: employers configure aptitude testing on job-order submit (Shugulika,

@@ -370,6 +370,36 @@ export const EXPERIENCE_LEVELS = [
   { key: "exec", label: "Executive" },
 ] as const;
 
+/** Fields a candidate may approve for recruiter talent-pool discovery (R-012). */
+export const SEARCH_APPROVED_FIELDS = [
+  { key: "desired_roles", label: "Desired roles" },
+  { key: "country_city", label: "Country & city" },
+  { key: "skills", label: "Skills" },
+  { key: "education_level", label: "Education level" },
+  { key: "experience_summary", label: "Experience summary" },
+  { key: "languages", label: "Languages" },
+  { key: "availability", label: "Availability" },
+] as const;
+
+export type SearchApprovedFieldKey = (typeof SEARCH_APPROVED_FIELDS)[number]["key"];
+
+/** Sourced-application contact disposition (R-064). */
+export const SOURCED_CONTACT_STATUSES = [
+  { key: "not_contacted", label: "Not contacted" },
+  { key: "contacted", label: "Contacted" },
+  { key: "interested", label: "Interested" },
+  { key: "declined", label: "Declined" },
+] as const;
+
+export type SourcedContactStatusKey = (typeof SOURCED_CONTACT_STATUSES)[number]["key"];
+
+/** Common availability phrases used as filter presets. */
+export const AVAILABILITY_PRESETS = [
+  { key: "Immediately", label: "Immediately" },
+  { key: "2 weeks", label: "Within 2 weeks" },
+  { key: "1 month", label: "Within 1 month" },
+] as const;
+
 // ---------------------------------------------------------------------------
 // Submission / offer / interview / invoice statuses
 // ---------------------------------------------------------------------------

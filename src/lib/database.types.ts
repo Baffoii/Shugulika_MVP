@@ -415,6 +415,8 @@ export type JobAssignmentRow = {
   role: string;
 };
 export type SavedJobRow = { id: string; candidate_id: string; job_id: string; created_at: string };
+export type SourcedContactStatus = "not_contacted" | "contacted" | "interested" | "declined";
+
 export type ApplicationRow = {
   id: string;
   candidate_id: string;
@@ -422,6 +424,10 @@ export type ApplicationRow = {
   owning_org_id: string;
   recruitment_path: "A" | "B";
   entry_source: string;
+  /** False when the recruiter sourced the candidate onto the job (R-064). */
+  is_direct_application: boolean;
+  sourced_contact_status: SourcedContactStatus | null;
+  sourced_contacted_at: string | null;
   current_stage: string;
   assigned_recruiter_id: string | null;
   consent_status: string;
@@ -438,6 +444,36 @@ export type ApplicationRow = {
   test_score: string | null;
   created_at: string;
   updated_at: string;
+};
+
+/** Ring-2 discovery projection — only candidate-approved fields (R-012). */
+export type DiscoverableCandidateRow = {
+  candidate_id: string;
+  given_name: string | null;
+  family_name: string | null;
+  headline: string | null;
+  country_code: string | null;
+  city: string | null;
+  skills: string[];
+  education_level: string | null;
+  experience_summary: string | null;
+  experience_years: number | null;
+  languages: string[];
+  availability: string | null;
+  desired_roles: string[];
+  approved_fields: string[];
+  open_to_work: boolean;
+  has_own_engagement: boolean;
+};
+
+export type CandidateSearchAccessEventRow = {
+  id: number;
+  actor_id: string | null;
+  candidate_id: string;
+  org_context_id: string | null;
+  access_kind: string;
+  metadata: Json;
+  created_at: string;
 };
 export type ApplicationAnswerRow = {
   id: string;
@@ -927,6 +963,7 @@ export type Database = {
       candidate_certifications: Tbl<CandidateCertificationRow>;
       candidate_preferences: Tbl<CandidatePreferenceRow>;
       candidate_search_visibility: Tbl<CandidateVisibilityRow>;
+      candidate_search_access_events: Tbl<CandidateSearchAccessEventRow>;
       candidate_documents: Tbl<CandidateDocumentRow>;
       candidate_consents: Tbl<CandidateConsentRow>;
       resume_parse_runs: Tbl<ResumeParseRunRow>;
@@ -1096,6 +1133,26 @@ export type Database = {
       assign_job_order_recruiter: {
         Args: { p_job_order_id: string; p_recruiter_user_id: string };
         Returns: undefined;
+      };
+      search_talent_pool: {
+        Args: {
+          p_q?: string | null;
+          p_skill?: string | null;
+          p_country?: string | null;
+          p_city?: string | null;
+          p_availability?: string | null;
+          p_experience_level?: string | null;
+          p_limit?: number | null;
+        };
+        Returns: DiscoverableCandidateRow[];
+      };
+      open_discovered_candidate: {
+        Args: { p_candidate: string };
+        Returns: DiscoverableCandidateRow[];
+      };
+      project_searchable_candidate: {
+        Args: { p_candidate: string };
+        Returns: DiscoverableCandidateRow[];
       };
     };
     Enums: Record<string, never>;
