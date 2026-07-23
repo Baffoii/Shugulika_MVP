@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/primitives";
 import { ShugulikaAnswerKeyPanel } from "@/components/assessments/ShugulikaAnswerKeyPanel";
+import { AssessmentResponseReview } from "@/components/assessments/AssessmentResponseReview";
 import type { AssessmentAssignmentRow } from "@/lib/database.types";
 import { formatDate, titleCase } from "@/lib/format";
 
@@ -186,6 +187,12 @@ export function AssessmentWorkflowPanel({
                 Moving the candidate to Testing delivers the assessment automatically.
               </Alert>
             )
+          ) : ["submitted", "graded", "cancelled", "expired"].includes(assignment.status) ? (
+            <Alert tone="info">
+              {assignment.status === "graded"
+                ? "Assessment graded. Free-response review is complete."
+                : "Assessment submitted. Review the candidate answers below."}
+            </Alert>
           ) : (
             <Alert tone="success">
               The candidate can take this assessment under Assessments. Moving into Testing delivers
@@ -194,6 +201,11 @@ export function AssessmentWorkflowPanel({
           )}
         </CardBody>
       </Card>
+      {assignment &&
+      includesShugulika &&
+      ["submitted", "graded", "in_progress", "opened"].includes(assignment.status) ? (
+        <AssessmentResponseReview assignment={assignment} seniority={seniority} />
+      ) : null}
       {includesShugulika ? <ShugulikaAnswerKeyPanel seniority={seniority} /> : null}
     </div>
   );

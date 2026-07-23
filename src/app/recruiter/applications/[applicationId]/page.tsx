@@ -70,14 +70,21 @@ export default async function ApplicationWorkspace({
         <div className="mb-4">
           <Alert tone="warn" title="Candidate withdrew">
             This application was withdrawn on {formatDate(application.withdrawn_at)}. It stays out
-            of the active pipeline until they reapply — stage history below keeps the full record.
+            of the active pipeline until they reapply —{" "}
+            <a href="#stage-history" className="font-medium underline underline-offset-2">
+              stage history
+            </a>{" "}
+            below keeps the full record.
           </Alert>
         </div>
       ) : history.some((h) => h.source === "candidate_reapply") ? (
         <div className="mb-4">
           <Alert tone="info" title="Candidate reapplied">
-            This candidate previously withdrew and has reapplied. See stage history for the full
-            timeline.
+            This candidate previously withdrew and has reapplied. See{" "}
+            <a href="#stage-history" className="font-medium underline underline-offset-2">
+              stage history
+            </a>{" "}
+            for the full timeline.
           </Alert>
         </div>
       ) : null}
@@ -164,7 +171,7 @@ export default async function ApplicationWorkspace({
             />
           ) : null}
 
-          <Card>
+          <Card id="stage-history" className="scroll-mt-24">
             <CardHeader>
               <CardTitle>Stage history</CardTitle>
             </CardHeader>
@@ -203,6 +210,15 @@ export default async function ApplicationWorkspace({
             rejectedFromStage={application.rejected_from_stage}
             rejectionReason={application.rejection_reason}
             withdrawnAt={application.withdrawn_at}
+            testName={application.test_name}
+            testScore={application.test_score}
+            assessmentScore={
+              assessmentAssignment?.score != null &&
+              ["submitted", "graded"].includes(assessmentAssignment.status) &&
+              !assessmentAssignment.human_review_required
+                ? Number(assessmentAssignment.score)
+                : null
+            }
           />
 
           <Card>

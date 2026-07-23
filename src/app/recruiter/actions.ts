@@ -8,7 +8,18 @@ import {
   REJECTION_REASONS,
   allowedNextStages,
 } from "@/lib/constants";
-import type { ApplicationRow, CandidateProfileRow, JobOrderRow } from "@/lib/database.types";
+import type {
+  ApplicationRow,
+  AssessmentAssignmentRow,
+  CandidateProfileRow,
+  JobOrderRow,
+  Json,
+} from "@/lib/database.types";
+import { getQuestionBank } from "@/lib/assessments/question-banks";
+import type {
+  AssessmentSeniority,
+  BankFreeResponseQuestion,
+} from "@/lib/assessments/question-bank-types";
 
 export interface ActionResult {
   ok: boolean;
@@ -187,7 +198,7 @@ export async function markTestingSubmittedAction(formData: FormData): Promise<Ac
   const applicationId = String(formData.get("application_id") ?? "");
   const note = String(formData.get("note") ?? "").trim();
   const testName = String(formData.get("test_name") ?? "").trim();
-  const testScore = String(formData.get("test_score") ?? "").trim();
+  let testScore = String(formData.get("test_score") ?? "").trim();
   const app = await loadApplication(applicationId);
   if (!app) return { ok: false, error: "Application not found or not authorized." };
   if (app.current_stage !== "testing") {
@@ -198,6 +209,18 @@ export async function markTestingSubmittedAction(formData: FormData): Promise<Ac
   }
 
   const supabase = createClient();
+  if (!testScore) {
+    const { data: assignmentData } = await supabase
+      .from("assessment_assignments")
+      .select("score,status")
+      .eq("application_id", app.id)
+      .maybeSingle();
+    const assignment = assignmentData as { score: number | null; status: string } | null;
+    if (assignment?.score != null && assignment.status === "graded") {
+      testScore = String(assignment.score);
+    }
+  }
+
   const { error: scoreError } = await supabase
     .from("applications")
     .update({
@@ -288,6 +311,193 @@ export async function assignAssessmentAction(formData: FormData): Promise<Action
   const app = await loadApplication(applicationId);
   if (!app) return { ok: false, error: "Application not found or not authorized." };
   return assignAssessmentForApplication(app);
+}
+
+/**
+ * Recruiter completes free-response review: records human scores, clears the
+ * human-review hold, and sets pass/fail from the pass threshold.
+ */
+export async function completeAssessmentReviewAction(formData: FormData): Promise<ActionResult> {
+  const assignmentId = String(formData.get("assignment_id") ?? "");
+  const reviewNotes = String(formData.get("review_notes") ?? "").trim();
+  if (!assignmentId) return { ok: false, error: "Assignment id is required." };
+
+  const supabase = createClient();
+  const { data: assignmentData } = await supabase
+    .from("assessment_assignments")
+    .select("*")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  const assignment = assignmentData as AssessmentAssignmentRow | null;
+  if (!assignment)
+    return { ok: false, error: "Assessment assignment not found or not authorized." };
+  if (!["submitted", "graded"].includes(assignment.status) && !assignment.human_review_required) {
+    return { ok: false, error: "Only submitted assessments awaiting review can be graded." };
+  }
+
+  const seniority = assignment.assessment_seniority as AssessmentSeniority;
+  const bank = getQuestionBank(seniority);
+  const frQuestions = bank.questions.filter(
+    (question): question is BankFreeResponseQuestion => question.kind === "free_response",
+  );
+
+  const humanScores: Array<{ questionId: string; score: number; maxScore: number }> = [];
+  for (const question of frQuestions) {
+    const raw = String(formData.get(`fr_score_${question.id}`) ?? "").trim();
+    if (!raw) {
+      return { ok: false, error: `Enter a score for free-response question ${question.id}.` };
+    }
+    const score = Number(raw);
+    if (!Number.isFinite(score) || score < 0 || score > question.points) {
+      return {
+        ok: false,
+        error: `Score for ${question.id} must be between 0 and ${question.points}.`,
+      };
+    }
+    humanScores.push({ questionId: question.id, score, maxScore: question.points });
+  }
+
+  const payload =
+    assignment.grading_payload &&
+    typeof assignment.grading_payload === "object" &&
+    !Array.isArray(assignment.grading_payload)
+      ? ({ ...(assignment.grading_payload as Record<string, unknown>) } as Record<string, unknown>)
+      : {};
+  const mcq =
+    payload.mcq && typeof payload.mcq === "object" && !Array.isArray(payload.mcq)
+      ? (payload.mcq as { pointsAwarded?: number; pointsPossible?: number })
+      : {};
+  const mcqAwarded = typeof mcq.pointsAwarded === "number" ? mcq.pointsAwarded : 0;
+  const mcqPossible = typeof mcq.pointsPossible === "number" ? mcq.pointsPossible : 0;
+  const frAwarded = humanScores.reduce((sum, item) => sum + item.score, 0);
+  const frPossible = humanScores.reduce((sum, item) => sum + item.maxScore, 0);
+  const pointsPossible = mcqPossible + frPossible;
+  const pointsAwarded = mcqAwarded + frAwarded;
+  const scorePercent =
+    pointsPossible === 0 ? 0 : Math.round((pointsAwarded / pointsPossible) * 10000) / 100;
+  const freeResponseScorePercent =
+    frPossible === 0 ? null : Math.round((frAwarded / frPossible) * 10000) / 100;
+  const passThreshold = Number(assignment.pass_threshold ?? bank.passThresholdPercent);
+  const resultBand: "pass" | "fail" = scorePercent >= passThreshold ? "pass" : "fail";
+  const actorId = await actor();
+  if (!actorId) return { ok: false, error: "Not signed in." };
+
+  const previousFr =
+    payload.freeResponse &&
+    typeof payload.freeResponse === "object" &&
+    !Array.isArray(payload.freeResponse)
+      ? (payload.freeResponse as Record<string, unknown>)
+      : {};
+  const previousResults = Array.isArray(previousFr.results) ? previousFr.results : [];
+  const updatedResults = frQuestions.map((question) => {
+    const human = humanScores.find((item) => item.questionId === question.id)!;
+    const prior = previousResults.find((item) => {
+      return (
+        item &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        (item as { questionId?: string }).questionId === question.id
+      );
+    }) as Record<string, unknown> | undefined;
+    return {
+      ...(prior ?? {}),
+      questionId: question.id,
+      rubricId: question.rubric.id,
+      score: human.score,
+      maxScore: human.maxScore,
+      percent: human.maxScore === 0 ? 0 : (human.score / human.maxScore) * 100,
+      explanation:
+        typeof prior?.explanation === "string"
+          ? prior.explanation
+          : "Scored by recruiter during human review.",
+      confidence: 1,
+      humanReviewRequired: false,
+      model: "recruiter",
+      recruiterScore: human.score,
+      reviewedBy: actorId,
+      reviewedAt: new Date().toISOString(),
+    };
+  });
+
+  const nextPayload = {
+    ...payload,
+    version: 1,
+    bankId: bank.id,
+    freeResponse: {
+      version: 1,
+      kind: "free_response",
+      gradedAt: new Date().toISOString(),
+      humanReviewRequired: false,
+      results: updatedResults,
+      recruiterReview: {
+        reviewedBy: actorId,
+        reviewedAt: new Date().toISOString(),
+        notes: reviewNotes || null,
+      },
+    },
+    scorePercent,
+    passThresholdPercent: passThreshold,
+    humanReviewCompleted: true,
+  } as Json;
+
+  const { error } = await supabase
+    .from("assessment_assignments")
+    .update({
+      status: "graded",
+      score: scorePercent,
+      free_response_score: freeResponseScorePercent,
+      result_band: resultBand,
+      human_review_required: false,
+      ai_confidence: 1,
+      grading_payload: nextPayload,
+      grading_notes:
+        reviewNotes ||
+        `Recruiter free-response review completed. Overall ${scorePercent}% (${resultBand}).`,
+      grader_id: actorId,
+      graded_at: new Date().toISOString(),
+    })
+    .eq("id", assignment.id);
+  if (error) return { ok: false, error: error.message };
+
+  const app = await loadApplication(assignment.application_id);
+  const scoreLabel = String(scorePercent);
+  if (app) {
+    const { error: appError } = await supabase
+      .from("applications")
+      .update({
+        test_name: app.test_name?.trim() || "Skills assessment",
+        test_score: scoreLabel,
+      })
+      .eq("id", app.id);
+    if (appError) {
+      return {
+        ok: true,
+        warning: `Grades saved, but the pipeline Test score could not be updated: ${appError.message}`,
+      };
+    }
+  }
+
+  await writeAudit(
+    "assessment.human_reviewed",
+    assignment.application_id,
+    app?.owning_org_id ?? null,
+    {
+      score: assignment.score,
+      result_band: assignment.result_band,
+      human_review_required: assignment.human_review_required,
+    },
+    {
+      score: scorePercent,
+      result_band: resultBand,
+      human_review_required: false,
+      free_response_score: freeResponseScorePercent,
+    },
+  );
+
+  revalidatePath(`/recruiter/applications/${assignment.application_id}`);
+  revalidatePath("/candidate/assessments");
+  revalidatePath(`/candidate/assessments/${assignment.id}`);
+  return { ok: true };
 }
 
 /** Interview Screening completed → automatically enter Interview Review. */

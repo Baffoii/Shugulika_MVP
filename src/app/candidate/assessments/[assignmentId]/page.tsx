@@ -75,7 +75,6 @@ export default async function TakeAssessmentPage({ params }: { params: { assignm
         <div className="mb-4">
           <Alert tone="info">
             This assessment is {assignment.status}.
-            {assignment.score != null ? ` Score: ${assignment.score}%.` : ""}
             {assignment.human_review_required
               ? " A recruiter will review free-response answers before any reject decision."
               : ""}
