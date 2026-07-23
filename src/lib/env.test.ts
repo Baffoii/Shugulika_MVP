@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { env, isSupabaseConfigured, isResumeParsingConfigured, isOpenAiConfigured } from "@/lib/env";
+import {
+  env,
+  isSupabaseConfigured,
+  isResumeParsingConfigured,
+  isOpenAiConfigured,
+} from "@/lib/env";
 
 const KEYS = [
   "NEXT_PUBLIC_SUPABASE_URL",

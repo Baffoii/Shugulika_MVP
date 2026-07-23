@@ -74,9 +74,7 @@ describe("dampenAuthenticityProbability", () => {
       aiProbability: 0.82,
       confidence: 0.9,
       rationale: "Looks polished.",
-      evidence: [
-        { quote: "I'd apologize", label: "supports_human", note: "informal" },
-      ],
+      evidence: [{ quote: "I'd apologize", label: "supports_human", note: "informal" }],
       sentenceLabels: [],
     });
     expect(result.dampened).toBe(true);
@@ -97,7 +95,9 @@ describe("dampenAuthenticityProbability", () => {
           note: "stock closing",
         },
       ],
-      sentenceLabels: [{ sentence: "I would ensure a seamless resolution moving forward", label: "ai" }],
+      sentenceLabels: [
+        { sentence: "I would ensure a seamless resolution moving forward", label: "ai" },
+      ],
     });
     expect(result.dampened).toBe(false);
     expect(result.aiProbability).toBe(0.82);
@@ -108,9 +108,7 @@ describe("dampenAuthenticityProbability", () => {
       aiProbability: 0.75,
       confidence: 0.8,
       rationale: "Mixed cues.",
-      evidence: [
-        { quote: "seamless resolution", label: "supports_ai", note: "generic" },
-      ],
+      evidence: [{ quote: "seamless resolution", label: "supports_ai", note: "generic" }],
       sentenceLabels: [
         { sentence: "One.", label: "human" },
         { sentence: "Two.", label: "human" },

@@ -126,9 +126,7 @@ export function filterValidSentenceLabels(
       sentence: item.sentence.trim(),
       label: item.label,
     }))
-    .filter(
-      (item) => item.sentence.length > 0 && isVerbatimQuoteInAnswer(answer, item.sentence),
-    )
+    .filter((item) => item.sentence.length > 0 && isVerbatimQuoteInAnswer(answer, item.sentence))
     .slice(0, 12);
 }
 
@@ -152,7 +150,8 @@ export function dampenAuthenticityProbability(opts: {
   if (aiProbability >= 0.4 && !hasAiQuote) {
     aiProbability = Math.min(aiProbability, AI_AUTHENTICITY_EVIDENCE_CAP);
     confidence = Math.min(confidence, 0.45);
-    rationale = `${rationale} Insufficient quote evidence for a high AI-written score — probability capped.`.trim();
+    rationale =
+      `${rationale} Insufficient quote evidence for a high AI-written score — probability capped.`.trim();
     dampened = true;
   }
 
@@ -163,8 +162,7 @@ export function dampenAuthenticityProbability(opts: {
       aiProbability = Math.min(aiProbability, AI_AUTHENTICITY_EVIDENCE_CAP);
       confidence = Math.min(confidence, 0.5);
       if (!dampened) {
-        rationale =
-          `${rationale} Most sentences labeled human — probability dampened.`.trim();
+        rationale = `${rationale} Most sentences labeled human — probability dampened.`.trim();
       }
       dampened = true;
     }

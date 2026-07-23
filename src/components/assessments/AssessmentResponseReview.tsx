@@ -136,8 +136,7 @@ function parseAuthenticitySentences(value: unknown): FrAuthenticitySentence[] {
 function parseAuthenticity(value: unknown): FrAuthenticity | null {
   const row = asRecord(value as Json);
   if (!row) return null;
-  const classification =
-    typeof row.classification === "string" ? row.classification : "mixed";
+  const classification = typeof row.classification === "string" ? row.classification : "mixed";
   const signals = Array.isArray(row.signals)
     ? row.signals.filter((item): item is string => typeof item === "string")
     : [];
@@ -155,9 +154,7 @@ function parseAuthenticity(value: unknown): FrAuthenticity | null {
   };
 }
 
-function authenticityEvidenceTone(
-  label: string,
-): "danger" | "success" | "neutral" {
+function authenticityEvidenceTone(label: string): "danger" | "success" | "neutral" {
   if (label === "supports_ai") return "danger";
   if (label === "supports_human") return "success";
   return "neutral";
@@ -204,9 +201,7 @@ function formatScore(value: number): string {
   return (Math.round(value * 100) / 100).toString();
 }
 
-function authenticityBadgeTone(
-  aiProbability: number,
-): "success" | "warn" | "orange" | "danger" {
+function authenticityBadgeTone(aiProbability: number): "success" | "warn" | "orange" | "danger" {
   // 0–15% green, 15–40% amber, 40–70% orange, ≥70% red.
   if (aiProbability >= 0.7) return "danger";
   if (aiProbability >= 0.4) return "orange";
@@ -229,8 +224,7 @@ function aiGradeBadgeTone(
 
 function authenticityLabel(auth: FrAuthenticity): string {
   const pct = Math.round(auth.aiProbability * 100);
-  const conf =
-    auth.confidence > 0 ? ` · ${Math.round(auth.confidence * 100)}% conf` : "";
+  const conf = auth.confidence > 0 ? ` · ${Math.round(auth.confidence * 100)}% conf` : "";
   return `${pct}% chance AI-written${conf}`;
 }
 
@@ -394,8 +388,8 @@ export function AssessmentResponseReview({
               {assignment.human_review_required && aiGraded ? (
                 <Alert tone="info">
                   AI graded these answers but flagged them for recruiter review (low confidence,
-                  borderline score, and/or AI-writing likelihood). Accept the AI grades or enter your
-                  own scores.
+                  borderline score, and/or AI-writing likelihood). Accept the AI grades or enter
+                  your own scores.
                 </Alert>
               ) : null}
 
@@ -476,9 +470,7 @@ export function AssessmentResponseReview({
                         {ai && ai.model !== "none" ? (
                           <Badge tone={aiGradeBadgeTone(ai.score, ai.maxScore)}>
                             AI grade {formatScore(ai.score)}/{ai.maxScore}
-                            {ai.confidence > 0
-                              ? ` · ${Math.round(ai.confidence * 100)}% conf`
-                              : ""}
+                            {ai.confidence > 0 ? ` · ${Math.round(ai.confidence * 100)}% conf` : ""}
                           </Badge>
                         ) : null}
                         {ai?.authenticity ? (
@@ -607,9 +599,7 @@ export function AssessmentResponseReview({
                                 </p>
                               ) : null}
                               {evidence?.quote ? (
-                                <p className="mt-1 italic text-ink-muted">
-                                  “{evidence.quote}”
-                                </p>
+                                <p className="mt-1 italic text-ink-muted">“{evidence.quote}”</p>
                               ) : null}
                             </div>
                           );
@@ -630,9 +620,7 @@ export function AssessmentResponseReview({
                               min={0}
                               max={question.points}
                               step={0.1}
-                              defaultValue={
-                                ai && ai.model !== "none" ? formatScore(ai.score) : ""
-                              }
+                              defaultValue={ai && ai.model !== "none" ? formatScore(ai.score) : ""}
                               required
                               disabled={pending}
                             />

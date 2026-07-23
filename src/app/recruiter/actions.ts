@@ -392,7 +392,10 @@ export async function regradeAssessmentWithAiAction(formData: FormData): Promise
     return { ok: false, error: "Only submitted or graded assessments can be re-graded." };
   }
   if (assignment.assessment_mode === "employer") {
-    return { ok: false, error: "Employer-only assignments have no Shugulika free-response grading." };
+    return {
+      ok: false,
+      error: "Employer-only assignments have no Shugulika free-response grading.",
+    };
   }
 
   const responses = parseStoredResponses(assignment.responses);
@@ -442,7 +445,8 @@ export async function regradeAssessmentWithAiAction(formData: FormData): Promise
   let warning: string | undefined;
   if (!grade.humanReviewRequired) {
     const syncError = await syncPipelineTestScore(assignment.application_id, grade.scorePercent);
-    if (syncError) warning = `AI grades saved, but the pipeline Test score could not be updated: ${syncError}`;
+    if (syncError)
+      warning = `AI grades saved, but the pipeline Test score could not be updated: ${syncError}`;
   }
 
   await writeAudit(
