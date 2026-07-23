@@ -19,6 +19,9 @@ import { stageByKey } from "@/lib/constants";
 import { formatDate, formatDateTime, titleCase, initials } from "@/lib/format";
 import { FileText, MapPin } from "lucide-react";
 import { AssessmentWorkflowPanel } from "@/components/assessments/AssessmentWorkflowPanel";
+import { DocumentExportButton } from "@/components/documents/DocumentExportButton";
+import { requireSession } from "@/lib/auth";
+import { isHqAdmin } from "@/lib/rbac";
 
 export const metadata: Metadata = { title: "Application" };
 
@@ -29,6 +32,8 @@ export default async function ApplicationWorkspace({
 }) {
   const detail = await getApplicationDetail(params.applicationId);
   if (!detail) notFound();
+  const session = await requireSession();
+  const canExportOriginal = isHqAdmin(session.roles);
   const {
     application,
     candidate,
@@ -130,18 +135,23 @@ export default async function ApplicationWorkspace({
                         {d.title ?? d.object_path.split("/").pop()}
                         {d.is_primary ? <Badge tone="success">Primary CV</Badge> : null}
                       </span>
-                      <ViewCvButton
-                        bucketId={d.bucket_id}
-                        objectPath={d.object_path}
-                        label="Open (view-only)"
-                      />
+                      <div className="flex shrink-0 items-center gap-1">
+                        <ViewCvButton
+                          documentId={d.id}
+                          applicationId={application.id}
+                          label="Preview (view-only)"
+                        />
+                        {canExportOriginal ? (
+                          <DocumentExportButton source="candidate_document" id={d.id} />
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
               )}
               <p className="mt-2 text-xs text-ink-subtle">
-                Documents open via a short-lived, logged link. Watermarked previews are an
-                integration-pending feature.
+                Opens a watermarked, view-only preview. Every access is audited. Original download
+                is Super Admin only.
               </p>
             </CardBody>
           </Card>

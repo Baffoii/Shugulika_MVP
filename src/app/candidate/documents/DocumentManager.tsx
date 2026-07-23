@@ -10,6 +10,7 @@ import { Field, Select } from "@/components/ui/form";
 import { DOCUMENT_TYPES, CANDIDATE_DOC_BUCKET } from "@/lib/constants";
 import { formatDate, titleCase } from "@/lib/format";
 import type { CandidateDocumentRow } from "@/lib/database.types";
+import { DocumentPreviewButton } from "@/components/documents/DocumentPreviewButton";
 
 export function DocumentManager({
   candidateId,
@@ -145,14 +146,6 @@ export function DocumentManager({
     });
   }
 
-  async function view(doc: CandidateDocumentRow) {
-    const supabase = createClient();
-    const { data } = await supabase.storage
-      .from(doc.bucket_id)
-      .createSignedUrl(doc.object_path, 120);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener");
-  }
-
   return (
     <div className="space-y-4">
       {documentsLocked ? (
@@ -211,8 +204,8 @@ export function DocumentManager({
             />
           </label>
           <p className="mt-2 text-xs text-ink-subtle">
-            Stored privately. Only you and recruiters you apply to (via a short-lived link) can open
-            your files.
+            Stored privately. Viewers open a watermarked, audited preview — originals are not
+            downloadable except by Super Admin export.
           </p>
           {error ? (
             <div className="mt-3">
@@ -256,8 +249,8 @@ export function DocumentManager({
             </label>
           </div>
           <p className="mt-2 text-xs text-ink-subtle">
-            Stored privately. Only you and recruiters you apply to (via a short-lived link) can open
-            your files.
+            Stored privately. Viewers open a watermarked, audited preview — originals are not
+            downloadable except by Super Admin export.
           </p>
           {error ? (
             <div className="mt-3">
@@ -293,9 +286,7 @@ export function DocumentManager({
                   {d.is_primary ? <Badge tone="success">Primary CV</Badge> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => view(d)}>
-                    View
-                  </Button>
+                  <DocumentPreviewButton source="candidate_document" id={d.id} label="Preview" />
                   {d.doc_type === "cv" && !d.is_primary ? (
                     <Button
                       variant="ghost"
