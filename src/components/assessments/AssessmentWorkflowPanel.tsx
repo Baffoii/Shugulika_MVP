@@ -188,8 +188,8 @@ export function AssessmentWorkflowPanel({
             )
           ) : (
             <Alert tone="success">
-              The candidate can take this assessment under Assessments. Moving into Testing
-              delivers it automatically; use Send only if delivery failed.
+              The candidate can take this assessment under Assessments. Moving into Testing delivers
+              it automatically; use Send only if delivery failed.
             </Alert>
           )}
         </CardBody>
