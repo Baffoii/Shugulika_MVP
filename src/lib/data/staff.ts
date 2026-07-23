@@ -83,6 +83,346 @@ export async function getJobOrderAudits(jobOrderIds: string[]): Promise<JobOrder
   }));
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function collectUuid(value: unknown, into: Set<string>) {
+  if (typeof value === "string" && value.length >= 32) into.add(value);
+}
+
+export interface HqAuditLogView extends AuditLogRow {
+  actor_name: string;
+  org_name: string | null;
+  entity_label: string;
+  detail: string | null;
+}
+
+/** HQ audit feed with resolved people, companies, jobs, and candidates. */
+export async function getHqAuditLog(limit = 100): Promise<HqAuditLogView[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("audit_logs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  const logs = (data as AuditLogRow[] | null) ?? [];
+  if (logs.length === 0) return [];
+
+  const actorIds = new Set<string>();
+  const orgIds = new Set<string>();
+  const jobOrderIds = new Set<string>();
+  const applicationIds = new Set<string>();
+  const assessmentIds = new Set<string>();
+  const submissionIds = new Set<string>();
+  const relatedProfileIds = new Set<string>();
+
+  for (const log of logs) {
+    if (log.actor_id) actorIds.add(log.actor_id);
+    if (log.org_context_id) orgIds.add(log.org_context_id);
+    const meta = asRecord(log.metadata);
+    const after = asRecord(log.after_value);
+    const before = asRecord(log.before_value);
+    collectUuid(meta.employer_org_id, orgIds);
+    collectUuid(meta.recruiter_user_id, relatedProfileIds);
+    collectUuid(after.recruiter_user_id, relatedProfileIds);
+    collectUuid(before.recruiter_user_id, relatedProfileIds);
+    collectUuid(meta.application_id, applicationIds);
+    collectUuid(meta.job_order_id, jobOrderIds);
+    collectUuid(meta.candidate_id, relatedProfileIds);
+
+    switch (log.entity_type) {
+      case "job_order":
+        if (log.entity_id) jobOrderIds.add(log.entity_id);
+        break;
+      case "application":
+        if (log.entity_id) applicationIds.add(log.entity_id);
+        break;
+      case "assessment_assignment":
+        if (log.entity_id) assessmentIds.add(log.entity_id);
+        break;
+      case "submission":
+      case "employer_submission":
+        if (log.entity_id) submissionIds.add(log.entity_id);
+        break;
+      default:
+        break;
+    }
+  }
+
+  const profileLookupIds = [...new Set([...actorIds, ...relatedProfileIds])];
+  const [profilesRes, orgsRes, jobsRes, appsRes, assessmentsRes, submissionsRes] =
+    await Promise.all([
+      profileLookupIds.length
+        ? supabase.from("profiles").select("id,full_name,email").in("id", profileLookupIds)
+        : Promise.resolve({ data: [] }),
+      orgIds.size
+        ? supabase
+            .from("organizations")
+            .select("id,name,org_type")
+            .in("id", [...orgIds])
+        : Promise.resolve({ data: [] }),
+      jobOrderIds.size
+        ? supabase
+            .from("job_orders")
+            .select("id,title,employer_org_id,responsible_org_id")
+            .in("id", [...jobOrderIds])
+        : Promise.resolve({ data: [] }),
+      applicationIds.size
+        ? supabase
+            .from("applications")
+            .select("id,candidate_id,job_order_id,assigned_recruiter_id")
+            .in("id", [...applicationIds])
+        : Promise.resolve({ data: [] }),
+      assessmentIds.size
+        ? supabase
+            .from("assessment_assignments")
+            .select("id,candidate_id,job_order_id,assigned_by")
+            .in("id", [...assessmentIds])
+        : Promise.resolve({ data: [] }),
+      submissionIds.size
+        ? supabase
+            .from("employer_submissions")
+            .select("id,candidate_id,job_order_id,employer_org_id,submitting_recruiter_id")
+            .in("id", [...submissionIds])
+        : Promise.resolve({ data: [] }),
+    ]);
+
+  const jobs =
+    (jobsRes.data as
+      | {
+          id: string;
+          title: string;
+          employer_org_id: string;
+          responsible_org_id: string;
+        }[]
+      | null) ?? [];
+  for (const job of jobs) {
+    orgIds.add(job.employer_org_id);
+    orgIds.add(job.responsible_org_id);
+  }
+
+  const apps =
+    (appsRes.data as
+      | {
+          id: string;
+          candidate_id: string;
+          job_order_id: string;
+          assigned_recruiter_id: string | null;
+        }[]
+      | null) ?? [];
+  const assessments =
+    (assessmentsRes.data as
+      { id: string; candidate_id: string; job_order_id: string; assigned_by: string }[] | null) ??
+    [];
+  const submissions =
+    (submissionsRes.data as
+      | {
+          id: string;
+          candidate_id: string;
+          job_order_id: string;
+          employer_org_id: string;
+          submitting_recruiter_id: string | null;
+        }[]
+      | null) ?? [];
+
+  const missingJobIds = new Set<string>();
+  const candidateIds = new Set<string>();
+  for (const app of apps) {
+    candidateIds.add(app.candidate_id);
+    if (!jobs.some((job) => job.id === app.job_order_id)) missingJobIds.add(app.job_order_id);
+    if (app.assigned_recruiter_id) relatedProfileIds.add(app.assigned_recruiter_id);
+  }
+  for (const row of assessments) {
+    candidateIds.add(row.candidate_id);
+    if (!jobs.some((job) => job.id === row.job_order_id)) missingJobIds.add(row.job_order_id);
+  }
+  for (const row of submissions) {
+    candidateIds.add(row.candidate_id);
+    orgIds.add(row.employer_org_id);
+    if (!jobs.some((job) => job.id === row.job_order_id)) missingJobIds.add(row.job_order_id);
+    if (row.submitting_recruiter_id) relatedProfileIds.add(row.submitting_recruiter_id);
+  }
+
+  const [extraJobsRes, candidatesRes] = await Promise.all([
+    missingJobIds.size
+      ? supabase
+          .from("job_orders")
+          .select("id,title,employer_org_id,responsible_org_id")
+          .in("id", [...missingJobIds])
+      : Promise.resolve({ data: [] }),
+    candidateIds.size
+      ? supabase
+          .from("candidate_profiles")
+          .select("id,given_name,family_name,user_id")
+          .in("id", [...candidateIds])
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const allJobs = [...jobs, ...((extraJobsRes.data as typeof jobs | null) ?? [])];
+  for (const job of allJobs) {
+    orgIds.add(job.employer_org_id);
+    orgIds.add(job.responsible_org_id);
+  }
+
+  const [extraOrgsRes, extraProfilesRes] = await Promise.all([
+    orgIds.size
+      ? supabase
+          .from("organizations")
+          .select("id,name,org_type")
+          .in("id", [...orgIds])
+      : Promise.resolve({ data: orgsRes.data }),
+    [...new Set([...profileLookupIds, ...relatedProfileIds])].length
+      ? supabase
+          .from("profiles")
+          .select("id,full_name,email")
+          .in("id", [...new Set([...profileLookupIds, ...relatedProfileIds])])
+      : Promise.resolve({ data: profilesRes.data }),
+  ]);
+
+  const orgName = new Map(
+    (
+      (extraOrgsRes.data as { id: string; name: string; org_type: string }[] | null) ??
+      (orgsRes.data as { id: string; name: string; org_type: string }[] | null) ??
+      []
+    ).map((org) => [org.id, org.name]),
+  );
+  const profileName = new Map(
+    (
+      (extraProfilesRes.data as { id: string; full_name: string | null; email: string }[] | null) ??
+      (profilesRes.data as { id: string; full_name: string | null; email: string }[] | null) ??
+      []
+    ).map((profile) => [profile.id, profile.full_name?.trim() || profile.email]),
+  );
+  const jobById = new Map(allJobs.map((job) => [job.id, job]));
+  const candidateName = new Map(
+    (
+      (candidatesRes.data as
+        | {
+            id: string;
+            given_name: string | null;
+            family_name: string | null;
+            user_id: string;
+          }[]
+        | null) ?? []
+    ).map((candidate) => {
+      const name = `${candidate.given_name ?? ""} ${candidate.family_name ?? ""}`.trim();
+      return [candidate.id, name || profileName.get(candidate.user_id) || "Candidate"];
+    }),
+  );
+  const appById = new Map(apps.map((app) => [app.id, app]));
+  const assessmentById = new Map(assessments.map((row) => [row.id, row]));
+  const submissionById = new Map(submissions.map((row) => [row.id, row]));
+
+  function jobLabel(jobId: string | null | undefined): string | null {
+    if (!jobId) return null;
+    const job = jobById.get(jobId);
+    if (!job) return null;
+    const employer = orgName.get(job.employer_org_id);
+    return employer ? `${job.title} · ${employer}` : job.title;
+  }
+
+  return logs.map((log) => {
+    const meta = asRecord(log.metadata);
+    const after = asRecord(log.after_value);
+    const before = asRecord(log.before_value);
+    const actor_name = log.actor_id ? profileName.get(log.actor_id) || "Unknown user" : "System";
+    const org_name = log.org_context_id ? (orgName.get(log.org_context_id) ?? null) : null;
+
+    let entity_label = titleCaseEntity(log.entity_type);
+    let detail: string | null = null;
+
+    if (log.entity_type === "job_order" && log.entity_id) {
+      entity_label = jobLabel(log.entity_id) ?? `Job order ${log.entity_id.slice(0, 8)}`;
+      const recruiterId =
+        (typeof after.recruiter_user_id === "string" && after.recruiter_user_id) ||
+        (typeof meta.recruiter_user_id === "string" && meta.recruiter_user_id) ||
+        null;
+      if (recruiterId) {
+        detail = `Recruiter: ${profileName.get(recruiterId) || recruiterId.slice(0, 8)}`;
+        const prev = typeof before.recruiter_user_id === "string" ? before.recruiter_user_id : null;
+        if (prev && profileName.get(prev)) {
+          detail += ` (was ${profileName.get(prev)})`;
+        }
+      }
+      if (typeof after.denial_reason === "string" && after.denial_reason) {
+        detail = `Reason: ${after.denial_reason}`;
+      }
+    } else if (log.entity_type === "application" && log.entity_id) {
+      const app = appById.get(log.entity_id);
+      if (app) {
+        const candidate = candidateName.get(app.candidate_id) ?? "Candidate";
+        const job = jobLabel(app.job_order_id);
+        entity_label = job ? `${candidate} · ${job}` : candidate;
+        if (app.assigned_recruiter_id) {
+          detail = `Owner: ${profileName.get(app.assigned_recruiter_id) || "Unassigned"}`;
+        }
+      } else {
+        entity_label = `Application ${log.entity_id.slice(0, 8)}`;
+      }
+      if (typeof after.to_stage === "string" || typeof after.stage === "string") {
+        const stage = String(after.to_stage ?? after.stage);
+        detail = detail
+          ? `${detail} · Stage → ${titleCaseWords(stage)}`
+          : `Stage → ${titleCaseWords(stage)}`;
+      }
+    } else if (log.entity_type === "assessment_assignment" && log.entity_id) {
+      const row = assessmentById.get(log.entity_id);
+      if (row) {
+        const candidate = candidateName.get(row.candidate_id) ?? "Candidate";
+        const job = jobLabel(row.job_order_id);
+        entity_label = job ? `${candidate} · ${job}` : candidate;
+      } else {
+        entity_label = `Assessment ${log.entity_id.slice(0, 8)}`;
+      }
+    } else if (
+      (log.entity_type === "submission" || log.entity_type === "employer_submission") &&
+      log.entity_id
+    ) {
+      const row = submissionById.get(log.entity_id);
+      if (row) {
+        const candidate = candidateName.get(row.candidate_id) ?? "Candidate";
+        const employer = orgName.get(row.employer_org_id);
+        const job = jobLabel(row.job_order_id);
+        entity_label = [candidate, job, employer].filter(Boolean).join(" · ");
+        if (row.submitting_recruiter_id) {
+          detail = `Submitted by ${profileName.get(row.submitting_recruiter_id) || "recruiter"}`;
+        }
+      } else {
+        entity_label = `Submission ${log.entity_id.slice(0, 8)}`;
+      }
+    } else if (log.entity_id) {
+      entity_label = `${titleCaseEntity(log.entity_type)} ${log.entity_id.slice(0, 8)}`;
+    }
+
+    return {
+      ...log,
+      actor_name,
+      org_name,
+      entity_label,
+      detail,
+    };
+  });
+}
+
+function titleCaseEntity(value: string): string {
+  return value
+    .split(/[._]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function titleCaseWords(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export interface EmployerSubmissionView extends EmployerSubmissionRow {
   job_orders: Pick<JobOrderRow, "id" | "title"> | null;
 }

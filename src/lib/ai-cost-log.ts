@@ -12,6 +12,7 @@ import { recordAiUsageEvent } from "@/lib/ai-usage-record";
 const TAG = {
   screening: "[ai:screening]",
   resume: "[ai:resume-parse]",
+  assessment: "[ai:assessment]",
   openai: "[ai:openai]",
 } as const;
 

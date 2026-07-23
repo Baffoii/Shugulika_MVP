@@ -18,6 +18,7 @@ import { AiScreeningPanel } from "./AiScreening";
 import { stageByKey } from "@/lib/constants";
 import { formatDate, formatDateTime, titleCase, initials } from "@/lib/format";
 import { FileText, MapPin } from "lucide-react";
+import { AssessmentWorkflowPanel } from "@/components/assessments/AssessmentWorkflowPanel";
 
 export const metadata: Metadata = { title: "Application" };
 
@@ -38,6 +39,8 @@ export default async function ApplicationWorkspace({
     submissions,
     aiReview,
     aiReviewItems,
+    assessmentAssignment,
+    assessmentFiles,
   } = detail;
   const primaryCv = documents.find((d) => d.is_primary) ?? documents[0] ?? null;
   const name = `${candidate?.given_name ?? "Candidate"} ${candidate?.family_name ?? ""}`.trim();
@@ -142,6 +145,24 @@ export default async function ApplicationWorkspace({
             review={aiReview}
             items={aiReviewItems}
           />
+
+          {job ? (
+            <AssessmentWorkflowPanel
+              applicationId={application.id}
+              jobOrderId={job.id}
+              currentStage={application.current_stage}
+              mode={job.assessment_mode}
+              seniority={job.assessment_seniority}
+              passThreshold={job.assessment_pass_threshold}
+              employerFileName={job.assessment_file_name}
+              employerFiles={assessmentFiles.map((file) => ({
+                id: file.id,
+                file_name: file.file_name,
+                kind: file.kind,
+              }))}
+              assignment={assessmentAssignment}
+            />
+          ) : null}
 
           <Card>
             <CardHeader>

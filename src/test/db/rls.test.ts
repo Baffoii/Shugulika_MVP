@@ -236,6 +236,159 @@ d("Row-Level Security & tenant isolation", () => {
     ).rejects.toThrow();
   });
 
+  it("scopes employer test files and candidate assessment assignments", async () => {
+    const candidateId = (
+      await client.query("select id from public.candidate_profiles where user_id = $1", [
+        ids.candidate1,
+      ])
+    ).rows[0].id as string;
+    const path = `${ids.employerA}/${ids.jobOrderA}/aptitude-test.pdf`;
+    await client.query(
+      `update public.job_orders
+       set assessment_mode = 'both', assessment_seniority = 'senior',
+           assessment_pass_threshold = 70,
+           assessment_file_bucket = 'employer-assessments', assessment_file_path = $2,
+           assessment_file_name = 'aptitude-test.pdf', assessment_file_mime = 'application/pdf',
+           assessment_file_size = 1000
+       where id = $1`,
+      [ids.jobOrderA, path],
+    );
+    await client.query("update public.applications set current_stage = 'testing' where id = $1", [
+      ids.applicationC1,
+    ]);
+
+    await commitAs(
+      client,
+      ids.employerUserA,
+      `insert into storage.objects (bucket_id, name, owner)
+       values ('employer-assessments', $1, $2)`,
+      [path, ids.employerUserA],
+    );
+
+    // Unassigned candidates and other employers cannot read the file yet.
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.candidate1,
+          "select count(*)::int c from storage.objects where bucket_id = 'employer-assessments'",
+        )
+      ).rows[0]?.c,
+    ).toBe(0);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.employerUserB,
+          "select count(*)::int c from storage.objects where bucket_id = 'employer-assessments'",
+        )
+      ).rows[0]?.c,
+    ).toBe(0);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.recruiterB,
+          "select count(*)::int c from storage.objects where bucket_id = 'employer-assessments'",
+        )
+      ).rows[0]?.c,
+    ).toBe(0);
+
+    await commitAs(
+      client,
+      ids.recruiterA,
+      `insert into public.assessment_assignments
+         (application_id, job_order_id, candidate_id, assessment_mode,
+          assessment_seniority, assigned_by, due_at, pass_threshold)
+       values ($1, $2, $3, 'both', 'senior', $4, now() + interval '7 days', 70)`,
+      [ids.applicationC1, ids.jobOrderA, candidateId, ids.recruiterA],
+    );
+
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.candidate1,
+          "select count(*)::int c from public.assessment_assignments",
+        )
+      ).rows[0]?.c,
+    ).toBe(1);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.candidate2,
+          "select count(*)::int c from public.assessment_assignments",
+        )
+      ).rows[0]?.c,
+    ).toBe(0);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.candidate1,
+          "select count(*)::int c from storage.objects where bucket_id = 'employer-assessments'",
+        )
+      ).rows[0]?.c,
+    ).toBe(1);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.candidate2,
+          "select count(*)::int c from storage.objects where bucket_id = 'employer-assessments'",
+        )
+      ).rows[0]?.c,
+    ).toBe(0);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.recruiterA,
+          "select count(*)::int c from storage.objects where bucket_id = 'employer-assessments'",
+        )
+      ).rows[0]?.c,
+    ).toBe(1);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.hqAdmin,
+          "select count(*)::int c from storage.objects where bucket_id = 'employer-assessments'",
+        )
+      ).rows[0]?.c,
+    ).toBe(1);
+    expect(
+      (
+        await queryAs(
+          client,
+          ids.recruiterB,
+          "select count(*)::int c from public.assessment_assignments",
+        )
+      ).rows[0]?.c,
+    ).toBe(0);
+
+    // Candidate can open; cannot self-grade.
+    await commitAs(
+      client,
+      ids.candidate1,
+      `update public.assessment_assignments
+       set status = 'opened', opened_at = now()
+       where application_id = $1`,
+      [ids.applicationC1],
+    );
+    await expect(
+      commitAs(
+        client,
+        ids.candidate1,
+        `update public.assessment_assignments
+         set score = 99, status = 'graded', graded_at = now()
+         where application_id = $1`,
+        [ids.applicationC1],
+      ),
+    ).rejects.toThrow();
+  });
+
   it("rejects vacancy counts below 1", async () => {
     await expect(
       queryAs(

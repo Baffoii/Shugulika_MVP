@@ -11,6 +11,8 @@ import type {
   NotificationRow,
   ApplicationAiReviewRow,
   ApplicationAiReviewItemRow,
+  AssessmentAssignmentRow,
+  JobOrderAssessmentFileRow,
 } from "@/lib/database.types";
 
 export interface PipelineApplication extends ApplicationRow {
@@ -131,6 +133,8 @@ export interface ApplicationDetail {
   interviews: InterviewRow[];
   aiReview: ApplicationAiReviewRow | null;
   aiReviewItems: ApplicationAiReviewItemRow[];
+  assessmentAssignment: AssessmentAssignmentRow | null;
+  assessmentFiles: JobOrderAssessmentFileRow[];
 }
 
 export async function getApplicationDetail(id: string): Promise<ApplicationDetail | null> {
@@ -139,48 +143,64 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
   const application = app as ApplicationRow | null;
   if (!application) return null;
 
-  const [candidate, job, history, notes, documents, submissions, interviews, aiReviewRes] =
-    await Promise.all([
-      supabase
-        .from("candidate_profiles")
-        .select("*")
-        .eq("id", application.candidate_id)
-        .maybeSingle(),
-      supabase.from("job_orders").select("*").eq("id", application.job_order_id).maybeSingle(),
-      supabase
-        .from("application_stage_history")
-        .select("*")
-        .eq("application_id", id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("recruiter_notes")
-        .select("*")
-        .eq("subject_type", "application")
-        .eq("subject_id", id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("candidate_documents")
-        .select("*")
-        .eq("candidate_id", application.candidate_id)
-        .eq("status", "active"),
-      supabase
-        .from("employer_submissions")
-        .select("*")
-        .eq("application_id", id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("interviews")
-        .select("*")
-        .eq("application_id", id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("application_ai_reviews")
-        .select("*")
-        .eq("application_id", id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  const [
+    candidate,
+    job,
+    history,
+    notes,
+    documents,
+    submissions,
+    interviews,
+    aiReviewRes,
+    assessmentRes,
+    assessmentFilesRes,
+  ] = await Promise.all([
+    supabase
+      .from("candidate_profiles")
+      .select("*")
+      .eq("id", application.candidate_id)
+      .maybeSingle(),
+    supabase.from("job_orders").select("*").eq("id", application.job_order_id).maybeSingle(),
+    supabase
+      .from("application_stage_history")
+      .select("*")
+      .eq("application_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("recruiter_notes")
+      .select("*")
+      .eq("subject_type", "application")
+      .eq("subject_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("candidate_documents")
+      .select("*")
+      .eq("candidate_id", application.candidate_id)
+      .eq("status", "active"),
+    supabase
+      .from("employer_submissions")
+      .select("*")
+      .eq("application_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("interviews")
+      .select("*")
+      .eq("application_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("application_ai_reviews")
+      .select("*")
+      .eq("application_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("assessment_assignments").select("*").eq("application_id", id).maybeSingle(),
+    supabase
+      .from("job_order_assessment_files")
+      .select("*")
+      .eq("job_order_id", application.job_order_id)
+      .order("created_at", { ascending: true }),
+  ]);
 
   const aiReviewRaw = (aiReviewRes.data as ApplicationAiReviewRow | null) ?? null;
   // Don't ship the full model reasoning trace to the browser — staff UI doesn't
@@ -207,6 +227,8 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
     interviews: (interviews.data as InterviewRow[] | null) ?? [],
     aiReview,
     aiReviewItems: (aiItemsData as ApplicationAiReviewItemRow[] | null) ?? [],
+    assessmentAssignment: (assessmentRes.data as AssessmentAssignmentRow | null) ?? null,
+    assessmentFiles: (assessmentFilesRes.data as JobOrderAssessmentFileRow[] | null) ?? [],
   };
 }
 

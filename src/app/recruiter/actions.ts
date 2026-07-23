@@ -8,7 +8,7 @@ import {
   REJECTION_REASONS,
   allowedNextStages,
 } from "@/lib/constants";
-import type { ApplicationRow, CandidateProfileRow } from "@/lib/database.types";
+import type { ApplicationRow, CandidateProfileRow, JobOrderRow } from "@/lib/database.types";
 
 export interface ActionResult {
   ok: boolean;
@@ -192,6 +192,73 @@ export async function markTestingSubmittedAction(formData: FormData): Promise<Ac
       allowAuto: true,
     },
   );
+}
+
+/** Send the job's configured assessment requirement to a candidate in Testing. */
+export async function assignAssessmentAction(formData: FormData): Promise<ActionResult> {
+  const applicationId = String(formData.get("application_id") ?? "");
+  const app = await loadApplication(applicationId);
+  if (!app) return { ok: false, error: "Application not found or not authorized." };
+  if (app.current_stage !== "testing") {
+    return { ok: false, error: "Move the candidate to Testing before assigning an assessment." };
+  }
+
+  const supabase = createClient();
+  const [{ data: jobData }, { data: existing }] = await Promise.all([
+    supabase.from("job_orders").select("*").eq("id", app.job_order_id).maybeSingle(),
+    supabase
+      .from("assessment_assignments")
+      .select("id,status")
+      .eq("application_id", app.id)
+      .maybeSingle(),
+  ]);
+  const job = jobData as JobOrderRow | null;
+  if (!job) return { ok: false, error: "The job-order assessment could not be loaded." };
+  if (existing) return { ok: true, warning: "This assessment has already been assigned." };
+
+  const actorId = await actor();
+  if (!actorId) return { ok: false, error: "Not signed in." };
+  const dueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: inserted, error } = await supabase
+    .from("assessment_assignments")
+    .insert({
+      application_id: app.id,
+      job_order_id: app.job_order_id,
+      candidate_id: app.candidate_id,
+      assessment_mode: job.assessment_mode,
+      assessment_seniority: job.assessment_seniority,
+      pass_threshold: job.assessment_pass_threshold,
+      assigned_by: actorId,
+      due_at: dueAt,
+      status: "assigned",
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  const assignmentId = (inserted as { id: string }).id;
+  const { error: notifyError } = await supabase.rpc("notify_candidate_of_assessment_assignment", {
+    p_assignment_id: assignmentId,
+    p_title: "Aptitude assessment assigned",
+    p_body: `Complete the ${job.assessment_seniority} assessment for ${job.title} within 7 days.`,
+  });
+  await writeAudit("assessment.assigned", app.id, app.owning_org_id, null, {
+    assessment_assignment_id: assignmentId,
+    mode: job.assessment_mode,
+    seniority: job.assessment_seniority,
+    due_at: dueAt,
+    pass_threshold: job.assessment_pass_threshold,
+  });
+  revalidatePath(`/recruiter/applications/${app.id}`);
+  revalidatePath("/candidate/assessments");
+  revalidatePath("/candidate/notifications");
+  if (notifyError) {
+    return {
+      ok: true,
+      warning: `Assessment assigned, but the candidate notification failed: ${notifyError.message}`,
+    };
+  }
+  return { ok: true };
 }
 
 /** Interview Screening completed → automatically enter Interview Review. */

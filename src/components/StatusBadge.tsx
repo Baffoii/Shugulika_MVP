@@ -54,10 +54,64 @@ const TONE_BY_STATUS: Record<string, BadgeTone> = {
   // verification / generic
   verified: "success",
   pending: "warn",
+  // aptitude assessment assignment
+  assigned: "info",
+  opened: "info",
+  in_progress: "warn",
+  graded: "success",
+  denied: "danger",
 };
 
 export function statusTone(status: string): BadgeTone {
   return TONE_BY_STATUS[status] ?? "neutral";
+}
+
+/**
+ * Muted worktool tones for audit-log action keys (e.g. job_order.approved_and_published).
+ * Prefer semantic meaning over decoration.
+ */
+export function auditActionTone(action: string): BadgeTone {
+  const key = action.toLowerCase();
+  if (
+    key.includes("denied") ||
+    key.includes("rejected") ||
+    key.includes("revoked") ||
+    key.includes("failed")
+  ) {
+    return "danger";
+  }
+  if (key.includes("withdrawn") || key.includes("cancelled") || key.includes("expired")) {
+    return "neutral";
+  }
+  if (
+    key.includes("approved") ||
+    key.includes("published") ||
+    key.includes("hired") ||
+    key.includes("graded") ||
+    key.includes("created") ||
+    key.includes("completed")
+  ) {
+    return "success";
+  }
+  if (
+    key.includes("assigned") ||
+    key.includes("submitted") ||
+    key.includes("opened") ||
+    key.includes("stage_changed") ||
+    key.includes("notified")
+  ) {
+    return "info";
+  }
+  if (
+    key.includes("review") ||
+    key.includes("configured") ||
+    key.includes("manual") ||
+    key.includes("pending") ||
+    key.includes("requested")
+  ) {
+    return "warn";
+  }
+  return "neutral";
 }
 
 export function StatusBadge({ status, label }: { status: string; label?: string }) {

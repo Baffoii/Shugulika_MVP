@@ -48,7 +48,7 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
     { href: "/candidate/saved-jobs", label: "Saved jobs", icon: Bookmark },
     { href: "/candidate/applications", label: "Applications", icon: ClipboardList },
     { href: "/candidate/interviews", label: "Interviews", icon: CalendarClock },
-    { href: "/candidate/assessments", label: "Assessments", icon: ShieldCheck, placeholder: true },
+    { href: "/candidate/assessments", label: "Assessments", icon: ShieldCheck },
     { href: "/candidate/notifications", label: "Notifications", icon: Bell },
     { href: "/candidate/settings", label: "Settings", icon: Settings },
   ],
