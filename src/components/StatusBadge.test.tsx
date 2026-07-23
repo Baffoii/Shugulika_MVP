@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { StatusBadge, StageBadge, statusTone } from "@/components/StatusBadge";
+import { StatusBadge, StageBadge, statusTone, auditActionTone } from "@/components/StatusBadge";
 
 describe("statusTone", () => {
   it("maps known statuses to sensible tones", () => {
@@ -11,6 +11,18 @@ describe("statusTone", () => {
   });
   it("falls back to neutral for unknown values", () => {
     expect(statusTone("some_new_status")).toBe("neutral");
+  });
+});
+
+describe("auditActionTone", () => {
+  it("maps audit actions to worktool-style tones", () => {
+    expect(auditActionTone("job_order.approved_and_published")).toBe("success");
+    expect(auditActionTone("job_order.submitted")).toBe("info");
+    expect(auditActionTone("job_order.recruiter_assigned")).toBe("info");
+    expect(auditActionTone("job_order.withdrawn")).toBe("neutral");
+    expect(auditActionTone("job_order.denied")).toBe("danger");
+    expect(auditActionTone("application.stage_changed")).toBe("info");
+    expect(auditActionTone("submission.created")).toBe("success");
   });
 });
 

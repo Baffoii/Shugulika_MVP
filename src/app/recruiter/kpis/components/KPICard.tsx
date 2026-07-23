@@ -37,6 +37,7 @@ export function KPICard({
     success: "text-emerald-700",
     info: "text-blue-700",
     warn: "text-amber-700",
+    orange: "text-orange-700",
     danger: "text-red-700",
     neutral: "text-ink",
     brand: "text-brand-700",

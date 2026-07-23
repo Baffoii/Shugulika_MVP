@@ -1,4 +1,4 @@
-import { PageHeader, EmptyState, Badge } from "@/components/ui/primitives";
+import { PageHeader, EmptyState } from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/lib/data/staff";
 import { formatDate, formatDateTime, formatMoney, titleCase } from "@/lib/format";
 import { PublishJobButton } from "@/components/jobs/PublishJobButton";
+import { DenyJobOrderButton } from "@/components/jobs/DenyJobOrderButton";
 import { WithdrawJobOrderButton } from "@/components/jobs/WithdrawJobOrderButton";
 import { AssignJobRecruiterControl } from "@/components/jobs/AssignJobRecruiterControl";
 import { JobOrderListRow } from "@/components/jobs/JobOrderDetails";
@@ -23,6 +24,7 @@ export async function JobOrdersPage({
   title,
   description,
   canPublish = false,
+  canDeny = false,
   canWithdraw = false,
   canAssignRecruiter = false,
   beforeList,
@@ -30,6 +32,8 @@ export async function JobOrdersPage({
   title: string;
   description?: string;
   canPublish?: boolean;
+  /** HQ / franchise admin denial with mandatory reason. */
+  canDeny?: boolean;
   canWithdraw?: boolean;
   canAssignRecruiter?: boolean;
   beforeList?: React.ReactNode;
@@ -87,10 +91,18 @@ export async function JobOrdersPage({
                         {canPublish && j.status === "submitted" ? (
                           <PublishJobButton jobOrderId={j.id} />
                         ) : null}
+                        {canDeny && j.status === "submitted" ? (
+                          <DenyJobOrderButton jobOrderId={j.id} jobTitle={j.title} />
+                        ) : null}
                         {canWithdraw && WITHDRAWABLE_STATUSES.has(j.status) ? (
                           <WithdrawJobOrderButton jobOrderId={j.id} jobTitle={j.title} />
                         ) : null}
                       </div>
+                      {j.status === "denied" && j.denial_reason ? (
+                        <p className="mt-2 max-w-xs text-xs text-status-danger">
+                          Denied: {j.denial_reason}
+                        </p>
+                      ) : null}
                       {canAssignRecruiter && ASSIGNABLE_STATUSES.has(j.status) ? (
                         <div className="mt-2">
                           <AssignJobRecruiterControl

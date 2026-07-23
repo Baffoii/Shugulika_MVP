@@ -1,20 +1,14 @@
 import type { Metadata } from "next";
 import { PageHeader, EmptyState, Alert, Badge } from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/server";
+import { auditActionTone } from "@/components/StatusBadge";
+import { getHqAuditLog } from "@/lib/data/staff";
 import { formatDateTime, titleCase } from "@/lib/format";
-import type { AuditLogRow } from "@/lib/database.types";
 
 export const metadata: Metadata = { title: "Audit log" };
 
 export default async function AuditLogPage() {
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("audit_logs")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(100);
-  const logs = (data as AuditLogRow[] | null) ?? [];
+  const logs = await getHqAuditLog(100);
 
   return (
     <div>
@@ -24,8 +18,8 @@ export default async function AuditLogPage() {
       />
       <div className="mb-4">
         <Alert tone="info">
-          Tracked: stage changes, rejections, submissions, employer decisions, and other
-          consequential actions, with actor, entity, and before/after values.
+          Tracked: stage changes, rejections, submissions, employer decisions, recruiter
+          assignments, and other consequential actions — with resolved people, companies, and roles.
         </Alert>
       </div>
       {logs.length === 0 ? (
@@ -40,22 +34,27 @@ export default async function AuditLogPage() {
               <TH>When</TH>
               <TH>Action</TH>
               <TH>Entity</TH>
+              <TH>Organization</TH>
               <TH>Actor</TH>
             </TR>
           </THead>
           <tbody>
-            {logs.map((l) => (
-              <TR key={l.id}>
-                <TD className="whitespace-nowrap text-ink-muted">{formatDateTime(l.created_at)}</TD>
+            {logs.map((log) => (
+              <TR key={log.id}>
+                <TD className="whitespace-nowrap text-ink-muted">
+                  {formatDateTime(log.created_at)}
+                </TD>
                 <TD>
-                  <Badge tone="neutral">{titleCase(l.action)}</Badge>
+                  <Badge tone={auditActionTone(log.action)}>{titleCase(log.action)}</Badge>
                 </TD>
-                <TD className="text-ink-muted">
-                  {titleCase(l.entity_type)} {l.entity_id ? l.entity_id.slice(0, 8) : ""}
+                <TD>
+                  <p className="font-medium text-ink">{log.entity_label}</p>
+                  {log.detail ? (
+                    <p className="mt-1 text-sm font-semibold text-ink-muted">{log.detail}</p>
+                  ) : null}
                 </TD>
-                <TD className="text-ink-subtle">
-                  {l.actor_id ? l.actor_id.slice(0, 8) : "system"}
-                </TD>
+                <TD className="text-ink-muted">{log.org_name ?? "—"}</TD>
+                <TD className="text-ink">{log.actor_name}</TD>
               </TR>
             ))}
           </tbody>

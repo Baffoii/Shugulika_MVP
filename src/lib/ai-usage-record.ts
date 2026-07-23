@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { estimateUsd, type AiFeature, type TokenUsage, aiWarn } from "@/lib/ai-cost-log";
 import type { AiUsageFeature } from "@/lib/database.types";
 
-const PERSISTABLE_FEATURES = new Set<AiFeature>(["resume", "screening"]);
+const PERSISTABLE_FEATURES = new Set<AiFeature>(["resume", "screening", "assessment"]);
 
 export async function recordAiUsageEvent(opts: {
   feature: AiFeature;

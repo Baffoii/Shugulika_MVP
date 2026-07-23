@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/primitives";
 import { TR, TD } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDate, formatMoney, titleCase } from "@/lib/format";
+import { CandidateAssessmentFileButton } from "@/components/assessments/CandidateAssessmentFileButton";
 
 function DetailBlock({ label, children }: { label: string; children: React.ReactNode }) {
   if (!children) return null;
@@ -50,6 +51,26 @@ function JobOrderDetailsPanel({ job }: { job: JobOrderRow }) {
         <DetailBlock label="Salary">{salary}</DetailBlock>
         <DetailBlock label="Deadline">
           {job.application_deadline ? formatDate(job.application_deadline) : null}
+        </DetailBlock>
+        <DetailBlock label="Aptitude testing">
+          {job.assessment_mode === "both"
+            ? "Shugulika and employer assessments"
+            : job.assessment_mode === "employer"
+              ? "Employer assessment"
+              : "Shugulika assessment"}
+        </DetailBlock>
+        <DetailBlock label="Assessment level">{titleCase(job.assessment_seniority)}</DetailBlock>
+        <DetailBlock label="Pass threshold">{`${job.assessment_pass_threshold}%`}</DetailBlock>
+        {job.status === "denied" ? (
+          <DetailBlock label="Denial reason">{job.denial_reason}</DetailBlock>
+        ) : null}
+        <DetailBlock label="Employer test file">
+          {job.assessment_file_name ? (
+            <CandidateAssessmentFileButton
+              jobOrderId={job.id}
+              fileName={job.assessment_file_name}
+            />
+          ) : null}
         </DetailBlock>
       </div>
     </div>

@@ -627,8 +627,9 @@ export const PLACEHOLDER_FEATURES: PlaceholderFeature[] = [
   },
   {
     key: "assessments",
-    title: "Assessments (TestGorilla / Central Test)",
-    description: "Skills and psychometric assessments via an integrated provider.",
+    title: "Assessments (vendor integration)",
+    description:
+      "First-party Shugulika junior/senior banks, MCQ keys, free-response rubrics, and assignment delivery are live. Hosted TestGorilla/Central Test (or successor) vendor sync is not enabled.",
     status: "integration_pending",
     portals: ["recruiter", "candidate", "employer"],
   },

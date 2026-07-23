@@ -57,6 +57,12 @@ Continue with every later numbered migration in filename order (including dated 
 - `20260721140000` / `20260721160000` — AI CV screening tables + metering security
 - `20260722093000_ai_usage_events.sql` — HQ OpenAI usage ledger (`ai_usage_events`) + HQ read on
   resume parse runs
+- `20260722150000_job_assessment_workflow.sql` — employer assessment preferences, private employer
+  test uploads, recruiter-to-candidate assignments, audit history, and scoped access policies
+- `20260722160000_assessment_lifecycle_hardening.sql` — pass threshold, candidate open/submit RLS,
+  assessment notification RPC, grading-boundary columns, lifecycle audit triggers
+- `20260722170000_assessment_engine_denial_multifile.sql` — Shugulika grading RPC, multi-file
+  employer test + answer-key uploads, job-order denial with mandatory reason
 
 Migrations are additive; do not replace or edit already-applied production migrations.
 
@@ -343,8 +349,18 @@ scheduler or manual staff action.
   rejected from, recruiter notes, stage history, **AI CV role-fit screening** (OpenAI; metered against
   employer package entitlements when subscribed; cache-aware), and automatic employer CV pack creation on
   Client Submission. Every change writes stage history + audit + a candidate notification.
+- **Assessment delivery**: employers configure aptitude testing on job-order submit (Shugulika,
+  employer-provided, or both; junior/senior; default 65% pass threshold). Employer mode requires
+  **one or more candidate-facing test files and one or more answer-key files** (private Storage;
+  candidates never see answer keys). HQ/franchise can **deny** a submitted job order only with a
+  mandatory written reason. Moving a candidate to Testing delivers the assessment; candidates take
+  the in-app Shugulika bank at `/candidate/assessments/[id]` (absolute MCQ keys + free-response rubrics for
+  OpenAI grading). Staff can view Shugulika answer keys/rubrics and employer answer-key files.
+  Low-confidence free-response scores or high AI-writing likelihood require human review before reject.
 - **Employer portal**: dashboard; employer job-order submission with scoped HQ/franchise/recruiter
   approval and atomic public publication; per-order audit history showing the actor and timestamp;
+  aptitude-test choice (Shugulika, employer-provided, or both) with private PDF/DOC/DOCX/XLS/XLSX/CSV
+  upload for employer tests; HQ/recruiter visibility follows the job's organization scope;
   **masked** submission review (identity/contact hidden); decision workflow
   (shortlist / request interview / reject-with-reason) with audit; employer comments. Employers only ever see
   candidates submitted to them (enforced by RLS). Client Submission from the recruiter portal creates that pack
@@ -366,16 +382,38 @@ scheduler or manual staff action.
   **Files are not falsely labelled as watermarked** — server-side watermarking is integration-pending.
 
 ## 9. Placeholders (clearly labelled, no fake results)
-AI interview question generation / analysis · assessments (TestGorilla/Central Test) · AI candidate matching ·
+AI interview question generation / analysis · hosted TestGorilla/Central Test (or successor) vendor
+integration · **automated reject from AI alone** (blocked by design — low-confidence free-response
+requires recruiter review) · AI candidate matching ·
 candidate intro videos · WhatsApp (applications/notifications/chat) · SMS OTP · live payments ·
 mobile money · recurring billing · accounting sync · social/external job publishing · advanced analytics ·
 whistleblowing case management · automated document watermarking. Each has a reserved nav location and a
-"Coming soon / Integration pending / Not enabled" card with disabled actions.
+"Coming soon / Integration pending / Not enabled" card with disabled actions where applicable.
+
+> **Assessment grading cost estimate**
+>
+> OpenAI bills by **tokens**, not a fixed “credit per test.” Official standard rates from
+> [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) (as of this write-up):
+> **gpt-4.1-mini** at **$0.40 / 1M input tokens** and **$1.60 / 1M output tokens**.
+>
+> Assumptions for a typical ~7-question aptitude set with **2 free-response** answers (~150–250 words
+> each). Each FR answer runs **two** OpenAI calls (rubric grade + AI-writing authenticity heuristic):
+> - Model: `gpt-4.1-mini`
+> - Grading: ~2,500 in + ~600 out ≈ **$0.0020**
+> - Authenticity (heuristic, not a dedicated detector API): ~800 in + ~250 out ≈ **$0.0007**
+> - **Total ≈ $0.0027 / candidate** · 100 ≈ **$0.27** · 1,000 ≈ **$2.70**
+>
+> MCQs are graded deterministically (no OpenAI). Low-confidence, borderline, or high AI-writing
+> likelihood results set `human_review_required` (review-only — never auto-reject). Usage logs to
+> `ai_usage_events` (`assessment_free_response`, `assessment_ai_authenticity`).
 
 > **Not placeholders:** CV autofill (AI or rule-based stub), candidate suggestion review, professional
-> summary/headline drafting when a CV has no summary, recruiter AI CV screening, and HQ AI usage reporting
-> are implemented (OpenAI features need `OPENAI_API_KEY`; without it, CV parse falls back to the free stub
-> and screening is unavailable).
+> summary/headline drafting when a CV has no summary, recruiter AI CV screening, HQ AI usage reporting,
+> and **assessment configuration + assignment delivery + Shugulika junior/senior banks with MCQ keys,
+> free-response rubrics, OpenAI free-response grading, and AI-writing authenticity checks** (employer upload, auto-deliver on move to Testing,
+> candidate take/submit, staff answer-key view, job denial with reason) are implemented. OpenAI features need
+> `OPENAI_API_KEY`; without it, CV parse falls back to the free stub, screening is unavailable, and
+> free-response aptitude answers are flagged for recruiter review.
 
 ## 10. Security notes
 - **RLS on every table**; access via non-recursive `SECURITY DEFINER` helper functions. Franchise A cannot see

@@ -280,7 +280,7 @@ export type ApplicationAiReviewItemRow = {
   ordinal: number;
   created_at: string;
 };
-export type AiUsageFeature = "resume" | "screening";
+export type AiUsageFeature = "resume" | "screening" | "assessment";
 export type AiUsageEventRow = {
   id: string;
   feature: AiUsageFeature;
@@ -331,11 +331,64 @@ export type JobOrderRow = {
   application_deadline: string | null;
   target_start_date: string | null;
   closed_reason: string | null;
+  denial_reason: string | null;
   created_by: string | null;
   /** Controlled vocabulary from job_roles.id */
   job_role: string | null;
+  assessment_mode: "shugulika" | "employer" | "both";
+  assessment_seniority: "junior" | "senior";
+  /** Passing score percent for the Shugulika aptitude plan (typically 60–70). */
+  assessment_pass_threshold: number;
+  assessment_file_bucket: string | null;
+  assessment_file_path: string | null;
+  assessment_file_name: string | null;
+  assessment_file_mime: string | null;
+  assessment_file_size: number | null;
   created_at: string;
   updated_at: string;
+};
+export type AssessmentAssignmentRow = {
+  id: string;
+  application_id: string;
+  job_order_id: string;
+  candidate_id: string;
+  assessment_mode: "shugulika" | "employer" | "both";
+  assessment_seniority: "junior" | "senior";
+  status: "assigned" | "opened" | "in_progress" | "submitted" | "graded" | "cancelled" | "expired";
+  assigned_by: string;
+  assigned_at: string;
+  due_at: string | null;
+  opened_at: string | null;
+  submitted_at: string | null;
+  score: number | null;
+  result_band: string | null;
+  grader_id: string | null;
+  graded_at: string | null;
+  grading_notes: string | null;
+  /** Optional future provider key; null means first-party / manual. */
+  provider: string | null;
+  external_reference: string | null;
+  pass_threshold: number | null;
+  mcq_score: number | null;
+  free_response_score: number | null;
+  human_review_required: boolean;
+  ai_confidence: number | null;
+  grading_payload: Json;
+  responses: Json;
+  created_at: string;
+  updated_at: string;
+};
+export type JobOrderAssessmentFileRow = {
+  id: string;
+  job_order_id: string;
+  kind: "candidate_test" | "answer_key";
+  bucket_id: string;
+  object_path: string;
+  file_name: string;
+  mime_type: string | null;
+  byte_size: number | null;
+  uploaded_by: string | null;
+  created_at: string;
 };
 export type JobRow = {
   id: string;
@@ -867,6 +920,8 @@ export type Database = {
       application_ai_review_items: Tbl<ApplicationAiReviewItemRow>;
       ai_usage_events: Tbl<AiUsageEventRow>;
       job_orders: Tbl<JobOrderRow>;
+      assessment_assignments: Tbl<AssessmentAssignmentRow>;
+      job_order_assessment_files: Tbl<JobOrderAssessmentFileRow>;
       jobs: Tbl<JobRow>;
       job_screening_questions: Tbl<JobScreeningQuestionRow>;
       job_assignments: Tbl<JobAssignmentRow>;
@@ -982,6 +1037,14 @@ export type Database = {
         };
         Returns: string;
       };
+      notify_candidate_of_assessment_assignment: {
+        Args: {
+          p_assignment_id: string;
+          p_title: string;
+          p_body: string;
+        };
+        Returns: string;
+      };
       ai_cv_screens_used: {
         Args: { p_employer_org: string; p_since: string };
         Returns: number;
@@ -992,6 +1055,25 @@ export type Database = {
       };
       withdraw_job_order: {
         Args: { p_job_order_id: string };
+        Returns: undefined;
+      };
+      deny_job_order: {
+        Args: { p_job_order_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      apply_assessment_grade: {
+        Args: {
+          p_assignment_id: string;
+          p_responses: Json;
+          p_score: number;
+          p_mcq_score: number | null;
+          p_free_response_score: number | null;
+          p_result_band: string;
+          p_human_review_required: boolean;
+          p_ai_confidence: number | null;
+          p_grading_payload: Json;
+          p_grading_notes: string | null;
+        };
         Returns: undefined;
       };
       assign_job_order_recruiter: {

@@ -25,9 +25,29 @@ const REQUIRED = {
   candidate_profiles: ["user_id", "completion_pct"],
   candidate_documents: ["candidate_id", "bucket_id", "object_path", "is_primary"],
   candidate_consents: ["candidate_id", "purpose", "covered_org_id", "withdrawn_at"],
-  job_orders: ["employer_org_id", "responsible_org_id", "recruitment_path", "status"],
+  job_orders: [
+    "employer_org_id",
+    "responsible_org_id",
+    "recruitment_path",
+    "status",
+    "assessment_mode",
+    "assessment_seniority",
+    "assessment_pass_threshold",
+    "assessment_file_path",
+  ],
   jobs: ["job_order_id", "status", "public_slug"],
   applications: ["candidate_id", "job_order_id", "owning_org_id", "current_stage"],
+  assessment_assignments: [
+    "application_id",
+    "job_order_id",
+    "candidate_id",
+    "assessment_mode",
+    "status",
+    "assigned_by",
+    "human_review_required",
+    "grading_payload",
+  ],
+  job_order_assessment_files: ["job_order_id", "kind", "object_path", "file_name"],
   application_stage_history: ["application_id", "from_stage", "to_stage"],
   recruiter_notes: ["owning_org_id", "visibility"],
   employer_submissions: ["employer_org_id", "submitting_org_id", "status", "access_revoked_at"],
@@ -81,6 +101,7 @@ for (const t of [
   "recruiter_notes",
   "candidate_profiles",
   "invoices",
+  "assessment_assignments",
 ]) {
   const row = rls.find((r) => r.relname === t);
   if (row && !row.relrowsecurity) errors.push(`RLS not enabled on public.${t}`);

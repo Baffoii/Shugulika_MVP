@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   advanceStageAction,
@@ -39,19 +39,28 @@ export function StageControl({
   rejectedFromStage,
   rejectionReason,
   withdrawnAt,
+  testName: initialTestName,
+  testScore: initialTestScore,
+  assessmentScore,
 }: {
   applicationId: string;
   currentStage: string;
   rejectedFromStage?: string | null;
   rejectionReason?: string | null;
   withdrawnAt?: string | null;
+  testName?: string | null;
+  testScore?: string | null;
+  /** Graded aptitude percent — auto-fills Test score when present. */
+  assessmentScore?: number | null;
 }) {
   const router = useRouter();
   const [toStage, setToStage] = useState("");
   const [note, setNote] = useState("");
   const [reason, setReason] = useState("");
-  const [testName, setTestName] = useState("Skills assessment");
-  const [testScore, setTestScore] = useState("");
+  const [testName, setTestName] = useState(initialTestName?.trim() || "Skills assessment");
+  const [testScore, setTestScore] = useState(
+    initialTestScore?.trim() || (assessmentScore != null ? String(assessmentScore) : ""),
+  );
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -61,6 +70,18 @@ export function StageControl({
   const isTesting = currentStage === "testing";
   const isInterviewScreening = currentStage === "interview_screening";
   const isWithdrawn = Boolean(withdrawnAt);
+
+  useEffect(() => {
+    if (initialTestName?.trim()) setTestName(initialTestName.trim());
+  }, [initialTestName]);
+
+  useEffect(() => {
+    if (assessmentScore != null) {
+      setTestScore(String(assessmentScore));
+      return;
+    }
+    if (initialTestScore?.trim()) setTestScore(initialTestScore.trim());
+  }, [assessmentScore, initialTestScore]);
 
   if (isWithdrawn) {
     return (
@@ -154,9 +175,9 @@ export function StageControl({
         {isTesting ? (
           <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-3 space-y-3">
             <p className="text-sm text-ink">
-              When the candidate submits their assessment, record the score (optional) and mark it
-              submitted to move them to <span className="font-medium">Test Review / Grading</span>.
-              Leave the score blank if no test was taken — employers will see N/A.
+              When the candidate submits their assessment, mark it submitted to move them to{" "}
+              <span className="font-medium">Test Review / Grading</span>. The test score fills in
+              automatically after you grade free-response answers.
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
               <Field label="Test name">
@@ -166,11 +187,19 @@ export function StageControl({
                   placeholder="Skills assessment"
                 />
               </Field>
-              <Field label="Test score">
+              <Field
+                label="Test score"
+                hint={
+                  assessmentScore != null
+                    ? "Synced from the aptitude assessment grade."
+                    : "Appears here after free-response review is saved."
+                }
+              >
                 <Input
                   value={testScore}
                   onChange={(e) => setTestScore(e.target.value)}
-                  placeholder="e.g. 78 or Pass"
+                  placeholder="Fills in after grading"
+                  readOnly={assessmentScore != null}
                 />
               </Field>
             </div>
