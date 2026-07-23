@@ -532,6 +532,8 @@ export const DOCUMENT_TYPES = [
 ] as const;
 export type DocumentTypeKey = (typeof DOCUMENT_TYPES)[number]["key"];
 export const CANDIDATE_DOC_BUCKET = "candidate-documents";
+/** Derived watermarked previews (optional cache); originals stay in source buckets. */
+export const DOCUMENT_PREVIEWS_BUCKET = "document-previews";
 
 // ---------------------------------------------------------------------------
 // Language proficiency (Title Case — matches candidate_languages check constraint)
@@ -703,13 +705,6 @@ export const PLACEHOLDER_FEATURES: PlaceholderFeature[] = [
     description: "Confidential, restricted-access case intake and management.",
     status: "coming_soon",
     portals: ["hq"],
-  },
-  {
-    key: "watermarking",
-    title: "Automated document watermarking",
-    description: "Server-side watermarked, view-only CV previews for employers.",
-    status: "integration_pending",
-    portals: ["recruiter", "employer"],
   },
 ];
 

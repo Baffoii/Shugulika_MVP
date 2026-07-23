@@ -29,7 +29,7 @@ OPENAI_API_KEY=...                 # enables AI CV parse + screening; omit for f
 OPENAI_RESUME_MODEL=gpt-4.1-mini   # optional
 OPENAI_SCREENING_MODEL=gpt-4.1-mini # optional
 OPENAI_PREPAID_BALANCE_USD=10      # optional — HQ AI credits “remaining” estimate
-SUPABASE_SERVICE_ROLE_KEY=...      # only for npm run seed:users (never used by the Next.js app)
+SUPABASE_SERVICE_ROLE_KEY=...      # seed:users + server document preview/export (never browser)
 ```
 > Never put a Supabase service-role/secret key or OpenAI key in any `NEXT_PUBLIC_*` variable.
 
@@ -378,8 +378,12 @@ scheduler or manual staff action.
   navigation and honest placeholders rather than fake data.
 - Interview scheduling and offers are recorded against applications/submissions but don't yet have dedicated
   full-CRUD screens.
-- Watermarked CV previews: the interface and access model exist; documents open via short-lived signed URLs.
-  **Files are not falsely labelled as watermarked** — server-side watermarking is integration-pending.
+- Watermarked document previews (R-021): CVs, certificates, and employer assessment files open as
+  server-generated, per-viewer watermarked PDF previews (candidate / job / employer / viewer /
+  timestamp). Original Storage signed URLs are not minted for viewers. Every preview is audited;
+  original export is HQ Super Admin only and audited. Requires migration
+  `20260723114157_document_watermarked_previews.sql` and `SUPABASE_SERVICE_ROLE_KEY` for employer
+  access after Storage hardening.
 
 ## 9. Placeholders (clearly labelled, no fake results)
 AI interview question generation / analysis · hosted TestGorilla/Central Test (or successor) vendor
@@ -387,7 +391,7 @@ integration · **automated reject from AI alone** (blocked by design — low-con
 requires recruiter review) · AI candidate matching ·
 candidate intro videos · WhatsApp (applications/notifications/chat) · SMS OTP · live payments ·
 mobile money · recurring billing · accounting sync · social/external job publishing · advanced analytics ·
-whistleblowing case management · automated document watermarking. Each has a reserved nav location and a
+whistleblowing case management. Each has a reserved nav location and a
 "Coming soon / Integration pending / Not enabled" card with disabled actions where applicable.
 
 > **Assessment grading cost estimate**

@@ -419,40 +419,19 @@ export async function assignJobOrderRecruiterAction(
 export async function getEmployerAssessmentUrlAction(
   jobOrderId: string,
   fileId?: string,
-): Promise<JobOrderActionResult & { url?: string }> {
+): Promise<JobOrderActionResult & { url?: string; previewPath?: string }> {
   await requireSession();
-  const supabase = createClient();
-
-  if (fileId) {
-    const { data: file } = await supabase
-      .from("job_order_assessment_files")
-      .select("bucket_id,object_path,job_order_id")
-      .eq("id", fileId)
-      .eq("job_order_id", jobOrderId)
-      .maybeSingle();
-    if (!file) return { ok: false, error: "Assessment file not found." };
-    const { data: signed, error } = await supabase.storage
-      .from((file as { bucket_id: string }).bucket_id)
-      .createSignedUrl((file as { object_path: string }).object_path, 120);
-    if (error || !signed?.signedUrl) {
-      return { ok: false, error: error?.message ?? "Could not open the assessment file." };
-    }
-    return { ok: true, url: signed.signedUrl };
-  }
-
-  const { data } = await supabase
-    .from("job_orders")
-    .select("assessment_file_bucket,assessment_file_path")
-    .eq("id", jobOrderId)
-    .maybeSingle();
-  if (!data?.assessment_file_bucket || !data.assessment_file_path) {
-    return { ok: false, error: "No employer assessment file is attached to this job." };
-  }
-  const { data: signed, error } = await supabase.storage
-    .from(data.assessment_file_bucket)
-    .createSignedUrl(data.assessment_file_path, 120);
-  if (error || !signed?.signedUrl) {
-    return { ok: false, error: error?.message ?? "Could not open the assessment file." };
-  }
-  return { ok: true, url: signed.signedUrl };
+  // R-021: never mint raw Storage signed URLs for assessment files.
+  // Callers should open the watermarked preview API instead.
+  const id = fileId ?? jobOrderId;
+  const q = new URLSearchParams({
+    source: "assessment_file",
+    id,
+    jobOrderId,
+  });
+  return {
+    ok: true,
+    previewPath: `/api/documents/preview?${q.toString()}`,
+    message: "Use the watermarked preview — original signed URLs are disabled.",
+  };
 }

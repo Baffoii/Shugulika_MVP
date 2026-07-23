@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { assignAssessmentAction } from "@/app/recruiter/actions";
-import { getEmployerAssessmentUrlAction } from "@/app/job-order-actions";
 import {
   Alert,
   Badge,
@@ -15,6 +14,7 @@ import {
 } from "@/components/ui/primitives";
 import { ShugulikaAnswerKeyPanel } from "@/components/assessments/ShugulikaAnswerKeyPanel";
 import { AssessmentResponseReview } from "@/components/assessments/AssessmentResponseReview";
+import { DocumentPreviewButton } from "@/components/documents/DocumentPreviewButton";
 import type { AssessmentAssignmentRow } from "@/lib/database.types";
 import { formatDate, titleCase } from "@/lib/format";
 
@@ -60,18 +60,6 @@ export function AssessmentWorkflowPanel({
         if (result.warning) setWarning(result.warning);
         router.refresh();
       }
-    });
-  }
-
-  function openFile(fileId?: string) {
-    setError(null);
-    startTransition(async () => {
-      const result = await getEmployerAssessmentUrlAction(jobOrderId, fileId);
-      if (!result.ok || !result.url) {
-        setError(result.error ?? "Could not open assessment.");
-        return;
-      }
-      window.open(result.url, "_blank", "noopener,noreferrer");
     });
   }
 
@@ -128,42 +116,49 @@ export function AssessmentWorkflowPanel({
               <div className="flex flex-wrap gap-2">
                 {candidateFiles.length ? (
                   candidateFiles.map((file) => (
-                    <Button
+                    <DocumentPreviewButton
                       key={file.id}
+                      source="assessment_file"
+                      id={file.id}
+                      jobOrderId={jobOrderId}
+                      label={`Preview ${file.file_name}`}
                       variant="outline"
                       size="sm"
-                      disabled={pending}
-                      onClick={() => openFile(file.id)}
-                    >
-                      Open {file.file_name}
-                    </Button>
+                    />
                   ))
                 ) : (
-                  <Button
+                  <DocumentPreviewButton
+                    source="assessment_file"
+                    id={jobOrderId}
+                    jobOrderId={jobOrderId}
+                    label={
+                      employerFileName
+                        ? `Preview employer test — ${employerFileName}`
+                        : "Preview employer test"
+                    }
                     variant="outline"
                     size="sm"
-                    disabled={pending || !employerFileName}
-                    onClick={() => openFile()}
-                  >
-                    Open employer test{employerFileName ? ` — ${employerFileName}` : ""}
-                  </Button>
+                  />
                 )}
               </div>
+              <p className="text-xs text-ink-subtle">
+                Watermarked view-only preview · no download · every open is audited
+              </p>
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
                 Answer keys (staff only)
               </p>
               <div className="flex flex-wrap gap-2">
                 {answerKeyFiles.length ? (
                   answerKeyFiles.map((file) => (
-                    <Button
+                    <DocumentPreviewButton
                       key={file.id}
+                      source="assessment_file"
+                      id={file.id}
+                      jobOrderId={jobOrderId}
+                      label={`Preview key — ${file.file_name}`}
                       variant="secondary"
                       size="sm"
-                      disabled={pending}
-                      onClick={() => openFile(file.id)}
-                    >
-                      Open key — {file.file_name}
-                    </Button>
+                    />
                   ))
                 ) : (
                   <p className="text-xs text-ink-subtle">No separate answer-key files attached.</p>

@@ -95,11 +95,7 @@ export default async function SubmissionDetailPage({
                       <FileText className="h-4 w-4 text-ink-subtle" aria-hidden />
                       {cv.title ?? cv.object_path.split("/").pop()}
                     </span>
-                    <ViewCvButton
-                      bucketId={cv.bucket_id}
-                      objectPath={cv.object_path}
-                      label="Open CV"
-                    />
+                    <ViewCvButton documentId={cv.id} submissionId={sub.id} label="Preview CV" />
                   </div>
                 ) : (
                   <p className="mt-0.5 text-ink-muted">No resume attached to this submission.</p>
@@ -112,8 +108,9 @@ export default async function SubmissionDetailPage({
                 </div>
               ) : null}
               <Alert tone="info">
-                Contact details and internal recruiter notes stay inside Shugulika. Withdrawal of
-                the application removes this pack from your view.
+                Contact details and internal recruiter notes stay inside Shugulika. The CV opens as
+                a watermarked, view-only preview — originals cannot be downloaded. Withdrawal of the
+                application removes this pack from your view.
               </Alert>
             </CardBody>
           </Card>

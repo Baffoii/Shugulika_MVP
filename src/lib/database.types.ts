@@ -648,6 +648,22 @@ export type AuditLogRow = {
   metadata: Json;
   created_at: string;
 };
+export type DocumentAccessEventRow = {
+  id: number;
+  actor_id: string | null;
+  source_kind: "candidate_document" | "assessment_file";
+  source_id: string;
+  access_scope: "preview" | "export";
+  bucket_id: string;
+  object_path: string;
+  job_order_id: string | null;
+  application_id: string | null;
+  submission_id: string | null;
+  org_context_id: string | null;
+  watermark_text: string | null;
+  metadata: Json;
+  created_at: string;
+};
 export type IntegrationConnectionRow = {
   id: string;
   key: string;
@@ -945,6 +961,7 @@ export type Database = {
       notifications: Tbl<NotificationRow>;
       activity_events: Tbl<ActivityEventRow>;
       audit_logs: Tbl<AuditLogRow>;
+      document_access_events: Tbl<DocumentAccessEventRow>;
       integration_connections: Tbl<IntegrationConnectionRow>;
       feature_flags: Tbl<FeatureFlagRow>;
       interview_templates: Tbl<InterviewTemplateRow>;
