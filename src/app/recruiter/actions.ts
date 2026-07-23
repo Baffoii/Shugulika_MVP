@@ -133,9 +133,33 @@ async function moveApplicationToStage(
     { stage: app.current_stage },
     { stage: toStage },
   );
+
+  // Entering Testing delivers the aptitude assignment so candidates can open it
+  // under Assessments. Recruiters can still use "Send assessment" as a recovery
+  // path if delivery failed earlier.
+  let assessmentWarning: string | undefined;
+  if (toStage === "testing") {
+    const assigned = await assignAssessmentForApplication({ ...app, current_stage: "testing" });
+    if (!assigned.ok) {
+      assessmentWarning = assigned.error ?? "Could not deliver the aptitude assessment.";
+    } else if (
+      assigned.warning &&
+      !assigned.warning.startsWith("This assessment has already been assigned")
+    ) {
+      assessmentWarning = assigned.warning;
+    }
+  }
+
   const notify = await notifyCandidateStatus(app, toStage);
   revalidateApplicationPaths(app.id);
-  return notify.ok ? { ok: true } : { ok: true, warning: notify.error };
+  revalidatePath("/candidate/assessments");
+  if (!notify.ok) {
+    return {
+      ok: true,
+      warning: [assessmentWarning, notify.error].filter(Boolean).join(" "),
+    };
+  }
+  return assessmentWarning ? { ok: true, warning: assessmentWarning } : { ok: true };
 }
 
 /** Advance/reject an application:
@@ -194,11 +218,8 @@ export async function markTestingSubmittedAction(formData: FormData): Promise<Ac
   );
 }
 
-/** Send the job's configured assessment requirement to a candidate in Testing. */
-export async function assignAssessmentAction(formData: FormData): Promise<ActionResult> {
-  const applicationId = String(formData.get("application_id") ?? "");
-  const app = await loadApplication(applicationId);
-  if (!app) return { ok: false, error: "Application not found or not authorized." };
+/** Create the aptitude assignment for an application already in Testing. */
+async function assignAssessmentForApplication(app: ApplicationRow): Promise<ActionResult> {
   if (app.current_stage !== "testing") {
     return { ok: false, error: "Move the candidate to Testing before assigning an assessment." };
   }
@@ -240,7 +261,7 @@ export async function assignAssessmentAction(formData: FormData): Promise<Action
   const { error: notifyError } = await supabase.rpc("notify_candidate_of_assessment_assignment", {
     p_assignment_id: assignmentId,
     p_title: "Aptitude assessment assigned",
-    p_body: `Complete the ${job.assessment_seniority} assessment for ${job.title} within 7 days.`,
+    p_body: `Complete the ${job.assessment_seniority} assessment for ${job.title} within 7 days. Open Assessments to start.`,
   });
   await writeAudit("assessment.assigned", app.id, app.owning_org_id, null, {
     assessment_assignment_id: assignmentId,
@@ -259,6 +280,14 @@ export async function assignAssessmentAction(formData: FormData): Promise<Action
     };
   }
   return { ok: true };
+}
+
+/** Send (or re-deliver) the job's assessment to a candidate already in Testing. */
+export async function assignAssessmentAction(formData: FormData): Promise<ActionResult> {
+  const applicationId = String(formData.get("application_id") ?? "");
+  const app = await loadApplication(applicationId);
+  if (!app) return { ok: false, error: "Application not found or not authorized." };
+  return assignAssessmentForApplication(app);
 }
 
 /** Interview Screening completed → automatically enter Interview Review. */
@@ -357,7 +386,9 @@ async function notifyCandidateStatus(app: ApplicationRow, toStage: string): Prom
       ? `Your application for ${roleLabel} was not selected.`
       : toStage === "hired"
         ? `Congratulations — your application for ${roleLabel} moved to Hired.`
-        : `Your application for ${roleLabel} moved to: ${statusLabel}.`;
+        : toStage === "testing"
+          ? `Your application for ${roleLabel} moved to: ${statusLabel}. Open Assessments to take your test.`
+          : `Your application for ${roleLabel} moved to: ${statusLabel}.`;
 
   // Security-definer RPC — does not depend on notif_staff_insert RLS.
   const { error } = await supabase.rpc("notify_candidate_of_application_status", {

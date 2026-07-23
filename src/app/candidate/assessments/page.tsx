@@ -55,7 +55,7 @@ export default async function CandidateAssessmentsPage() {
     <div>
       <PageHeader
         title="Assessments"
-        description="Aptitude assessments assigned by your Shugulika recruiter."
+        description="Aptitude assessments for applications in Skills assessment."
       />
       <AssessmentSection
         title="Assigned & in progress"
@@ -96,7 +96,7 @@ function AssessmentSection({
         <EmptyState
           icon={<ClipboardList className="h-7 w-7" aria-hidden />}
           title="No assessments"
-          description="Assigned assessments will appear here when your recruiter sends one during Testing."
+          description="When your application moves to Skills assessment, your test appears here so you can start it."
         />
       ) : (
         <div className="space-y-3">

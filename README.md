@@ -353,8 +353,8 @@ scheduler or manual staff action.
   employer-provided, or both; junior/senior; default 65% pass threshold). Employer mode requires
   **one or more candidate-facing test files and one or more answer-key files** (private Storage;
   candidates never see answer keys). HQ/franchise can **deny** a submitted job order only with a
-  mandatory written reason. Recruiters send assessments at Testing; candidates take the in-app
-  Shugulika bank at `/candidate/assessments/[id]` (absolute MCQ keys + free-response rubrics for
+  mandatory written reason. Moving a candidate to Testing delivers the assessment; candidates take
+  the in-app Shugulika bank at `/candidate/assessments/[id]` (absolute MCQ keys + free-response rubrics for
   OpenAI grading). Staff can view Shugulika answer keys/rubrics and employer answer-key files.
   Low-confidence free-response scores require human review before reject.
 - **Employer portal**: dashboard; employer job-order submission with scoped HQ/franchise/recruiter
@@ -410,7 +410,7 @@ whistleblowing case management · automated document watermarking. Each has a re
 > **Not placeholders:** CV autofill (AI or rule-based stub), candidate suggestion review, professional
 > summary/headline drafting when a CV has no summary, recruiter AI CV screening, HQ AI usage reporting,
 > and **assessment configuration + assignment delivery + Shugulika junior/senior banks with MCQ keys,
-> free-response rubrics, and OpenAI free-response grading** (employer upload, recruiter send-at-Testing,
+> free-response rubrics, and OpenAI free-response grading** (employer upload, auto-deliver on move to Testing,
 > candidate take/submit, staff answer-key view, job denial with reason) are implemented. OpenAI features need
 > `OPENAI_API_KEY`; without it, CV parse falls back to the free stub, screening is unavailable, and
 > free-response aptitude answers are flagged for recruiter review.

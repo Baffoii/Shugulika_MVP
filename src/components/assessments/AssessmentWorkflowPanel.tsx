@@ -172,18 +172,24 @@ export function AssessmentWorkflowPanel({
           ) : null}
           {!assignment ? (
             currentStage === "testing" ? (
-              <Button size="sm" disabled={pending} onClick={assign}>
-                {pending ? "Sending…" : "Send assessment to candidate"}
-              </Button>
+              <>
+                <Alert tone="warn">
+                  This candidate is in Testing but has no assignment yet. Send it so they can open
+                  Assessments.
+                </Alert>
+                <Button size="sm" disabled={pending} onClick={assign}>
+                  {pending ? "Sending…" : "Send assessment to candidate"}
+                </Button>
+              </>
             ) : (
               <Alert tone="info">
-                Move the candidate to Testing to enable assessment delivery.
+                Moving the candidate to Testing delivers the assessment automatically.
               </Alert>
             )
           ) : (
             <Alert tone="success">
-              The candidate can take this assessment under My Assessments. Delivery is manual —
-              entering Testing does not auto-send.
+              The candidate can take this assessment under Assessments. Moving into Testing
+              delivers it automatically; use Send only if delivery failed.
             </Alert>
           )}
         </CardBody>
