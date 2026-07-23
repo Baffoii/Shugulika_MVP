@@ -20,8 +20,10 @@ import { formatDate, formatDateTime, titleCase, initials } from "@/lib/format";
 import { FileText, MapPin } from "lucide-react";
 import { AssessmentWorkflowPanel } from "@/components/assessments/AssessmentWorkflowPanel";
 import { DocumentExportButton } from "@/components/documents/DocumentExportButton";
+import { SourcedContactControl } from "@/components/candidates/SourcedContactControl";
 import { requireSession } from "@/lib/auth";
 import { isHqAdmin } from "@/lib/rbac";
+import type { SourcedContactStatus } from "@/lib/database.types";
 
 export const metadata: Metadata = { title: "Application" };
 
@@ -230,6 +232,15 @@ export default async function ApplicationWorkspace({
                 : null
             }
           />
+
+          {!application.is_direct_application ||
+          application.entry_source === "recruiter_sourced" ? (
+            <SourcedContactControl
+              applicationId={application.id}
+              status={(application.sourced_contact_status as SourcedContactStatus | null) ?? null}
+              contactedAt={application.sourced_contacted_at}
+            />
+          ) : null}
 
           <Card>
             <CardHeader>
