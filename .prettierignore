@@ -11,3 +11,5 @@ supabase/migrations
 supabase/migrations_draft
 docs
 *.md
+**/* 2.*
+* 2.*

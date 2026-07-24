@@ -1181,6 +1181,35 @@ export type Database = {
         };
         Returns: string;
       };
+      advance_application: {
+        Args: {
+          p_application: string;
+          p_to_stage: string;
+          p_note?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: Json;
+      };
+      reject_application: {
+        Args: {
+          p_application: string;
+          p_reason: string;
+          p_note?: string | null;
+        };
+        Returns: Json;
+      };
+      reopen_application: {
+        Args: {
+          p_application: string;
+          p_note?: string | null;
+          p_source?: string | null;
+        };
+        Returns: Json;
+      };
+      create_placement_from_offer: {
+        Args: { p_offer: string };
+        Returns: string;
+      };
       notify_candidate_of_assessment_assignment: {
         Args: {
           p_assignment_id: string;

@@ -19,6 +19,7 @@ Complete Supabase/PostgreSQL database architecture for the Shugulika Africa pan-
 | [12-open-decisions-and-risks.md](12-open-decisions-and-risks.md) | Product/legal/technical decisions with recommended defaults |
 | [13-migration-plan.md](13-migration-plan.md) | Ordered migration sequence + dependencies + rollback |
 | [14-schema-review-checklist.md](14-schema-review-checklist.md) | Pre-implementation verification checklist |
+| [15-mvp-pipeline-deviation.md](15-mvp-pipeline-deviation.md) | Approved MVP stage collapses + DB-enforced gate mapping |
 
 Draft SQL: [`../../supabase/migrations_draft/`](../../supabase/migrations_draft/).
 

@@ -499,13 +499,16 @@ export async function applyToJobAction(
   } | null;
   const isResubmit = Boolean(existing);
   const isReapplyAfterWithdraw = Boolean(existing?.withdrawn_at);
+  const isReapplyAfterReject = existing?.current_stage === "rejected";
   const confirmedResubmit = formData.get("reapply") === "1";
   if (isResubmit && !confirmedResubmit) {
     return {
       ok: false,
       error: isReapplyAfterWithdraw
         ? "You previously withdrew from this role. Use Apply again to submit a new application."
-        : "You've already applied to this role. Use Apply again if you want to resubmit.",
+        : isReapplyAfterReject
+          ? "A previous application for this role was closed. Use Apply again to submit a new application."
+          : "You've already applied to this role. Use Apply again if you want to resubmit.",
     };
   }
 
@@ -570,12 +573,21 @@ export async function applyToJobAction(
   let applicationId: string;
   if (isResubmit && existing) {
     applicationId = existing.id;
+    if (isReapplyAfterWithdraw || isReapplyAfterReject) {
+      const { error: reopenErr } = await supabase.rpc("reopen_application", {
+        p_application: applicationId,
+        p_note: isReapplyAfterWithdraw
+          ? "Candidate reapplied after withdraw"
+          : "Candidate reapplied after rejection",
+        p_source: isReapplyAfterWithdraw ? "candidate_reapply" : "candidate_reapply_rejected",
+      });
+      if (reopenErr) return { ok: false, error: reopenErr.message };
+    }
+
     const { error: updErr } = await supabase
       .from("applications")
       .update({
         cv_document_id: cvDocumentId,
-        withdrawn_at: null,
-        current_stage: "cv_review",
         consent_status: "granted",
       })
       .eq("id", applicationId);
@@ -648,17 +660,17 @@ export async function applyToJobAction(
     },
   ]);
 
-  await supabase.from("application_stage_history").insert({
-    application_id: applicationId,
-    from_stage: isReapplyAfterWithdraw ? "withdrawn" : isResubmit ? existing!.current_stage : null,
-    to_stage: "cv_review",
-    actor_role: "candidate",
-    source: isReapplyAfterWithdraw
-      ? "candidate_reapply"
-      : isResubmit
-        ? "candidate_update"
-        : "candidate_apply",
-  });
+  // reopen_application already writes history for withdraw/reject reopen paths.
+  // CV/answers-only resubmits do not change stage — skip a misleading history row.
+  if (!isResubmit) {
+    await supabase.from("application_stage_history").insert({
+      application_id: applicationId,
+      from_stage: null,
+      to_stage: "cv_review",
+      actor_role: "candidate",
+      source: "candidate_apply",
+    });
+  }
 
   const { data: user } = await supabase.auth.getUser();
   if (user.user) {
@@ -762,5 +774,64 @@ export async function withdrawApplicationAction(applicationId: string): Promise<
   revalidatePath("/recruiter/notifications");
   revalidatePath("/recruiter/pipeline");
   revalidatePath(`/recruiter/applications/${applicationId}`);
+  return { ok: true };
+}
+
+/** Candidate grants employer-specific consent for Client Submission. */
+export async function grantEmployerSubmissionConsentAction(
+  applicationId: string,
+): Promise<ActionResult> {
+  const supabase = createClient();
+  const cid = await myCandidateId();
+  if (!cid) return { ok: false, error: "No candidate profile" };
+
+  const { data: appRow } = await supabase
+    .from("applications")
+    .select("id, candidate_id, job_order_id, withdrawn_at")
+    .eq("id", applicationId)
+    .eq("candidate_id", cid)
+    .maybeSingle();
+  const app = appRow as {
+    id: string;
+    candidate_id: string;
+    job_order_id: string;
+    withdrawn_at: string | null;
+  } | null;
+  if (!app) return { ok: false, error: "Application not found." };
+  if (app.withdrawn_at) return { ok: false, error: "Application is withdrawn." };
+
+  const { data: jo } = await supabase
+    .from("job_orders")
+    .select("employer_org_id, title")
+    .eq("id", app.job_order_id)
+    .maybeSingle();
+  const job = jo as { employer_org_id: string; title: string } | null;
+  if (!job?.employer_org_id) return { ok: false, error: "Job order not found." };
+
+  const { data: existing } = await supabase
+    .from("candidate_consents")
+    .select("id")
+    .eq("candidate_id", cid)
+    .eq("purpose", "employer_submission")
+    .eq("covered_org_id", job.employer_org_id)
+    .is("withdrawn_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (!existing) {
+    const { error } = await supabase.from("candidate_consents").insert({
+      candidate_id: cid,
+      purpose: "employer_submission",
+      covered_org_id: job.employer_org_id,
+      method: "web_form",
+      scope: { application_id: app.id },
+    });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  await supabase.from("applications").update({ consent_status: "granted" }).eq("id", app.id);
+
+  revalidatePath("/candidate/applications");
+  revalidatePath(`/recruiter/applications/${applicationId}`);
+  revalidatePath("/recruiter/pipeline");
   return { ok: true };
 }

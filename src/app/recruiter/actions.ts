@@ -72,7 +72,7 @@ function revalidateApplicationPaths(applicationId: string) {
   revalidatePath("/employer/submissions");
 }
 
-/** Shared stage transition with forward-only + rejection permanence rules. */
+/** Shared stage transition — gates + history enforced by advance_application RPC. */
 async function moveApplicationToStage(
   app: ApplicationRow,
   toStage: string,
@@ -80,6 +80,7 @@ async function moveApplicationToStage(
     note?: string;
     source?: string;
     allowAuto?: boolean;
+    waiveReason?: string;
   } = {},
 ): Promise<ActionResult> {
   const supabase = createClient();
@@ -122,26 +123,35 @@ async function moveApplicationToStage(
     }
   }
 
+  const metadata: Record<string, unknown> = { source };
+  if (opts.allowAuto) metadata.allow_auto = true;
+  let waiveReason = opts.waiveReason?.trim();
+  // Manual test scores recorded on the application satisfy the Test Review gate
+  // when no graded platform assignment exists yet.
+  if (
+    !waiveReason &&
+    app.current_stage === "test_review" &&
+    (app.test_score?.trim() || app.test_name?.trim())
+  ) {
+    waiveReason = "Test result recorded on application";
+  }
+  if (waiveReason) metadata.waive_reason = waiveReason;
+
+  // Create the employer pack before the stage flip so a pack failure does not
+  // leave the application stuck in client_submission with no pack (forward-only).
   if (toStage === "client_submission") {
     const submission = await ensureEmployerSubmission(app, note);
     if (!submission.ok) return submission;
   }
 
-  const { error } = await supabase
-    .from("applications")
-    .update({ current_stage: toStage })
-    .eq("id", app.id);
-  if (error) return { ok: false, error: error.message };
-
-  await supabase.from("application_stage_history").insert({
-    application_id: app.id,
-    from_stage: app.current_stage,
-    to_stage: toStage,
-    actor_id: await actor(),
-    actor_role: "recruiter",
-    note: note || null,
-    source,
+  const { error: rpcError } = await supabase.rpc("advance_application", {
+    p_application: app.id,
+    p_to_stage: toStage,
+    p_note: note || null,
+    p_metadata: metadata as never,
   });
+  if (rpcError) return { ok: false, error: rpcError.message };
+
   await writeAudit(
     "application.stage_changed",
     app.id,
@@ -150,19 +160,41 @@ async function moveApplicationToStage(
     { stage: toStage },
   );
 
+  let sideEffectWarning: string | undefined;
+
   // Entering Testing delivers the aptitude assignment so candidates can open it
   // under Assessments. Recruiters can still use "Send assessment" as a recovery
   // path if delivery failed earlier.
-  let assessmentWarning: string | undefined;
   if (toStage === "testing") {
     const assigned = await assignAssessmentForApplication({ ...app, current_stage: "testing" });
     if (!assigned.ok) {
-      assessmentWarning = assigned.error ?? "Could not deliver the aptitude assessment.";
+      sideEffectWarning = assigned.error ?? "Could not deliver the aptitude assessment.";
     } else if (
       assigned.warning &&
       !assigned.warning.startsWith("This assessment has already been assigned")
     ) {
-      assessmentWarning = assigned.warning;
+      sideEffectWarning = assigned.warning;
+    }
+  }
+
+  // Hired requires an accepted offer (RPC gate); create the placement for invoicing.
+  if (toStage === "hired") {
+    const { data: offerData } = await supabase
+      .from("offers")
+      .select("id")
+      .eq("application_id", app.id)
+      .eq("status", "accepted")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const offerId = (offerData as { id: string } | null)?.id;
+    if (offerId) {
+      const { error: placementError } = await supabase.rpc("create_placement_from_offer", {
+        p_offer: offerId,
+      });
+      if (placementError) {
+        sideEffectWarning = `Hired, but placement was not created: ${placementError.message}`;
+      }
     }
   }
 
@@ -172,21 +204,22 @@ async function moveApplicationToStage(
   if (!notify.ok) {
     return {
       ok: true,
-      warning: [assessmentWarning, notify.error].filter(Boolean).join(" "),
+      warning: [sideEffectWarning, notify.error].filter(Boolean).join(" "),
     };
   }
-  return assessmentWarning ? { ok: true, warning: assessmentWarning } : { ok: true };
+  return sideEffectWarning ? { ok: true, warning: sideEffectWarning } : { ok: true };
 }
 
 /** Advance/reject an application:
- *  - forward-only stage moves;
+ *  - forward-only stage moves via advance_application / reject_application RPCs;
  *  - rejection is permanent and records the stage where it happened;
- *  - Client Submission auto-creates the employer-visible CV pack. */
+ *  - Client Submission creates the employer CV pack after employer-specific consent. */
 export async function advanceStageAction(formData: FormData): Promise<ActionResult> {
   const applicationId = String(formData.get("application_id") ?? "");
   const toStage = String(formData.get("to_stage") ?? "");
   const note = String(formData.get("note") ?? "").trim();
   const rejectionReason = String(formData.get("rejection_reason") ?? "");
+  const waiveReason = String(formData.get("waive_reason") ?? "").trim();
 
   const app = await loadApplication(applicationId);
   if (!app) return { ok: false, error: "Application not found or not authorized." };
@@ -195,7 +228,11 @@ export async function advanceStageAction(formData: FormData): Promise<ActionResu
     return rejectApplication(app, rejectionReason, note);
   }
 
-  return moveApplicationToStage(app, toStage, { note, source: "recruiter" });
+  return moveApplicationToStage(app, toStage, {
+    note,
+    source: "recruiter",
+    waiveReason: waiveReason || undefined,
+  });
 }
 
 /** Testing submitted → automatically enter Test Review / Grading. */
@@ -226,6 +263,25 @@ export async function markTestingSubmittedAction(formData: FormData): Promise<Ac
     }
   }
 
+  const { data: assignmentData } = await supabase
+    .from("assessment_assignments")
+    .select("status")
+    .eq("application_id", app.id)
+    .maybeSingle();
+  const assignmentStatus = (assignmentData as { status: string } | null)?.status;
+  const assessmentReady = assignmentStatus === "submitted" || assignmentStatus === "graded";
+  // Manual score entry without a platform assessment = explicit waive for the gate.
+  const waiveReason =
+    !assessmentReady && (testScore || testName)
+      ? "Manual test result recorded by recruiter"
+      : undefined;
+  if (!assessmentReady && !waiveReason) {
+    return {
+      ok: false,
+      error: "Assessment must be submitted, or record a manual test name/score to waive.",
+    };
+  }
+
   const { error: scoreError } = await supabase
     .from("applications")
     .update({
@@ -242,6 +298,7 @@ export async function markTestingSubmittedAction(formData: FormData): Promise<Ac
       note,
       source: "testing_submitted",
       allowAuto: true,
+      waiveReason,
     },
   );
 }
@@ -824,6 +881,37 @@ export async function markInterviewCompleteAction(formData: FormData): Promise<A
       error: "Interview can only be marked complete while the candidate is in Interview Screening.",
     };
   }
+
+  const supabase = createClient();
+  const outcome = note || "Marked complete by recruiter";
+
+  // Satisfy interview completion + review gates with a structured interview row
+  // (video assignments in submitted/reviewed also count at the DB layer).
+  const { data: existingInterview } = await supabase
+    .from("interviews")
+    .select("id")
+    .eq("application_id", app.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const interviewId = (existingInterview as { id: string } | null)?.id;
+  if (interviewId) {
+    const { error } = await supabase
+      .from("interviews")
+      .update({ status: "completed", outcome })
+      .eq("id", interviewId);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase.from("interviews").insert({
+      application_id: app.id,
+      owning_org_id: app.owning_org_id,
+      interview_type: "recruiter",
+      status: "completed",
+      outcome,
+    });
+    if (error) return { ok: false, error: error.message };
+  }
+
   return moveApplicationToStage(app, "interview_review", {
     note,
     source: "interview_completed",
@@ -847,31 +935,15 @@ async function rejectApplication(
 
   const reasonLabel =
     REJECTION_REASONS.find((r) => r.key === rejectionReason)?.label ?? rejectionReason;
-  const rejectedAt = new Date().toISOString();
   const rejectedFrom = app.current_stage;
 
-  const { error } = await supabase
-    .from("applications")
-    .update({
-      current_stage: "rejected",
-      is_on_hold: false,
-      rejected_from_stage: rejectedFrom,
-      rejected_at: rejectedAt,
-      rejection_reason: reasonLabel,
-    })
-    .eq("id", app.id);
+  const { error } = await supabase.rpc("reject_application", {
+    p_application: app.id,
+    p_reason: reasonLabel,
+    p_note: note || null,
+  });
   if (error) return { ok: false, error: error.message };
 
-  await supabase.from("application_stage_history").insert({
-    application_id: app.id,
-    from_stage: rejectedFrom,
-    to_stage: "rejected",
-    actor_id: await actor(),
-    actor_role: "recruiter",
-    reason: reasonLabel,
-    note: note || `Rejected during ${stageByKey(rejectedFrom)?.label ?? rejectedFrom}`,
-    source: "recruiter",
-  });
   await writeAudit(
     "application.rejected",
     app.id,
@@ -953,7 +1025,7 @@ export async function addNoteAction(formData: FormData): Promise<ActionResult> {
 }
 
 /** Ensure the employer has one active candidate pack for this application.
- * Called automatically when the recruiter advances to Client Submission. */
+ * Called after Client Submission advance (consent already gated in the RPC). */
 async function ensureEmployerSubmission(
   app: ApplicationRow,
   summary: string,
@@ -979,6 +1051,24 @@ async function ensureEmployerSubmission(
     .maybeSingle();
   const employerOrgId = (jo as { employer_org_id: string } | null)?.employer_org_id;
   if (!employerOrgId) return { ok: false, error: "Job order not found." };
+
+  const { data: consentData } = await supabase
+    .from("candidate_consents")
+    .select("id")
+    .eq("candidate_id", app.candidate_id)
+    .eq("purpose", "employer_submission")
+    .eq("covered_org_id", employerOrgId)
+    .is("withdrawn_at", null)
+    .order("granted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const consentId = (consentData as { id: string } | null)?.id;
+  if (!consentId) {
+    return {
+      ok: false,
+      error: "Employer-specific consent is required before creating the employer CV pack.",
+    };
+  }
 
   const { data: cand } = await supabase
     .from("candidate_profiles")
@@ -1011,7 +1101,7 @@ async function ensureEmployerSubmission(
       employer_org_id: employerOrgId,
       submitting_org_id: app.owning_org_id,
       submitting_recruiter_id: await actor(),
-      consent_id: null,
+      consent_id: consentId,
       status: "submitted",
       is_masked: false,
       summary: summary.trim() || null,
@@ -1037,10 +1127,166 @@ async function ensureEmployerSubmission(
   await supabase.from("applications").update({ consent_status: "granted" }).eq("id", app.id);
   await writeAudit("submission.created", (sub as { id: string }).id, app.owning_org_id, null, {
     employer: employerOrgId,
-    consent_basis: "active_application",
+    consent_id: consentId,
   });
 
   revalidatePath("/recruiter/clients");
   revalidatePath("/employer/submissions");
+  return { ok: true };
+}
+
+/** Request employer-specific submission consent from the candidate (or record verbal). */
+export async function requestEmployerSubmissionConsentAction(
+  formData: FormData,
+): Promise<ActionResult> {
+  const applicationId = String(formData.get("application_id") ?? "");
+  const method = String(formData.get("method") ?? "web_form").trim();
+  const note = String(formData.get("note") ?? "").trim();
+  const recordNow = String(formData.get("record_now") ?? "") === "1";
+
+  const app = await loadApplication(applicationId);
+  if (!app) return { ok: false, error: "Application not found or not authorized." };
+
+  const supabase = createClient();
+  const { data: jo } = await supabase
+    .from("job_orders")
+    .select("employer_org_id, title")
+    .eq("id", app.job_order_id)
+    .maybeSingle();
+  const job = jo as { employer_org_id: string; title: string } | null;
+  if (!job?.employer_org_id) return { ok: false, error: "Job order not found." };
+
+  if (recordNow) {
+    if (method !== "verbal_recorded") {
+      return { ok: false, error: "Only verbal_recorded consent can be captured by a recruiter." };
+    }
+    const { error } = await supabase.from("candidate_consents").insert({
+      candidate_id: app.candidate_id,
+      purpose: "employer_submission",
+      covered_org_id: job.employer_org_id,
+      method: "verbal_recorded",
+      scope: { application_id: app.id },
+      note: note || null,
+    });
+    if (error) return { ok: false, error: error.message };
+    await supabase.from("applications").update({ consent_status: "granted" }).eq("id", app.id);
+    await writeAudit("consent.employer_submission_recorded", app.id, app.owning_org_id, null, {
+      employer: job.employer_org_id,
+      method,
+    });
+    revalidateApplicationPaths(app.id);
+    return { ok: true };
+  }
+
+  await supabase.from("applications").update({ consent_status: "pending" }).eq("id", app.id);
+
+  const { data: cand } = await supabase
+    .from("candidate_profiles")
+    .select("user_id")
+    .eq("id", app.candidate_id)
+    .maybeSingle();
+  const userId = (cand as { user_id: string } | null)?.user_id;
+  if (userId) {
+    await supabase.from("notifications").insert({
+      user_id: userId,
+      category: "consent",
+      title: "Employer submission consent needed",
+      body: `Please consent to share your profile with the employer for ${job.title} before Client Submission.`,
+      subject_type: "application",
+      subject_id: app.id,
+    });
+  }
+
+  await writeAudit("consent.employer_submission_requested", app.id, app.owning_org_id, null, {
+    employer: job.employer_org_id,
+  });
+  revalidateApplicationPaths(app.id);
+  revalidatePath("/candidate/notifications");
+  return { ok: true };
+}
+
+/** Record an accepted offer so Hired / placement gates can proceed. */
+export async function recordAcceptedOfferAction(formData: FormData): Promise<ActionResult> {
+  const applicationId = String(formData.get("application_id") ?? "");
+  const positionTitle = String(formData.get("position_title") ?? "").trim();
+  const compensationRaw = String(formData.get("compensation") ?? "").trim();
+  const currency = String(formData.get("currency") ?? "TZS").trim() || "TZS";
+  const startDate = String(formData.get("start_date") ?? "").trim() || null;
+
+  const app = await loadApplication(applicationId);
+  if (!app) return { ok: false, error: "Application not found or not authorized." };
+  if (app.current_stage !== "offer") {
+    return {
+      ok: false,
+      error: "Accepted offers can only be recorded while the candidate is in Offer.",
+    };
+  }
+  if (app.withdrawn_at) {
+    return { ok: false, error: "This application was withdrawn." };
+  }
+
+  const supabase = createClient();
+  const { data: jo } = await supabase
+    .from("job_orders")
+    .select("employer_org_id, title")
+    .eq("id", app.job_order_id)
+    .maybeSingle();
+  const job = jo as { employer_org_id: string; title: string } | null;
+  if (!job?.employer_org_id) return { ok: false, error: "Job order not found." };
+
+  const compensation = compensationRaw ? Number(compensationRaw) : null;
+  if (compensationRaw && (compensation == null || Number.isNaN(compensation))) {
+    return { ok: false, error: "Compensation must be a number." };
+  }
+
+  const { data: existing } = await supabase
+    .from("offers")
+    .select("id,status")
+    .eq("application_id", app.id)
+    .eq("status", "accepted")
+    .limit(1)
+    .maybeSingle();
+  if (existing) {
+    return { ok: true, warning: "An accepted offer already exists for this application." };
+  }
+
+  const { data: offer, error } = await supabase
+    .from("offers")
+    .insert({
+      application_id: app.id,
+      owning_org_id: app.owning_org_id,
+      employer_org_id: job.employer_org_id,
+      status: "accepted",
+      position_title: positionTitle || job.title,
+      compensation,
+      currency,
+      start_date: startDate,
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  const offerId = (offer as { id: string }).id;
+  const { error: placementError } = await supabase.rpc("create_placement_from_offer", {
+    p_offer: offerId,
+  });
+  if (placementError) {
+    await writeAudit("offer.accepted", offerId, app.owning_org_id, null, {
+      application_id: app.id,
+      placement_error: placementError.message,
+    });
+    revalidateApplicationPaths(app.id);
+    return {
+      ok: true,
+      warning: `Offer recorded, but placement was not created: ${placementError.message}`,
+    };
+  }
+
+  await writeAudit("offer.accepted", offerId, app.owning_org_id, null, {
+    application_id: app.id,
+    status: "accepted",
+  });
+  revalidateApplicationPaths(app.id);
+  revalidatePath("/recruiter/pipeline");
   return { ok: true };
 }

@@ -220,22 +220,23 @@ immediately, and (assigned via `job_assignments`) in each recruiter's **Jobs & o
 
 ---
 
-## 6d. Simplified recruitment pipeline
+## 6d. Simplified recruitment pipeline (approved MVP deviation)
 
-Candidates move **forward only** through a shorter screening flow:
+Candidates move **forward only** through a shorter screening flow. Full stage collapses and
+gate mapping are documented in [`docs/database/15-mvp-pipeline-deviation.md`](docs/database/15-mvp-pipeline-deviation.md).
 
-**Apply → CV Review → Testing → Test Review / Grading → Interview Screening → Interview Review →
+**Apply/Source → CV Review → Testing → Test Review / Grading → Interview Screening → Interview Review →
 (optional) Reference Checks → Client Submission → Offer → Hired**
 
-- New applications start in **CV Review** (not a separate “Applied” stage).
+- New applications start in **CV Review** (Applied/Sourced + CV Screening + Longlisted/Shortlisted are collapsed; `entry_source` distinguishes applied vs sourced).
+- Screening notes are required before leaving **CV Review**.
 - After Testing or Interview Screening, recruiters mark the step complete and the candidate
-  auto-advances to the matching review stage.
-- From Testing onward, recruiters can skip ahead to **Client Submission** when ready.
-- **Reject** is permanent; the stage they were rejected from is stored for reporting.
-- **Client Submission** automatically creates a masked employer CV pack (no separate consent step —
-  applying / staying active is enough). Withdrawal removes employer visibility.
-- Each stage move writes history + audit and notifies the candidate (via a secure RPC so the
-  notification cannot silently fail under RLS).
+  auto-advances to the matching review stage (completion/review rules enforced in DB).
+- Mid-pipeline skips to **Client Submission** are not allowed. Reference Checks remain optional after Interview Review.
+- **Client Submission** requires **employer-specific consent** (`purpose=employer_submission`, covered employer org) and creates the employer CV pack with that consent attached.
+- **Hired** requires an accepted offer; placement is created from that offer before placement invoices can be issued.
+- **Reject** is permanent, requires a reason, and stores `rejected_from_stage`.
+- Stage moves and rejects run through Postgres RPCs (`advance_application` / `reject_application`); direct stage updates are blocked.
 
 Legacy stage keys remain in the database for history only; they are not offered as move targets.
 
@@ -349,10 +350,12 @@ scheduler or manual staff action.
   (not contacted / contacted / interested / declined); phase-grouped **pipeline board** over the
   simplified candidate flow (CV Review → Testing → Test Review → Interview Screening → Interview Review →
   optional Reference Checks → Client Submission → Offer → Hired); application workspace with forward-only
-  stage moves, automatic Test Review / Interview Review transitions, permanent rejection that records the
-  stage rejected from, recruiter notes, stage history, **AI CV role-fit screening** (OpenAI; metered against
-  employer package entitlements when subscribed; cache-aware), and automatic employer CV pack creation on
-  Client Submission. Every change writes stage history + audit + a candidate notification.
+  stage moves, mandatory DB gates (screening notes, test/interview completion, employer-specific consent,
+  accepted offer before Hired), automatic Test Review / Interview Review transitions, permanent rejection
+  that records the stage rejected from, recruiter notes, stage history, **AI CV role-fit screening**
+  (OpenAI; metered against employer package entitlements when subscribed; cache-aware), and employer CV
+  pack creation on Client Submission after consent. Every change writes stage history + audit + a
+  candidate notification.
 - **Assessment delivery**: employers configure aptitude testing on job-order submit (Shugulika,
   employer-provided, or both; junior/senior; default 65% pass threshold). Employer mode requires
   **one or more candidate-facing test files and one or more answer-key files** (private Storage;
@@ -368,7 +371,7 @@ scheduler or manual staff action.
   **masked** submission review (identity/contact hidden); decision workflow
   (shortlist / request interview / reject-with-reason) with audit; employer comments. Employers only ever see
   candidates submitted to them (enforced by RLS). Client Submission from the recruiter portal creates that pack
-  automatically while the application is active.
+  after employer-specific consent is on file.
 - **Franchise & HQ**: metrics dashboards (RLS-scoped), franchise/employer/job/placement/invoice lists, **audit log**
   viewer (append-only, HQ-only), and HQ **AI credits** (`/hq/ai-usage`) — estimated OpenAI spend by purpose
   (CV extraction, summary/headline drafts, role-fit screens) with links to the official OpenAI usage dashboard.

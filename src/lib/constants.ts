@@ -107,7 +107,9 @@ export const APPLICATION_PHASES: { key: ApplicationPhase; label: string }[] = [
  * Active pipeline. Apply → CV Review automatically.
  * Testing submitted → Test Review automatically.
  * Interview Screening completed → Interview Review automatically.
- * Reference Checks are optional; recruiters may skip to Client Submission.
+ * Reference Checks are optional after Interview Review only.
+ * Mandatory gates (screening notes, test/interview rules, employer consent,
+ * accepted offer) are enforced in advance_application / reject_application.
  * Rejection is permanent and records the stage where it happened.
  */
 export const PIPELINE_STAGES: PipelineStage[] = [
@@ -263,18 +265,6 @@ export function allowedNextStages(current: string): PipelineStage[] {
   };
 
   const keys = new Set<string>(linear[current] ?? []);
-
-  // After CV review passes, recruiters may skip ahead to Client Submission.
-  const testing = stageByKey("testing");
-  const clientSubmission = stageByKey("client_submission");
-  if (
-    testing &&
-    clientSubmission &&
-    cur.ordinal >= testing.ordinal &&
-    cur.ordinal < clientSubmission.ordinal
-  ) {
-    keys.add("client_submission");
-  }
 
   return [...keys]
     .map((k) => stageByKey(k))

@@ -137,33 +137,26 @@ export async function sourceCandidateAction(input: {
       withdrawn_at: existing.withdrawn_at,
       entry_source: existing.entry_source,
     };
+    const { error: reopenErr } = await supabase.rpc("reopen_application", {
+      p_application: existing.id,
+      p_note: "Reopened as recruiter-sourced",
+      p_source: "recruiter_sourced",
+    });
+    if (reopenErr) return { ok: false, error: reopenErr.message };
+
     const { error: updErr } = await supabase
       .from("applications")
       .update({
-        withdrawn_at: null,
-        current_stage: "cv_review",
         entry_source: "recruiter_sourced",
         is_direct_application: false,
         sourced_contact_status: "not_contacted",
         sourced_contacted_at: null,
         assigned_recruiter_id: session.userId,
         consent_status: "pending",
-        rejected_from_stage: null,
-        rejected_at: null,
-        rejection_reason: null,
       })
       .eq("id", existing.id);
     if (updErr) return { ok: false, error: updErr.message };
 
-    await supabase.from("application_stage_history").insert({
-      application_id: existing.id,
-      from_stage: existing.current_stage,
-      to_stage: "cv_review",
-      actor_id: session.userId,
-      actor_role: "recruiter",
-      note: "Reopened as recruiter-sourced",
-      source: "recruiter_sourced",
-    });
     await writeAudit(
       "application.sourced_reopened",
       "application",

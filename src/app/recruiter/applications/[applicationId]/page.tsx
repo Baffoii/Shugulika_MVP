@@ -48,6 +48,8 @@ export default async function ApplicationWorkspace({
     aiReviewItems,
     assessmentAssignment,
     assessmentFiles,
+    employerSubmissionConsentId,
+    acceptedOfferId,
   } = detail;
   const primaryCv = documents.find((d) => d.is_primary) ?? documents[0] ?? null;
   const name = `${candidate?.given_name ?? "Candidate"} ${candidate?.family_name ?? ""}`.trim();
@@ -231,6 +233,9 @@ export default async function ApplicationWorkspace({
                 ? Number(assessmentAssignment.score)
                 : null
             }
+            hasScreeningNotes={notes.some((n) => n.body?.trim())}
+            hasEmployerConsent={Boolean(employerSubmissionConsentId)}
+            hasAcceptedOffer={Boolean(acceptedOfferId)}
           />
 
           {!application.is_direct_application ||
