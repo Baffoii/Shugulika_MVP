@@ -76,6 +76,7 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
   franchise: [
     { href: "/franchise/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/franchise/recruiters", label: "Assignments", icon: Users },
+    { href: "/franchise/employer-applications", label: "Employer applications", icon: ClipboardList },
     { href: "/franchise/employers", label: "Employers", icon: Store },
     { href: "/franchise/jobs", label: "Jobs", icon: Briefcase },
     { href: "/franchise/candidates", label: "Candidates", icon: User },
@@ -90,6 +91,7 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
     { href: "/hq/franchises", label: "Franchises", icon: Store },
     { href: "/hq/recruiters", label: "Assignments", icon: Target },
     { href: "/hq/users", label: "Users & roles", icon: Users },
+    { href: "/hq/employer-applications", label: "Employer applications", icon: ClipboardList },
     { href: "/hq/jobs", label: "Jobs", icon: Briefcase },
     { href: "/hq/candidates", label: "Candidates", icon: User },
     { href: "/hq/placements", label: "Placements", icon: BadgeDollarSign },

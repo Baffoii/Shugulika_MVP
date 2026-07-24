@@ -42,11 +42,17 @@ function hrefForNotification(
   }
   if (portal === "hq") {
     if (subjectType === "job_order") return "/hq/jobs";
+    if (subjectType === "employer_application" && subjectId) {
+      return `/hq/employer-applications/${subjectId}`;
+    }
     return "/hq/notifications";
   }
   if (portal === "franchise") {
     if (subjectType === "job_order") return "/franchise/jobs";
-    return "/franchise/jobs";
+    if (subjectType === "employer_application" && subjectId) {
+      return `/franchise/employer-applications/${subjectId}`;
+    }
+    return "/franchise/employer-applications";
   }
   return `/${portal}/dashboard`;
 }

@@ -114,6 +114,67 @@ export const languageSchema = z.object({
   ),
 });
 
+// ---------------------------------------------------------------------------
+// Employer onboarding (Workflow 1) — one schema per wizard section so the
+// form can autosave after each completed section.
+// ---------------------------------------------------------------------------
+export const employerCompanySectionSchema = z.object({
+  legal_name: z.string().min(2, "Enter the registered company name").max(200),
+  trading_name: z.string().max(200).optional().or(z.literal("")),
+  organization_type: z.string().min(1, "Choose an organization type"),
+  industry: z.string().min(1, "Enter the industry").max(120),
+  company_size: z.string().min(1, "Choose a company size"),
+  year_established: z
+    .union([z.literal(""), z.coerce.number().int().min(1800, "Enter a valid year").max(2100)])
+    .optional(),
+  website: z
+    .string()
+    .url("Enter a valid website URL (https://…)")
+    .max(300)
+    .optional()
+    .or(z.literal("")),
+});
+
+export const employerAddressSectionSchema = z.object({
+  country_code: z.string().length(2, "Choose a country"),
+  region: z.string().min(1, "Enter the region/state/province").max(120),
+  city: z.string().min(1, "Enter the city").max(120),
+  physical_address: z.string().min(4, "Enter the physical address").max(400),
+  postal_address: z.string().max(400).optional().or(z.literal("")),
+});
+
+export const employerContactSectionSchema = z.object({
+  contact_name: z.string().min(2, "Enter the contact person's full name").max(160),
+  contact_job_title: z.string().min(1, "Enter the job title").max(120),
+  contact_email: z.string().email("Enter a valid work email").max(160),
+  contact_phone: z.string().min(6, "Enter a phone number").max(40),
+  contact_is_authorized: z.literal(true, {
+    errorMap: () => ({ message: "Confirm this person may administer the account" }),
+  }),
+});
+
+export const employerRoutingSectionSchema = z
+  .object({
+    routing_mode: z.enum(["auto", "franchise", "hq"]),
+    requested_franchise_id: z.string().uuid().optional().or(z.literal("")),
+  })
+  .refine((v) => v.routing_mode !== "franchise" || !!v.requested_franchise_id, {
+    message: "Choose a Shugulika office",
+    path: ["requested_franchise_id"],
+  });
+
+export const employerDeclarationsSectionSchema = z.object({
+  declared_accurate: z.literal(true, {
+    errorMap: () => ({ message: "Confirm the information is accurate" }),
+  }),
+  declared_authorized: z.literal(true, {
+    errorMap: () => ({ message: "Confirm you are authorized to represent the company" }),
+  }),
+  accepted_terms: z.literal(true, {
+    errorMap: () => ({ message: "Accept the employer and privacy terms" }),
+  }),
+});
+
 export const jobOrderSchema = z.object({
   title: z.string().min(2, "Required").max(160),
   department: z.string().max(120).optional().or(z.literal("")),
