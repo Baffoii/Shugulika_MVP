@@ -16,7 +16,7 @@ test.describe("authenticated portals (live)", () => {
   async function signIn(page: import("@playwright/test").Page, email: string) {
     await page.goto("/auth/sign-in");
     await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/password/i).fill(PASSWORD);
+    await page.locator('input[name="password"]').fill(PASSWORD);
     await page.getByRole("button", { name: /sign in/i }).click();
   }
 
