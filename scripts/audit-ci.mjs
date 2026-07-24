@@ -3,20 +3,18 @@
 // Fails on any high/critical advisory in production dependencies, EXCEPT a
 // small, documented allowlist of upstream advisories we knowingly accept.
 //
-// Currently allowlisted: the Next.js framework. Its outstanding high advisories
-// are self-hosted DoS / cache / CSP-nonce classes (e.g. GHSA-h25m-26qc-wcjf,
-// GHSA-q4gf-8mx6-v5v3, GHSA-8h8q-6873-q5fj, GHSA-c4j6-fc7j-m34r,
-// GHSA-36qx-fr4f-26g5) whose only fix is a breaking major upgrade (next@16).
-// The app deploys on Vercel, where the image-optimizer / DoS classes are
-// platform-mitigated. Drop "next" from ALLOW_PACKAGES when the framework is
-// upgraded so these advisories block again.
+// The allowlist is currently empty: the Next.js framework advisories that
+// previously forced a waiver were resolved by upgrading to next@16, and the
+// bundled `sharp`/libvips advisory (GHSA-f88m-g3jw-g9cj) is pinned to a
+// patched release via the `sharp` override in package.json. Re-add a package
+// here only for an upstream advisory with no available fix, with justification.
 //
 // Any high/critical advisory in a package NOT on the allowlist still fails CI,
 // so this stays a meaningful gate for our own dependency choices.
 
 import { execFileSync } from "node:child_process";
 
-const ALLOW_PACKAGES = new Set(["next"]);
+const ALLOW_PACKAGES = new Set();
 const BLOCK_LEVELS = new Set(["high", "critical"]);
 
 let json = "";

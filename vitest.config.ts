@@ -13,18 +13,16 @@ export default defineConfig({
     // parallel races those resets; the suite is small enough that deterministic
     // file-level sequencing is preferable.
     fileParallelism: false,
-    poolOptions: {
-      threads: {
-        singleThread: true,
-      },
-    },
+    // vitest 4 flattened the pool config: a single worker replaces the old
+    // poolOptions.threads.singleThread, keeping DB suites from racing the
+    // shared ephemeral schema.
+    maxWorkers: 1,
     // Integration/DB tests connect to a real Postgres and are opt-in (they run
     // only when DATABASE_URL is set — CI provides it, unit runs skip them).
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary", "html", "json-summary", "lcov"],
       reportsDirectory: "./coverage",
-      all: true,
       // Meaningful, security-relevant modules. Server/UI wiring that needs a live
       // DB or browser is exercised by the DB and e2e suites, not unit coverage.
       include: [

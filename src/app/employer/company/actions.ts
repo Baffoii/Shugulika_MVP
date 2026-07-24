@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireApprovedEmployer } from "@/lib/auth";
 import { fieldErrors } from "@/lib/validation";
+import type { OrganizationRow } from "@/lib/database.types";
 
 export interface CompanyUpdateResult {
   ok: boolean;
@@ -68,7 +69,10 @@ export async function updateEmployerCompanyAction(
   );
 
   const supabase = createClient();
-  const { error } = await supabase.from("organizations").update(values).eq("id", employerOrg.id);
+  const { error } = await supabase
+    .from("organizations")
+    .update(values as Partial<OrganizationRow>)
+    .eq("id", employerOrg.id);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/employer/company");

@@ -1,6 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Tailwind v4 is CSS-first, but our design tokens (brand palette, surfaces,
+   sidebar, radii, shadows) still live in the JS config, loaded here. */
+@config "../../tailwind.config.ts";
 
 :root {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;

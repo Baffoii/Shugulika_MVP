@@ -35,7 +35,7 @@ export function TimeToFillChart({ data }: { data: TimeToFillTrendPoint[] }) {
               <XAxis dataKey="weekLabel" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} unit="d" width={36} />
               <Tooltip
-                formatter={(value: number) => [`${value} days`, "Avg time to fill"]}
+                formatter={(value) => [`${value} days`, "Avg time to fill"]}
                 labelFormatter={(label) => `Week of ${label}`}
               />
               <Line

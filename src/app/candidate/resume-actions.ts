@@ -726,7 +726,7 @@ export async function acceptSuggestionAction(
     } else {
       const { error } = await supabase
         .from("candidate_profiles")
-        .update({ [field]: value || null })
+        .update({ [field]: value || null } as Partial<CandidateProfileRow>)
         .eq("id", cid);
       if (error) return { ok: false, error: error.message };
     }
