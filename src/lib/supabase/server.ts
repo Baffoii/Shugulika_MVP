@@ -12,14 +12,18 @@ import type { Database } from "@/lib/database.types";
  * the middleware refreshes the session on every request.
  */
 export function createClient() {
-  const cookieStore = cookies();
+  // Next 15+ made `cookies()` async. Resolving it lazily inside the cookie
+  // handlers keeps `createClient()` synchronous, so its ~180 call sites don't
+  // each need to become `await createClient()`. @supabase/ssr supports async
+  // getAll/setAll and invokes them within the same request scope.
   return createServerClient<Database>(env.supabaseUrl(), env.supabaseKey(), {
     cookies: {
-      getAll() {
-        return cookieStore.getAll();
+      async getAll() {
+        return (await cookies()).getAll();
       },
-      setAll(cookiesToSet: CookieToSet[]) {
+      async setAll(cookiesToSet: CookieToSet[]) {
         try {
+          const cookieStore = await cookies();
           cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
         } catch {
           // Called from a Server Component — ignore; middleware handles refresh.

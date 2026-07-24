@@ -117,9 +117,7 @@ export const languageSchema = z.object({
     z.union([
       z.literal(""),
       z.enum(LANGUAGE_PROFICIENCIES, {
-        errorMap: () => ({
-          message: "Use Basic, Conversational, Professional, Fluent, or Native",
-        }),
+        error: "Use Basic, Conversational, Professional, Fluent, or Native",
       }),
     ]),
   ),
@@ -160,7 +158,7 @@ export const employerContactSectionSchema = z.object({
   contact_email: z.string().email("Enter a valid work email").max(160),
   contact_phone: z.string().min(6, "Enter a phone number").max(40),
   contact_is_authorized: z.literal(true, {
-    errorMap: () => ({ message: "Confirm this person may administer the account" }),
+    error: "Confirm this person may administer the account",
   }),
 });
 
@@ -176,13 +174,13 @@ export const employerRoutingSectionSchema = z
 
 export const employerDeclarationsSectionSchema = z.object({
   declared_accurate: z.literal(true, {
-    errorMap: () => ({ message: "Confirm the information is accurate" }),
+    error: "Confirm the information is accurate",
   }),
   declared_authorized: z.literal(true, {
-    errorMap: () => ({ message: "Confirm you are authorized to represent the company" }),
+    error: "Confirm you are authorized to represent the company",
   }),
   accepted_terms: z.literal(true, {
-    errorMap: () => ({ message: "Accept the employer and privacy terms" }),
+    error: "Accept the employer and privacy terms",
   }),
 });
 
@@ -197,7 +195,7 @@ export const jobOrderSchema = z.object({
   work_arrangement: z.string().optional().or(z.literal("")),
   experience_level: z.string().optional().or(z.literal("")),
   vacancy_count: z.coerce
-    .number({ invalid_type_error: "Enter at least 1 vacancy" })
+    .number({ error: "Enter at least 1 vacancy" })
     .int("Vacancies must be a whole number")
     .min(1, "Enter at least 1 vacancy")
     .max(999),

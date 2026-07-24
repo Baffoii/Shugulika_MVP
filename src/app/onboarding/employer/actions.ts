@@ -142,7 +142,7 @@ export async function saveEmployerOnboardingSectionAction(
     }
     const { error } = await supabase
       .from("employer_applications")
-      .update(payload)
+      .update(payload as Partial<EmployerApplicationRow>)
       .eq("id", existing.id);
     if (error) return { ok: false, error: error.message };
   } else {

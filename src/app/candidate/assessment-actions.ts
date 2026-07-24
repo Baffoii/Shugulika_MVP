@@ -42,7 +42,7 @@ export async function openAssessmentAction(assignmentId: string): Promise<Assess
 
   const nextStatus = assignment.status === "assigned" ? "opened" : "in_progress";
   const supabase = createClient();
-  const patch: Record<string, unknown> = { status: nextStatus };
+  const patch: Partial<AssessmentAssignmentRow> = { status: nextStatus };
   if (!assignment.opened_at) patch.opened_at = new Date().toISOString();
 
   const { error } = await supabase

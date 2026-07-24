@@ -835,7 +835,7 @@ export async function getRecruitersWithRoles(filters: {
 
   if (filters.organizationId) memQuery = memQuery.eq("organization_id", filters.organizationId);
   if (filters.regionCode) memQuery = memQuery.eq("country_code", filters.regionCode);
-  if (filters.level) memQuery = memQuery.eq("recruiter_level", filters.level);
+  if (filters.level) memQuery = memQuery.eq("recruiter_level", filters.level as RecruiterLevel);
 
   const { data: memberships, error } = await memQuery;
   if (error) {

@@ -21,7 +21,7 @@ export function AppsReviewedChart({ data }: { data: AppsReviewedTrendPoint[] }) 
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="weekLabel" tick={{ fontSize: 11 }} />
               <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={32} />
-              <Tooltip formatter={(value: number) => [value, "Reviews"]} />
+              <Tooltip formatter={(value) => [Number(value), "Reviews"]} />
               <Bar dataKey="count" fill="#0f766e" radius={[4, 4, 0, 0]} name="Reviews" />
             </BarChart>
           </ResponsiveContainer>

@@ -85,7 +85,8 @@ export async function listEmployerApplicationsForReview(
     .select("*")
     .neq("status", "draft")
     .order("submitted_at", { ascending: false, nullsFirst: false });
-  if (filters.status) query = query.eq("status", filters.status);
+  if (filters.status)
+    query = query.eq("status", filters.status as NonNullable<EmployerApplicationRow["status"]>);
   if (filters.country) query = query.eq("country_code", filters.country);
   const { data } = await query;
   const rows = (data as EmployerApplicationRow[] | null) ?? [];
