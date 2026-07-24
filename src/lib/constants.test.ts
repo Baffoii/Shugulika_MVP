@@ -49,20 +49,16 @@ describe("pipeline stages", () => {
     expect(CANDIDATE_FACING_STATUS["hired"]).toBe("Hired");
   });
 
-  it("only allows forward moves and optional skips", () => {
+  it("only allows forward moves without mid-pipeline Client Submission skips", () => {
     expect(allowedNextStages("cv_review").map((s) => s.key)).toEqual(["testing"]);
-    expect(allowedNextStages("testing").map((s) => s.key)).toEqual(["client_submission"]);
-    expect(allowedNextStages("test_review").map((s) => s.key)).toEqual([
-      "interview_screening",
-      "client_submission",
-    ]);
-    expect(allowedNextStages("interview_screening").map((s) => s.key)).toEqual([
-      "client_submission",
-    ]);
+    expect(allowedNextStages("testing").map((s) => s.key)).toEqual([]);
+    expect(allowedNextStages("test_review").map((s) => s.key)).toEqual(["interview_screening"]);
+    expect(allowedNextStages("interview_screening").map((s) => s.key)).toEqual([]);
     expect(allowedNextStages("interview_review").map((s) => s.key)).toEqual([
       "reference_checks",
       "client_submission",
     ]);
+    expect(allowedNextStages("reference_checks").map((s) => s.key)).toEqual(["client_submission"]);
     expect(allowedNextStages("rejected")).toEqual([]);
     expect(allowedNextStages("hired")).toEqual([]);
   });

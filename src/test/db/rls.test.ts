@@ -253,9 +253,12 @@ d("Row-Level Security & tenant isolation", () => {
        where id = $1`,
       [ids.jobOrderA, path],
     );
-    await client.query("update public.applications set current_stage = 'testing' where id = $1", [
+    await client.query("begin");
+    await client.query(`select set_config('shugulika.stage_rpc', '1', true)`);
+    await client.query(`update public.applications set current_stage = 'testing' where id = $1`, [
       ids.applicationC1,
     ]);
+    await client.query("commit");
 
     await commitAs(
       client,

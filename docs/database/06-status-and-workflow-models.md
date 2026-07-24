@@ -34,6 +34,8 @@ The 12 candidate stages (from the 15-Spine, excluding job/accounts milestones):
 `Applied/Sourced → CV Screening → Longlisted → AI Interview Screening → Shortlisted → Screening Interview → Testing → Reference Checks → Client Submission → Client Interview → Offer → Hired`
 Plus cross-cutting states: `on_hold`, `withdrawn`, `rejected` (with reopen), and Path-A employer-facing collapse.
 
+> **MVP deviation (approved):** the live product keeps a simplified stage list and enforces R-062 gates on those stages via `advance_application` / `reject_application`. See [15-mvp-pipeline-deviation.md](./15-mvp-pipeline-deviation.md).
+
 Transitions run via `advance_application(application_id, to_stage, payload)`:
 - **Applied/Sourced → CV Screening** `[application.review]` — sourced candidates start as *Sourced – not yet contacted*; establishing interest sets `sourced_contacted_at`.
 - **CV Screening → Longlisted** — ⛔ `screening_record` outcome recorded.

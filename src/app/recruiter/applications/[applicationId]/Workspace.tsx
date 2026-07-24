@@ -7,6 +7,8 @@ import {
   addNoteAction,
   markTestingSubmittedAction,
   markInterviewCompleteAction,
+  requestEmployerSubmissionConsentAction,
+  recordAcceptedOfferAction,
 } from "@/app/recruiter/actions";
 import { cancelAssignmentAction, createAssignmentAction } from "@/app/recruiter/interview-actions";
 import {
@@ -42,6 +44,9 @@ export function StageControl({
   testName: initialTestName,
   testScore: initialTestScore,
   assessmentScore,
+  hasScreeningNotes = false,
+  hasEmployerConsent = false,
+  hasAcceptedOffer = false,
 }: {
   applicationId: string;
   currentStage: string;
@@ -52,6 +57,9 @@ export function StageControl({
   testScore?: string | null;
   /** Graded aptitude percent — auto-fills Test score when present. */
   assessmentScore?: number | null;
+  hasScreeningNotes?: boolean;
+  hasEmployerConsent?: boolean;
+  hasAcceptedOffer?: boolean;
 }) {
   const router = useRouter();
   const [toStage, setToStage] = useState("");
@@ -69,6 +77,10 @@ export function StageControl({
   const isRejected = currentStage === "rejected";
   const isTesting = currentStage === "testing";
   const isInterviewScreening = currentStage === "interview_screening";
+  const isCvReview = currentStage === "cv_review";
+  const isOffer = currentStage === "offer";
+  const canReachClientSubmission = nextStages.some((s) => s.key === "client_submission");
+  const canReachHired = nextStages.some((s) => s.key === "hired");
   const isWithdrawn = Boolean(withdrawnAt);
 
   useEffect(() => {
@@ -171,6 +183,67 @@ export function StageControl({
       <CardBody className="space-y-3">
         {error ? <Alert tone="danger">{error}</Alert> : null}
         {warning ? <Alert tone="warn">{warning}</Alert> : null}
+
+        {isCvReview && !hasScreeningNotes ? (
+          <Alert tone="warn" title="Screening notes required">
+            Add a screening note before moving past CV Review.
+          </Alert>
+        ) : null}
+
+        {canReachClientSubmission && !hasEmployerConsent ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+            <p className="text-sm text-ink">
+              Employer-specific consent is required before Client Submission.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => run(requestEmployerSubmissionConsentAction)}
+              >
+                Request candidate consent
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={pending}
+                onClick={() =>
+                  run(requestEmployerSubmissionConsentAction, {
+                    record_now: "1",
+                    method: "verbal_recorded",
+                  })
+                }
+              >
+                Record verbal consent
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {canReachHired && !hasAcceptedOffer ? (
+          <Alert tone="warn" title="Accepted offer required">
+            Record an accepted offer before moving to Hired.
+          </Alert>
+        ) : null}
+
+        {isOffer ? (
+          <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-3 space-y-3">
+            <p className="text-sm text-ink">
+              Record the accepted offer to unlock <span className="font-medium">Hired</span> and
+              create the placement for invoicing.
+            </p>
+            {hasAcceptedOffer ? (
+              <Alert tone="success" title="Accepted offer on file">
+                You can move this candidate to Hired.
+              </Alert>
+            ) : (
+              <Button size="sm" disabled={pending} onClick={() => run(recordAcceptedOfferAction)}>
+                {pending ? "Saving…" : "Mark offer accepted"}
+              </Button>
+            )}
+          </div>
+        ) : null}
 
         {isTesting ? (
           <div className="rounded-lg border border-brand-200 bg-brand-50/50 p-3 space-y-3">

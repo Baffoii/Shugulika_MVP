@@ -135,6 +135,9 @@ export interface ApplicationDetail {
   aiReviewItems: ApplicationAiReviewItemRow[];
   assessmentAssignment: AssessmentAssignmentRow | null;
   assessmentFiles: JobOrderAssessmentFileRow[];
+  /** Active employer_submission consent for this job's employer, if any. */
+  employerSubmissionConsentId: string | null;
+  acceptedOfferId: string | null;
 }
 
 export async function getApplicationDetail(id: string): Promise<ApplicationDetail | null> {
@@ -154,6 +157,7 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
     aiReviewRes,
     assessmentRes,
     assessmentFilesRes,
+    acceptedOfferRes,
   ] = await Promise.all([
     supabase
       .from("candidate_profiles")
@@ -200,7 +204,30 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
       .select("*")
       .eq("job_order_id", application.job_order_id)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("offers")
+      .select("id")
+      .eq("application_id", id)
+      .eq("status", "accepted")
+      .limit(1)
+      .maybeSingle(),
   ]);
+
+  const jobRow = (job.data as JobOrderRow | null) ?? null;
+  let employerSubmissionConsentId: string | null = null;
+  if (jobRow?.employer_org_id) {
+    const { data: consent } = await supabase
+      .from("candidate_consents")
+      .select("id")
+      .eq("candidate_id", application.candidate_id)
+      .eq("purpose", "employer_submission")
+      .eq("covered_org_id", jobRow.employer_org_id)
+      .is("withdrawn_at", null)
+      .order("granted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    employerSubmissionConsentId = (consent as { id: string } | null)?.id ?? null;
+  }
 
   const aiReviewRaw = (aiReviewRes.data as ApplicationAiReviewRow | null) ?? null;
   // Don't ship the full model reasoning trace to the browser — staff UI doesn't
@@ -219,7 +246,7 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
   return {
     application,
     candidate: (candidate.data as CandidateProfileRow | null) ?? null,
-    job: (job.data as JobOrderRow | null) ?? null,
+    job: jobRow,
     history: (history.data as ApplicationStageHistoryRow[] | null) ?? [],
     notes: (notes.data as RecruiterNoteRow[] | null) ?? [],
     documents: (documents.data as CandidateDocumentRow[] | null) ?? [],
@@ -229,6 +256,8 @@ export async function getApplicationDetail(id: string): Promise<ApplicationDetai
     aiReviewItems: (aiItemsData as ApplicationAiReviewItemRow[] | null) ?? [],
     assessmentAssignment: (assessmentRes.data as AssessmentAssignmentRow | null) ?? null,
     assessmentFiles: (assessmentFilesRes.data as JobOrderAssessmentFileRow[] | null) ?? [],
+    employerSubmissionConsentId,
+    acceptedOfferId: (acceptedOfferRes.data as { id: string } | null)?.id ?? null,
   };
 }
 

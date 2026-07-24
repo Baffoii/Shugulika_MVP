@@ -6,7 +6,7 @@ import { getMyCandidate, getMyApplications, applicationRoleLabel } from "@/lib/d
 import { CANDIDATE_FACING_STATUS } from "@/lib/constants";
 import { statusTone } from "@/components/StatusBadge";
 import { formatDate, titleCase } from "@/lib/format";
-import { WithdrawButton } from "./ApplicationActions";
+import { WithdrawButton, GrantEmployerConsentButton } from "./ApplicationActions";
 
 export const metadata: Metadata = { title: "Applications" };
 
@@ -73,7 +73,7 @@ export default async function CandidateApplicationsPage() {
                     {a.recruitment_path === "A" ? "Direct employer" : "Shugulika-managed"}
                   </TD>
                   <TD className="text-right">
-                    {a.withdrawn_at ? (
+                    {a.withdrawn_at || a.current_stage === "rejected" ? (
                       <ButtonLink
                         href={`/candidate/apply/${a.job_order_id}?reapply=1`}
                         variant="outline"
@@ -82,7 +82,12 @@ export default async function CandidateApplicationsPage() {
                         Apply again
                       </ButtonLink>
                     ) : (
-                      <WithdrawButton applicationId={a.id} />
+                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                        {a.consent_status === "pending" ? (
+                          <GrantEmployerConsentButton applicationId={a.id} />
+                        ) : null}
+                        <WithdrawButton applicationId={a.id} />
+                      </span>
                     )}
                   </TD>
                 </TR>

@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { withdrawApplicationAction } from "@/app/candidate/actions";
+import { useRouter } from "next/navigation";
+import {
+  withdrawApplicationAction,
+  grantEmployerSubmissionConsentAction,
+} from "@/app/candidate/actions";
 import { Button } from "@/components/ui/primitives";
 
 export function WithdrawButton({ applicationId }: { applicationId: string }) {
@@ -32,5 +36,34 @@ export function WithdrawButton({ applicationId }: { applicationId: string }) {
     <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
       Withdraw
     </Button>
+  );
+}
+
+export function GrantEmployerConsentButton({ applicationId }: { applicationId: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <Button
+        size="sm"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            setError(null);
+            const res = await grantEmployerSubmissionConsentAction(applicationId);
+            if (!res.ok) {
+              setError(res.error ?? "Could not grant consent.");
+              return;
+            }
+            router.refresh();
+          })
+        }
+      >
+        {pending ? "Saving…" : "Allow employer share"}
+      </Button>
+      {error ? <span className="text-xs text-red-700">{error}</span> : null}
+    </span>
   );
 }

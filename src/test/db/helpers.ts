@@ -120,7 +120,13 @@ export async function setupDb(client: Client): Promise<SeedIds> {
   // every `00xx_` name sorts before every `2026…` name, and timestamps sort
   // chronologically among themselves.
   const migrations = readdirSync(MIG)
-    .filter((f) => /^\d+_.*\.sql$/.test(f) && !SKIP.has(f))
+    .filter(
+      (f) =>
+        /^\d+_.*\.sql$/.test(f) &&
+        !SKIP.has(f) &&
+        // macOS duplicate downloads like "foo 2.sql" must not re-apply schema.
+        !/ \d+\.sql$/.test(f),
+    )
     .sort();
   for (const f of migrations) {
     await client.query(readSql(f));
@@ -212,10 +218,16 @@ export async function setupDb(client: Client): Promise<SeedIds> {
        values ($1,$2,$3,$4,'B','cv_review',$5)`,
     [applicationC1, cand1Profile, jobOrderA, franchiseA, recA],
   );
+  const consentC1 = "e2000000-0000-4000-8000-000000000001";
   await client.query(
-    `insert into public.employer_submissions (id, application_id, candidate_id, job_order_id, employer_org_id, submitting_org_id, status, submitted_at)
-       values ($1,$2,$3,$4,$5,$6,'submitted', now())`,
-    [submissionC1, applicationC1, cand1Profile, jobOrderA, employerA, franchiseA],
+    `insert into public.candidate_consents (id, candidate_id, purpose, covered_org_id, method)
+       values ($1,$2,'employer_submission',$3,'web_form')`,
+    [consentC1, cand1Profile, employerA],
+  );
+  await client.query(
+    `insert into public.employer_submissions (id, application_id, candidate_id, job_order_id, employer_org_id, submitting_org_id, consent_id, status, submitted_at)
+       values ($1,$2,$3,$4,$5,$6,$7,'submitted', now())`,
+    [submissionC1, applicationC1, cand1Profile, jobOrderA, employerA, franchiseA, consentC1],
   );
 
   return {
