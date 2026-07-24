@@ -64,8 +64,9 @@ function resolveStep(
 export default async function EmployerOnboardingPage({
   searchParams,
 }: {
-  searchParams: { step?: string };
+  searchParams: Promise<{ step?: string }>;
 }) {
+  const { step: requestedStep } = await searchParams;
   const ctx = await requireSession();
   const isEmployer = ctx.memberships.some(
     (m) => m.status === "active" && m.role === "employer_user",
@@ -77,7 +78,7 @@ export default async function EmployerOnboardingPage({
   const editable = !app || canEditApplication(app.status);
   const guidance = app ? parseRequestedChanges(app.requested_changes) : [];
   const incomplete = app ? firstIncompleteStep(app) : "company";
-  const step = editable ? resolveStep(searchParams.step, app?.status ?? null, incomplete) : null;
+  const step = editable ? resolveStep(requestedStep, app?.status ?? null, incomplete) : null;
 
   const franchises = app?.country_code
     ? await getEligibleFranchises(app.country_code, app.region)

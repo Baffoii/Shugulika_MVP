@@ -17,9 +17,10 @@ export const metadata = { title: "Interview template" };
 export default async function InterviewTemplatePage({
   params,
 }: {
-  params: { templateId: string };
+  params: Promise<{ templateId: string }>;
 }) {
-  const template = await getInterviewTemplate(params.templateId);
+  const { templateId } = await params;
+  const template = await getInterviewTemplate(templateId);
   if (!template) notFound();
   return (
     <div>

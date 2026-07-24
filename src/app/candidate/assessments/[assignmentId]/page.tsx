@@ -13,14 +13,19 @@ import { formatDate, titleCase } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Take assessment" };
 
-export default async function TakeAssessmentPage({ params }: { params: { assignmentId: string } }) {
+export default async function TakeAssessmentPage({
+  params,
+}: {
+  params: Promise<{ assignmentId: string }>;
+}) {
+  const { assignmentId } = await params;
   const candidate = await getMyCandidate();
   if (!candidate) redirect("/auth/sign-in");
   const supabase = createClient();
   const { data } = await supabase
     .from("assessment_assignments")
     .select("*")
-    .eq("id", params.assignmentId)
+    .eq("id", assignmentId)
     .eq("candidate_id", candidate.id)
     .maybeSingle();
   const assignment = data as AssessmentAssignmentRow | null;

@@ -9,20 +9,21 @@ export const metadata: Metadata = { title: "Record video interview" };
 export default async function InterviewSessionPage({
   params,
 }: {
-  params: { assignmentId: string };
+  params: Promise<{ assignmentId: string }>;
 }) {
-  const detail = await getMyInterviewDetail(params.assignmentId);
+  const { assignmentId } = await params;
+  const detail = await getMyInterviewDetail(assignmentId);
   if (!detail) notFound();
 
   const softExpired =
     detail.assignment.expires_at !== null && new Date(detail.assignment.expires_at) < new Date();
   if (softExpired && ["invited", "in_progress"].includes(detail.assignment.status)) {
-    await markInterviewExpiredAction(params.assignmentId);
-    redirect(`/candidate/interviews/${params.assignmentId}`);
+    await markInterviewExpiredAction(assignmentId);
+    redirect(`/candidate/interviews/${assignmentId}`);
   }
 
   if (detail.assignment.status !== "in_progress") {
-    redirect(`/candidate/interviews/${params.assignmentId}`);
+    redirect(`/candidate/interviews/${assignmentId}`);
   }
 
   return <InterviewSession initialDetail={detail} />;

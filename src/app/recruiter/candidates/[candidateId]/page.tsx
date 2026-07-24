@@ -25,12 +25,13 @@ export const metadata: Metadata = { title: "Discovered candidate" };
 export default async function DiscoveredCandidatePage({
   params,
 }: {
-  params: { candidateId: string };
+  params: Promise<{ candidateId: string }>;
 }) {
+  const { candidateId } = await params;
   const [{ candidate, error }, jobs, ownApps] = await Promise.all([
-    openDiscoveredCandidate(params.candidateId),
+    openDiscoveredCandidate(candidateId),
     listSourceableJobs(),
-    listOwnOrgApplicationsForCandidate(params.candidateId),
+    listOwnOrgApplicationsForCandidate(candidateId),
   ]);
 
   if (error && !candidate) {
