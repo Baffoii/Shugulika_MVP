@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, LogOut, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  Menu,
+  X,
+  LogOut,
+  KeyRound,
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationToasts } from "@/components/notifications/NotificationToasts";
@@ -207,21 +215,27 @@ export function PortalChrome({
                         ))}
                     </div>
                   ) : null}
-                  <form
-                    action="/auth/sign-out"
-                    method="post"
-                    className="border-t border-surface-border pt-1"
-                  >
-                    <button
-                      type="submit"
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-status-danger hover:bg-red-50",
-                      )}
+                  <div className="border-t border-surface-border pt-1">
+                    <Link
+                      href="/auth/update-password"
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-ink hover:bg-surface-muted"
                       role="menuitem"
+                      onClick={() => setMenuOpen(false)}
                     >
-                      <LogOut className="h-4 w-4" /> Sign out
-                    </button>
-                  </form>
+                      <KeyRound className="h-4 w-4" /> Change password
+                    </Link>
+                    <form action="/auth/sign-out" method="post">
+                      <button
+                        type="submit"
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-status-danger hover:bg-red-50",
+                        )}
+                        role="menuitem"
+                      >
+                        <LogOut className="h-4 w-4" /> Sign out
+                      </button>
+                    </form>
+                  </div>
                 </div>
               ) : null}
             </div>

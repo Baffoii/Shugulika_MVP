@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   PageHeader,
   Card,
@@ -65,6 +66,11 @@ export default async function CandidateSettingsPage() {
             <p className="flex items-center gap-2">
               <span className="text-ink-subtle">Phone verification:</span>{" "}
               <PlaceholderInline label="SMS OTP integration pending — email verification used" />
+            </p>
+            <p className="pt-1">
+              <Link href="/auth/update-password" className="text-brand-700 hover:underline">
+                Change password
+              </Link>
             </p>
             <form action="/auth/sign-out" method="post" className="pt-2">
               <button className="rounded-lg border border-surface-border px-3 py-1.5 text-sm text-status-danger hover:bg-red-50">

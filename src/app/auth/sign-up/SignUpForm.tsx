@@ -4,10 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { env } from "@/lib/env";
-import { Field, Input, Select } from "@/components/ui/form";
+import { Field, Input, Select, PasswordInput } from "@/components/ui/form";
 import { Button, Alert } from "@/components/ui/primitives";
 import { signUpSchema, fieldErrors } from "@/lib/validation";
 import { ROLE_LABELS } from "@/lib/constants";
+import { isEmailAlreadyRegistered } from "./actions";
+
+const EXISTING_ACCOUNT_MESSAGE =
+  "An account with this email already exists. Sign in instead, or use a different email.";
 
 export function SignUpForm() {
   const router = useRouter();
@@ -33,6 +37,15 @@ export function SignUpForm() {
     }
     setErrors({});
     setLoading(true);
+
+    // Block duplicate emails before calling signUp so Supabase does not send
+    // another confirmation email for an existing account (user_repeated_signup).
+    if (await isEmailAlreadyRegistered(parsed.data.email)) {
+      setLoading(false);
+      setFormError(EXISTING_ACCOUNT_MESSAGE);
+      return;
+    }
+
     const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({
       email: parsed.data.email,
@@ -44,7 +57,18 @@ export function SignUpForm() {
     });
     setLoading(false);
     if (error) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes("already") || msg.includes("registered")) {
+        setFormError(EXISTING_ACCOUNT_MESSAGE);
+        return;
+      }
       setFormError(error.message);
+      return;
+    }
+    // Supabase obfuscates duplicate signups: returns a user with empty identities
+    // and no session instead of an error (prevents email enumeration by default).
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      setFormError(EXISTING_ACCOUNT_MESSAGE);
       return;
     }
     // If email confirmation is required, there is no session yet.
@@ -95,10 +119,9 @@ export function SignUpForm() {
         hint="At least 8 characters."
         required
       >
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="new-password"
           placeholder="••••••••"
         />

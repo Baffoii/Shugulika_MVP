@@ -7,7 +7,9 @@ test("landing page renders the Shugulika brand and a jobs entry point", async ({
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByRole("link", { name: /browse jobs/i }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: /create account|create a candidate profile/i }).first()).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /create account|create a candidate profile/i }).first(),
+  ).toBeVisible();
 });
 
 test("job board shows the search + filter controls", async ({ page }) => {
@@ -21,11 +23,16 @@ test("job board shows the search + filter controls", async ({ page }) => {
 test("sign-in page exposes an accessible form", async ({ page }) => {
   await page.goto("/auth/sign-in");
   await expect(page.getByLabel(/email/i)).toBeVisible();
-  await expect(page.getByLabel(/password/i)).toBeVisible();
+  // Prefer the password input by name — getByLabel(/password/i) also matches the
+  // show/hide toggle's aria-label ("Show password").
+  await expect(page.locator('input[name="password"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: /show password/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
 });
 
-test("protected candidate route redirects unauthenticated visitors to sign-in", async ({ page }) => {
+test("protected candidate route redirects unauthenticated visitors to sign-in", async ({
+  page,
+}) => {
   await page.goto("/candidate/dashboard");
   await expect(page).toHaveURL(/\/auth\/sign-in/);
   // and preserves where they were headed

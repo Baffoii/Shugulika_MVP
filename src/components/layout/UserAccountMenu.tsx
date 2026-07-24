@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, LogOut } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, KeyRound, LogOut } from "lucide-react";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -50,21 +51,27 @@ export function UserAccountMenu({ userName, email }: { userName: string; email: 
             <p className="truncate text-sm font-medium text-ink">{userName || "Signed in"}</p>
             <p className="truncate text-xs text-ink-subtle">{email}</p>
           </div>
-          <form
-            action="/auth/sign-out"
-            method="post"
-            className="border-t border-surface-border pt-1"
-          >
-            <button
-              type="submit"
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-status-danger hover:bg-red-50",
-              )}
+          <div className="border-t border-surface-border pt-1">
+            <Link
+              href="/auth/update-password"
+              className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-ink hover:bg-surface-muted"
               role="menuitem"
+              onClick={() => setOpen(false)}
             >
-              <LogOut className="h-4 w-4" /> Sign out
-            </button>
-          </form>
+              <KeyRound className="h-4 w-4" /> Change password
+            </Link>
+            <form action="/auth/sign-out" method="post">
+              <button
+                type="submit"
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-status-danger hover:bg-red-50",
+                )}
+                role="menuitem"
+              >
+                <LogOut className="h-4 w-4" /> Sign out
+              </button>
+            </form>
+          </div>
         </div>
       ) : null}
     </div>
