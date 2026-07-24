@@ -5,9 +5,31 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Major upgrades require dedicated migrations, so we don't take them
+    # automatically:
+    #   * The dev-dependencies group is restricted to minor/patch, so grouped
+    #     dev bumps never again bundle a breaking major (e.g. typescript@7,
+    #     vitest@4). Dev majors are done deliberately, by hand.
+    #   * Known framework/tooling majors that need a migration are ignored
+    #     outright so Dependabot stops reopening them. next@16 removes
+    #     `next lint` (see scripts/audit-ci.mjs); eslint@10 / eslint-config-next@16
+    #     need an ESLint flat-config migration; typescript@7 is the preview
+    #     native rewrite. Drop these once we schedule the migration.
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-config-next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:
         dependency-type: development
+        update-types:
+          - "minor"
+          - "patch"
       production-dependencies:
         dependency-type: production
   - package-ecosystem: github-actions
