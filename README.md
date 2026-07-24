@@ -30,6 +30,8 @@ OPENAI_RESUME_MODEL=gpt-4.1-mini   # optional
 OPENAI_SCREENING_MODEL=gpt-4.1-mini # optional
 OPENAI_PREPAID_BALANCE_USD=10      # optional — HQ AI credits “remaining” estimate
 SUPABASE_SERVICE_ROLE_KEY=...      # seed:users + server document preview/export (never browser)
+RESEND_API_KEY=...                 # optional — employer decision emails (changes requested / approved)
+EMAIL_FROM=Shugulika <onboarding@your-verified-domain.com>  # required with RESEND_API_KEY
 ```
 > Never put a Supabase service-role/secret key or OpenAI key in any `NEXT_PUBLIC_*` variable.
 
@@ -368,7 +370,10 @@ scheduler or manual staff action.
   **masked** submission review (identity/contact hidden); decision workflow
   (shortlist / request interview / reject-with-reason) with audit; employer comments. Employers only ever see
   candidates submitted to them (enforced by RLS). Client Submission from the recruiter portal creates that pack
-  automatically while the application is active.
+  automatically while the application is active. New employers complete company registration at
+  `/onboarding/employer`; HQ/franchise review can request changes or approve. With `RESEND_API_KEY` +
+  `EMAIL_FROM` set, those two decisions also send a best-effort email to the applicant (in-app
+  notifications always remain the source of truth).
 - **Franchise & HQ**: metrics dashboards (RLS-scoped), franchise/employer/job/placement/invoice lists, **audit log**
   viewer (append-only, HQ-only), and HQ **AI credits** (`/hq/ai-usage`) — estimated OpenAI spend by purpose
   (CV extraction, summary/headline drafts, role-fit screens) with links to the official OpenAI usage dashboard.
