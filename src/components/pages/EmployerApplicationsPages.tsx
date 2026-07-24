@@ -198,8 +198,7 @@ export async function EmployerApplicationReviewPage({
   const { application: app, events, eligibleFranchises } = detail;
 
   const orgType =
-    ORGANIZATION_TYPES.find((t) => t.key === app.organization_type)?.label ??
-    app.organization_type;
+    ORGANIZATION_TYPES.find((t) => t.key === app.organization_type)?.label ?? app.organization_type;
   const country = COUNTRIES.find((c) => c.code === app.country_code)?.name ?? app.country_code;
   const rejectionLabel = EMPLOYER_REJECTION_CATEGORIES.find(
     (c) => c.key === app.rejection_category,

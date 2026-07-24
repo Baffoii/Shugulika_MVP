@@ -129,9 +129,7 @@ async function enrichApplications(
   if (rows.length === 0) return [];
   const supabase = createClient();
   const userIds = [...new Set(rows.map((r) => r.applicant_user_id))];
-  const orgIds = [
-    ...new Set(rows.map((r) => r.assigned_org_id).filter((v): v is string => !!v)),
-  ];
+  const orgIds = [...new Set(rows.map((r) => r.assigned_org_id).filter((v): v is string => !!v))];
   const [{ data: profiles }, { data: orgs }] = await Promise.all([
     supabase.from("profiles").select("id,full_name,email").in("id", userIds),
     orgIds.length

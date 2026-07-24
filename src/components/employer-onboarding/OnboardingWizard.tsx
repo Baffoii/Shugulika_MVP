@@ -107,11 +107,7 @@ export function CompanySection({ app, guidance }: SectionProps) {
         <Input id="legal_name" name="legal_name" defaultValue={app?.legal_name ?? ""} required />
         <FieldGuidance field="legal_name" guidance={guidance} />
       </Field>
-      <Field
-        label="Trading name (if different)"
-        htmlFor="trading_name"
-        error={err.trading_name}
-      >
+      <Field label="Trading name (if different)" htmlFor="trading_name" error={err.trading_name}>
         <Input id="trading_name" name="trading_name" defaultValue={app?.trading_name ?? ""} />
         <FieldGuidance field="trading_name" guidance={guidance} />
       </Field>
@@ -141,7 +137,12 @@ export function CompanySection({ app, guidance }: SectionProps) {
         <FieldGuidance field="industry" guidance={guidance} />
       </Field>
       <Field label="Company size" htmlFor="company_size" required error={err.company_size}>
-        <Select id="company_size" name="company_size" defaultValue={app?.company_size ?? ""} required>
+        <Select
+          id="company_size"
+          name="company_size"
+          defaultValue={app?.company_size ?? ""}
+          required
+        >
           <option value="">Select</option>
           {COMPANY_SIZES.map((s) => (
             <option key={s} value={s}>
@@ -191,7 +192,12 @@ export function AddressSection({ app, guidance }: SectionProps) {
       action={action}
     >
       <Field label="Country" htmlFor="country_code" required error={err.country_code}>
-        <Select id="country_code" name="country_code" defaultValue={app?.country_code ?? "TZ"} required>
+        <Select
+          id="country_code"
+          name="country_code"
+          defaultValue={app?.country_code ?? "TZ"}
+          required
+        >
           {COUNTRIES.map((c) => (
             <option key={c.code} value={c.code} disabled={!c.active}>
               {c.name}
@@ -209,7 +215,12 @@ export function AddressSection({ app, guidance }: SectionProps) {
         <Input id="city" name="city" defaultValue={app?.city ?? ""} required />
         <FieldGuidance field="city" guidance={guidance} />
       </Field>
-      <Field label="Physical address" htmlFor="physical_address" required error={err.physical_address}>
+      <Field
+        label="Physical address"
+        htmlFor="physical_address"
+        required
+        error={err.physical_address}
+      >
         <Input
           id="physical_address"
           name="physical_address"
@@ -219,8 +230,16 @@ export function AddressSection({ app, guidance }: SectionProps) {
         <FieldGuidance field="physical_address" guidance={guidance} />
       </Field>
       <div className="md:col-span-2">
-        <Field label="Postal address (if applicable)" htmlFor="postal_address" error={err.postal_address}>
-          <Input id="postal_address" name="postal_address" defaultValue={app?.postal_address ?? ""} />
+        <Field
+          label="Postal address (if applicable)"
+          htmlFor="postal_address"
+          error={err.postal_address}
+        >
+          <Input
+            id="postal_address"
+            name="postal_address"
+            defaultValue={app?.postal_address ?? ""}
+          />
           <FieldGuidance field="postal_address" guidance={guidance} />
         </Field>
       </div>
@@ -241,7 +260,12 @@ export function ContactSection({ app, guidance }: SectionProps) {
       action={action}
     >
       <Field label="Full name" htmlFor="contact_name" required error={err.contact_name}>
-        <Input id="contact_name" name="contact_name" defaultValue={app?.contact_name ?? ""} required />
+        <Input
+          id="contact_name"
+          name="contact_name"
+          defaultValue={app?.contact_name ?? ""}
+          required
+        />
         <FieldGuidance field="contact_name" guidance={guidance} />
       </Field>
       <Field label="Job title" htmlFor="contact_job_title" required error={err.contact_job_title}>
@@ -264,7 +288,12 @@ export function ContactSection({ app, guidance }: SectionProps) {
         <FieldGuidance field="contact_email" guidance={guidance} />
       </Field>
       <Field label="Phone number" htmlFor="contact_phone" required error={err.contact_phone}>
-        <Input id="contact_phone" name="contact_phone" defaultValue={app?.contact_phone ?? ""} required />
+        <Input
+          id="contact_phone"
+          name="contact_phone"
+          defaultValue={app?.contact_phone ?? ""}
+          required
+        />
         <FieldGuidance field="contact_phone" guidance={guidance} />
       </Field>
       <div className="md:col-span-2 space-y-1">
@@ -301,8 +330,11 @@ export function RoutingSection({
       <div className="md:col-span-2 space-y-3">
         {!hasGeography ? (
           <Alert tone="warn">
-            Complete the <Link href="?step=address" className="font-medium underline">registered
-            address</Link> first so we can propose an eligible office.
+            Complete the{" "}
+            <Link href="?step=address" className="font-medium underline">
+              registered address
+            </Link>{" "}
+            first so we can propose an eligible office.
           </Alert>
         ) : franchises.length === 0 ? (
           <Alert tone="info">

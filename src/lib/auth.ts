@@ -80,9 +80,7 @@ export async function requirePortal(portal: Portal): Promise<SessionContext> {
  * membership scoped to an ACTIVE + VERIFIED employer organization. An
  * unscoped employer_user membership (fresh sign-up) does not count.
  */
-export async function getApprovedEmployerOrg(
-  ctx: SessionContext,
-): Promise<OrganizationRow | null> {
+export async function getApprovedEmployerOrg(ctx: SessionContext): Promise<OrganizationRow | null> {
   const scoped = ctx.memberships.filter(
     (m) => m.status === "active" && m.role === "employer_user" && m.organization_id,
   );

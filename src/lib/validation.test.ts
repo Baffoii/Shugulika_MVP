@@ -11,6 +11,12 @@ import {
   interviewQuestionSchema,
   interviewReviewSchema,
   interviewTemplateSchema,
+  employerCompanySectionSchema,
+  employerAddressSectionSchema,
+  employerContactSectionSchema,
+  employerRoutingSectionSchema,
+  employerDeclarationsSectionSchema,
+  normalizeLanguageProficiency,
   fieldErrors,
 } from "@/lib/validation";
 
@@ -168,6 +174,140 @@ describe("language validation", () => {
   it("rejects unknown proficiency values", () => {
     const r = languageSchema.safeParse({ language: "English", proficiency: "kinda ok" });
     expect(r.success).toBe(false);
+  });
+});
+
+describe("normalizeLanguageProficiency", () => {
+  it("treats null, undefined, and blank values as empty", () => {
+    expect(normalizeLanguageProficiency(null)).toBe("");
+    expect(normalizeLanguageProficiency(undefined)).toBe("");
+    expect(normalizeLanguageProficiency("")).toBe("");
+    expect(normalizeLanguageProficiency("   ")).toBe("");
+  });
+
+  it("maps aliases and rejects unknown tokens", () => {
+    expect(normalizeLanguageProficiency("mother tongue")).toBe("Native");
+    expect(normalizeLanguageProficiency("FLUENT")).toBe("Fluent");
+    expect(normalizeLanguageProficiency("kinda ok")).toBeNull();
+  });
+});
+
+describe("employer onboarding section validation", () => {
+  const company = {
+    legal_name: "Test Company Ltd",
+    trading_name: "",
+    organization_type: "private_company",
+    industry: "Technology",
+    company_size: "11-50",
+    year_established: "2018",
+    website: "",
+  };
+
+  it("accepts a complete company section and coerces year", () => {
+    const r = employerCompanySectionSchema.safeParse(company);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.year_established).toBe(2018);
+  });
+
+  it("rejects an incomplete company section", () => {
+    expect(employerCompanySectionSchema.safeParse({ ...company, legal_name: "" }).success).toBe(
+      false,
+    );
+    expect(
+      employerCompanySectionSchema.safeParse({ ...company, website: "not-a-url" }).success,
+    ).toBe(false);
+  });
+
+  it("accepts address, contact, routing, and declarations when complete", () => {
+    expect(
+      employerAddressSectionSchema.safeParse({
+        country_code: "TZ",
+        region: "Dar es Salaam",
+        city: "Dar es Salaam",
+        physical_address: "123 Samora Ave",
+        postal_address: "",
+      }).success,
+    ).toBe(true);
+
+    expect(
+      employerContactSectionSchema.safeParse({
+        contact_name: "Ada Admin",
+        contact_job_title: "HR Manager",
+        contact_email: "ada@example.com",
+        contact_phone: "+255700000000",
+        contact_is_authorized: true,
+      }).success,
+    ).toBe(true);
+
+    expect(employerRoutingSectionSchema.safeParse({ routing_mode: "auto" }).success).toBe(true);
+    expect(employerRoutingSectionSchema.safeParse({ routing_mode: "hq" }).success).toBe(true);
+    expect(
+      employerRoutingSectionSchema.safeParse({
+        routing_mode: "franchise",
+        requested_franchise_id: "00000000-0000-4000-8000-000000000001",
+      }).success,
+    ).toBe(true);
+
+    expect(
+      employerDeclarationsSectionSchema.safeParse({
+        declared_accurate: true,
+        declared_authorized: true,
+        accepted_terms: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("requires a franchise id only when routing_mode is franchise", () => {
+    const r = employerRoutingSectionSchema.safeParse({
+      routing_mode: "franchise",
+      requested_franchise_id: "",
+    });
+    expect(r.success).toBe(false);
+    if (r.success) return;
+    expect(fieldErrors(r.error).requested_franchise_id).toBe("Choose a Shugulika office");
+  });
+
+  it("requires authorization and declaration confirmations", () => {
+    expect(
+      employerContactSectionSchema.safeParse({
+        contact_name: "Ada Admin",
+        contact_job_title: "HR Manager",
+        contact_email: "ada@example.com",
+        contact_phone: "+255700000000",
+        contact_is_authorized: false,
+      }).success,
+    ).toBe(false);
+    expect(
+      employerDeclarationsSectionSchema.safeParse({
+        declared_accurate: false,
+        declared_authorized: true,
+        accepted_terms: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      employerDeclarationsSectionSchema.safeParse({
+        declared_accurate: true,
+        declared_authorized: false,
+        accepted_terms: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      employerDeclarationsSectionSchema.safeParse({
+        declared_accurate: true,
+        declared_authorized: true,
+        accepted_terms: false,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("allows blank optional company fields", () => {
+    const r = employerCompanySectionSchema.safeParse({
+      ...company,
+      year_established: "",
+      website: "https://example.com",
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.year_established).toBe("");
   });
 });
 

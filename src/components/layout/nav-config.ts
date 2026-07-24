@@ -76,7 +76,11 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
   franchise: [
     { href: "/franchise/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/franchise/recruiters", label: "Assignments", icon: Users },
-    { href: "/franchise/employer-applications", label: "Employer applications", icon: ClipboardList },
+    {
+      href: "/franchise/employer-applications",
+      label: "Employer applications",
+      icon: ClipboardList,
+    },
     { href: "/franchise/employers", label: "Employers", icon: Store },
     { href: "/franchise/jobs", label: "Jobs", icon: Briefcase },
     { href: "/franchise/candidates", label: "Candidates", icon: User },

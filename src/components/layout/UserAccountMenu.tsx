@@ -6,13 +6,7 @@ import { initials } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 /** Boxed account control used in portal chrome and standalone flows (e.g. onboarding). */
-export function UserAccountMenu({
-  userName,
-  email,
-}: {
-  userName: string;
-  email: string;
-}) {
+export function UserAccountMenu({ userName, email }: { userName: string; email: string }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +50,11 @@ export function UserAccountMenu({
             <p className="truncate text-sm font-medium text-ink">{userName || "Signed in"}</p>
             <p className="truncate text-xs text-ink-subtle">{email}</p>
           </div>
-          <form action="/auth/sign-out" method="post" className="border-t border-surface-border pt-1">
+          <form
+            action="/auth/sign-out"
+            method="post"
+            className="border-t border-surface-border pt-1"
+          >
             <button
               type="submit"
               className={cn(

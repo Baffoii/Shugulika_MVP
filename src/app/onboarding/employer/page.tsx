@@ -25,10 +25,7 @@ import {
   StartRevisionButton,
   WithdrawApplicationButton,
 } from "@/components/employer-onboarding/StatusActions";
-import {
-  getApprovedEmployerOrg,
-  requireSession,
-} from "@/lib/auth";
+import { getApprovedEmployerOrg, requireSession } from "@/lib/auth";
 import {
   getEligibleFranchises,
   getEmployerApplicationEvents,
@@ -50,10 +47,7 @@ import { EMPLOYER_REJECTION_CATEGORIES } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Employer registration" };
 
-const WIZARD_STEPS: WizardStep[] = [
-  ...ONBOARDING_STEPS.map((s) => s.key),
-  "review",
-];
+const WIZARD_STEPS: WizardStep[] = [...ONBOARDING_STEPS.map((s) => s.key), "review"];
 
 function resolveStep(
   requested: string | undefined,
@@ -83,14 +77,11 @@ export default async function EmployerOnboardingPage({
   const editable = !app || canEditApplication(app.status);
   const guidance = app ? parseRequestedChanges(app.requested_changes) : [];
   const incomplete = app ? firstIncompleteStep(app) : "company";
-  const step = editable
-    ? resolveStep(searchParams.step, app?.status ?? null, incomplete)
-    : null;
+  const step = editable ? resolveStep(searchParams.step, app?.status ?? null, incomplete) : null;
 
-  const franchises =
-    app?.country_code
-      ? await getEligibleFranchises(app.country_code, app.region)
-      : [];
+  const franchises = app?.country_code
+    ? await getEligibleFranchises(app.country_code, app.region)
+    : [];
   const events = app ? await getEmployerApplicationEvents(app.id) : [];
 
   return (
@@ -98,10 +89,7 @@ export default async function EmployerOnboardingPage({
       <div className="border-b border-surface-border bg-white">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
           <Logo />
-          <UserAccountMenu
-            userName={ctx.profile?.full_name ?? ctx.email}
-            email={ctx.email}
-          />
+          <UserAccountMenu userName={ctx.profile?.full_name ?? ctx.email} email={ctx.email} />
         </div>
       </div>
 
@@ -109,8 +97,8 @@ export default async function EmployerOnboardingPage({
         <div className="mb-6">
           <h1 className="text-xl font-semibold text-ink">Register your company</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-            Complete your company registration so Shugulika can review and unlock the
-            employer portal.
+            Complete your company registration so Shugulika can review and unlock the employer
+            portal.
           </p>
         </div>
 
@@ -133,9 +121,7 @@ export default async function EmployerOnboardingPage({
                       <ul className="list-disc space-y-1 pl-5 text-sm text-ink">
                         {guidance.map((g, i) => (
                           <li key={i}>
-                            {g.field ? (
-                              <span className="font-medium">{g.field}: </span>
-                            ) : null}
+                            {g.field ? <span className="font-medium">{g.field}: </span> : null}
                             {g.instruction}
                           </li>
                         ))}
@@ -149,15 +135,9 @@ export default async function EmployerOnboardingPage({
             <StepNav current={step!} app={app} />
 
             <div className="mt-4">
-              {step === "company" ? (
-                <CompanySection app={app} guidance={guidance} />
-              ) : null}
-              {step === "address" ? (
-                <AddressSection app={app} guidance={guidance} />
-              ) : null}
-              {step === "contact" ? (
-                <ContactSection app={app} guidance={guidance} />
-              ) : null}
+              {step === "company" ? <CompanySection app={app} guidance={guidance} /> : null}
+              {step === "address" ? <AddressSection app={app} guidance={guidance} /> : null}
+              {step === "contact" ? <ContactSection app={app} guidance={guidance} /> : null}
               {step === "routing" ? (
                 <RoutingSection app={app} guidance={guidance} franchises={franchises} />
               ) : null}
@@ -295,7 +275,10 @@ function StatusPanel({
           <CardBody>
             <ul className="space-y-3">
               {events.map((event) => (
-                <li key={event.id} className="border-b border-surface-border/60 pb-3 last:border-0 last:pb-0">
+                <li
+                  key={event.id}
+                  className="border-b border-surface-border/60 pb-3 last:border-0 last:pb-0"
+                >
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className="text-sm font-medium text-ink">
                       {event.message || event.action.replace(/_/g, " ")}

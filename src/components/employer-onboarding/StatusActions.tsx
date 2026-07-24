@@ -62,7 +62,8 @@ export function StartRevisionButton({
         onClick={() =>
           startTransition(async () => {
             const result = await startRevisedEmployerApplicationAction(previousApplicationId);
-            if (result && !result.ok) setError(result.error ?? "Could not start a new application.");
+            if (result && !result.ok)
+              setError(result.error ?? "Could not start a new application.");
           })
         }
       >
