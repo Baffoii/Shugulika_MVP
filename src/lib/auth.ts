@@ -3,7 +3,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ROLES, type Portal, type Role } from "@/lib/constants";
 import { rolesCanAccessPortal, homeForRoles } from "@/lib/rbac";
-import type { ProfileRow, MembershipRow, CandidateProfileRow } from "@/lib/database.types";
+import type {
+  ProfileRow,
+  MembershipRow,
+  CandidateProfileRow,
+  OrganizationRow,
+} from "@/lib/database.types";
 
 export { rolesCanAccessPortal, homeForRoles };
 
@@ -68,6 +73,46 @@ export async function requirePortal(portal: Portal): Promise<SessionContext> {
     redirect("/unauthorized");
   }
   return ctx;
+}
+
+/**
+ * Employer onboarding gate: usable employer access requires an ACTIVE
+ * membership scoped to an ACTIVE + VERIFIED employer organization. An
+ * unscoped employer_user membership (fresh sign-up) does not count.
+ */
+export async function getApprovedEmployerOrg(ctx: SessionContext): Promise<OrganizationRow | null> {
+  const scoped = ctx.memberships.filter(
+    (m) => m.status === "active" && m.role === "employer_user" && m.organization_id,
+  );
+  if (scoped.length === 0) return null;
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("organizations")
+    .select("*")
+    .in(
+      "id",
+      scoped.map((m) => m.organization_id as string),
+    )
+    .eq("org_type", "employer")
+    .eq("status", "active")
+    .eq("verification_status", "verified")
+    .limit(1)
+    .maybeSingle();
+  return (data as OrganizationRow | null) ?? null;
+}
+
+/**
+ * Require an approved employer organization for the employer portal / employer
+ * server actions. Redirects unapproved employers to the onboarding journey.
+ */
+export async function requireApprovedEmployer(): Promise<{
+  ctx: SessionContext;
+  employerOrg: OrganizationRow;
+}> {
+  const ctx = await requirePortal("employer");
+  const employerOrg = await getApprovedEmployerOrg(ctx);
+  if (!employerOrg) redirect("/onboarding/employer");
+  return { ctx, employerOrg };
 }
 
 /** The org ids a user is a member of (used to scope org-owned reads/writes). */

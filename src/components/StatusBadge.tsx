@@ -51,6 +51,9 @@ const TONE_BY_STATUS: Record<string, BadgeTone> = {
   paid: "success",
   overdue: "danger",
   voided: "neutral",
+  // employer onboarding application
+  under_review: "info",
+  changes_requested: "warn",
   // verification / generic
   verified: "success",
   pending: "warn",

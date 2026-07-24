@@ -18,6 +18,10 @@ function notificationHref(
     if (portal === "franchise") return "/franchise/jobs";
     if (portal === "recruiter") return "/recruiter/jobs";
   }
+  if (subjectType === "employer_application" && subjectId) {
+    if (portal === "hq") return `/hq/employer-applications/${subjectId}`;
+    if (portal === "franchise") return `/franchise/employer-applications/${subjectId}`;
+  }
   if (subjectType === "application" && subjectId && portal === "recruiter") {
     return `/recruiter/applications/${subjectId}`;
   }

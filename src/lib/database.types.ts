@@ -44,6 +44,15 @@ export type OrganizationRow = {
   website: string | null;
   company_size: string | null;
   verification_status: string;
+  trading_name: string | null;
+  legal_type: string | null;
+  year_established: number | null;
+  region: string | null;
+  city: string | null;
+  physical_address: string | null;
+  postal_address: string | null;
+  /** Franchise geographic coverage inside its country. NULL = whole country. */
+  coverage_regions: string[] | null;
   created_at: string;
   updated_at: string;
 };
@@ -56,7 +65,86 @@ export type MembershipRow = {
   /** Present for recruiter memberships: generic | head | junior */
   recruiter_level: "generic" | "head" | "junior" | null;
   status: string;
+  /** First employer administrator flag (company administration capability). */
+  is_org_admin: boolean;
   created_at: string;
+};
+
+// ---- Employer onboarding (Workflow 1) ---------------------------------------
+export type EmployerApplicationStatusDb =
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "changes_requested"
+  | "approved"
+  | "rejected"
+  | "withdrawn";
+
+export type EmployerApplicationRow = {
+  id: string;
+  applicant_user_id: string;
+  status: EmployerApplicationStatusDb;
+  version: number;
+  legal_name: string | null;
+  trading_name: string | null;
+  organization_type: string | null;
+  industry: string | null;
+  company_size: string | null;
+  year_established: number | null;
+  website: string | null;
+  country_code: string | null;
+  region: string | null;
+  city: string | null;
+  physical_address: string | null;
+  postal_address: string | null;
+  contact_name: string | null;
+  contact_job_title: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  contact_is_authorized: boolean;
+  routing_mode: "auto" | "franchise" | "hq";
+  requested_franchise_id: string | null;
+  /** Responsible review queue. NULL = HQ queue. */
+  assigned_org_id: string | null;
+  declared_accurate: boolean;
+  declared_authorized: boolean;
+  accepted_terms: boolean;
+  duplicate_warning: boolean;
+  duplicate_reasons: string[];
+  changes_requested_message: string | null;
+  requested_changes: Json;
+  rejection_category: string | null;
+  rejection_reason: string | null;
+  reapply_allowed: boolean | null;
+  previous_application_id: string | null;
+  resulting_org_id: string | null;
+  submitted_at: string | null;
+  first_submitted_at: string | null;
+  decided_at: string | null;
+  decided_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EmployerApplicationEventRow = {
+  id: number;
+  application_id: string;
+  actor_id: string | null;
+  action: string;
+  from_status: string | null;
+  to_status: string | null;
+  assigned_org_id: string | null;
+  message: string | null;
+  visible_to_employer: boolean;
+  metadata: Json;
+  created_at: string;
+};
+
+export type EligibleFranchiseRow = {
+  id: string;
+  name: string;
+  country_code: string;
+  coverage_regions: string[] | null;
 };
 
 export type JobRoleRow = {
@@ -952,6 +1040,8 @@ export type Database = {
       profiles: Tbl<ProfileRow>;
       organizations: Tbl<OrganizationRow>;
       memberships: Tbl<MembershipRow>;
+      employer_applications: Tbl<EmployerApplicationRow>;
+      employer_application_events: Tbl<EmployerApplicationEventRow>;
       job_roles: Tbl<JobRoleRow>;
       recruiter_role_assignments: Tbl<RecruiterRoleAssignmentRow>;
       recruiter_kpi_targets: Tbl<RecruiterKpiTargetRow>;
@@ -1153,6 +1243,52 @@ export type Database = {
       project_searchable_candidate: {
         Args: { p_candidate: string };
         Returns: DiscoverableCandidateRow[];
+      };
+      eligible_employer_franchises: {
+        Args: { p_country: string; p_region?: string | null };
+        Returns: EligibleFranchiseRow[];
+      };
+      submit_employer_application: {
+        Args: { p_application_id: string };
+        Returns: EmployerApplicationRow;
+      };
+      withdraw_employer_application: {
+        Args: { p_application_id: string };
+        Returns: undefined;
+      };
+      open_employer_application_review: {
+        Args: { p_application_id: string };
+        Returns: undefined;
+      };
+      approve_employer_application: {
+        Args: { p_application_id: string };
+        Returns: string;
+      };
+      request_employer_application_changes: {
+        Args: { p_application_id: string; p_message: string; p_changes?: Json };
+        Returns: undefined;
+      };
+      reject_employer_application: {
+        Args: {
+          p_application_id: string;
+          p_category: string;
+          p_reason: string;
+          p_reapply_allowed: boolean;
+          p_internal_note?: string | null;
+        };
+        Returns: undefined;
+      };
+      reassign_employer_application: {
+        Args: { p_application_id: string; p_org_id?: string | null };
+        Returns: undefined;
+      };
+      add_employer_application_note: {
+        Args: { p_application_id: string; p_note: string };
+        Returns: undefined;
+      };
+      start_revised_employer_application: {
+        Args: { p_previous_id: string };
+        Returns: string;
       };
     };
     Enums: Record<string, never>;

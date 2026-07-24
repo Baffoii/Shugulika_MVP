@@ -310,6 +310,53 @@ export const CANDIDATE_FACING_STATUS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Employer onboarding applications (Workflow 1)
+// ---------------------------------------------------------------------------
+export const EMPLOYER_APPLICATION_STATUSES = [
+  "draft",
+  "submitted",
+  "under_review",
+  "changes_requested",
+  "approved",
+  "rejected",
+  "withdrawn",
+] as const;
+export type EmployerApplicationStatus = (typeof EMPLOYER_APPLICATION_STATUSES)[number];
+
+export const EMPLOYER_APPLICATION_STATUS_LABELS: Record<EmployerApplicationStatus, string> = {
+  draft: "Draft",
+  submitted: "Submitted",
+  under_review: "Under review",
+  changes_requested: "Changes requested",
+  approved: "Approved",
+  rejected: "Rejected",
+  withdrawn: "Withdrawn",
+};
+
+/** Structured rejection categories (mirrors the DB check constraint). */
+export const EMPLOYER_REJECTION_CATEGORIES = [
+  { key: "duplicate_company", label: "Duplicate company" },
+  { key: "information_mismatch", label: "Information could not be verified" },
+  { key: "ineligible_geography", label: "Geography not currently served" },
+  { key: "not_a_genuine_employer", label: "Not a genuine employer" },
+  { key: "policy_violation", label: "Policy violation" },
+  { key: "other", label: "Other (reason required)" },
+] as const;
+export type EmployerRejectionCategory = (typeof EMPLOYER_REJECTION_CATEGORIES)[number]["key"];
+
+export const ORGANIZATION_TYPES = [
+  { key: "private_company", label: "Private company" },
+  { key: "public_company", label: "Public / listed company" },
+  { key: "ngo", label: "NGO / non-profit" },
+  { key: "government", label: "Government / public sector" },
+  { key: "partnership", label: "Partnership" },
+  { key: "sole_proprietor", label: "Sole proprietor" },
+  { key: "other", label: "Other" },
+] as const;
+
+export const COMPANY_SIZES = ["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"] as const;
+
+// ---------------------------------------------------------------------------
 // Job order / posting statuses
 // ---------------------------------------------------------------------------
 export const JOB_ORDER_STATUSES = [

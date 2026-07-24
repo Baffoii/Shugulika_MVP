@@ -70,6 +70,7 @@ describe("recruiter role assignment permissions", () => {
     country_code: "TZ",
     recruiter_level: null,
     status: "active",
+    is_org_admin: false,
     created_at: "",
   };
   const opsMem: MembershipRow = { ...franchiseMem, role: "operations", country_code: "KE" };
