@@ -5,6 +5,17 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Defer framework/tooling major upgrades that require a dedicated migration.
+    # next@16 removes `next lint` and is intentionally deferred (see
+    # scripts/audit-ci.mjs); eslint@10 / eslint-config-next@16 need an ESLint
+    # flat-config migration and pair with Next 16. Drop these once we migrate.
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-config-next"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:
         dependency-type: development
