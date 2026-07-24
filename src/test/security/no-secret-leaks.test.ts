@@ -35,7 +35,7 @@ describe("no service-role key or secrets in browser-reachable code", () => {
       if (!isClient) continue;
       // Client bundles must never reference these env var names (server-only).
       expect(src, `${f} is a client component and must not read server secrets`).not.toMatch(
-        /SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY/,
+        /SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY|RESEND_API_KEY/,
       );
     }
   });

@@ -44,7 +44,8 @@ for (const key of REQUIRED_PUBLIC) {
 }
 
 // A server secret must never be exposed to the browser via a NEXT_PUBLIC_ name.
-const FORBIDDEN_PUBLIC = /^NEXT_PUBLIC_.*(SERVICE_ROLE|SERVICE_KEY|SECRET|PRIVATE_KEY|OPENAI)/i;
+const FORBIDDEN_PUBLIC =
+  /^NEXT_PUBLIC_.*(SERVICE_ROLE|SERVICE_KEY|SECRET|PRIVATE_KEY|OPENAI|RESEND)/i;
 for (const key of Object.keys(process.env)) {
   if (FORBIDDEN_PUBLIC.test(key)) {
     errors.push(`Server secret exposed to the browser via a NEXT_PUBLIC_ name: ${key}`);

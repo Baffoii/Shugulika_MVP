@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth";
 import { EMPLOYER_REJECTION_CATEGORIES } from "@/lib/constants";
-import type { Json } from "@/lib/database.types";
+import { employerDecisionCtaUrl, sendEmployerDecisionEmail } from "@/lib/email/send";
+import { getOrganizationName } from "@/lib/data/employer-applications";
+import type { EmployerApplicationRow, Json, ProfileRow } from "@/lib/database.types";
 
 export interface ReviewActionResult {
   ok: boolean;
@@ -39,6 +41,63 @@ function revalidateReviewPaths(applicationId: string) {
   }
 }
 
+async function loadApplicationForEmail(
+  applicationId: string,
+): Promise<{ app: EmployerApplicationRow; applicantEmail: string } | null> {
+  const supabase = createClient();
+  const { data: app } = await supabase
+    .from("employer_applications")
+    .select("*")
+    .eq("id", applicationId)
+    .maybeSingle();
+  if (!app) return null;
+  const row = app as EmployerApplicationRow;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("email")
+    .eq("id", row.applicant_user_id)
+    .maybeSingle();
+  const email = ((profile as Pick<ProfileRow, "email"> | null)?.email ?? "").trim();
+  if (!email) return null;
+  return { app: row, applicantEmail: email };
+}
+
+/** Best-effort; never blocks the reviewer action. */
+async function notifyEmployerChangesRequested(
+  applicationId: string,
+  explanation: string,
+  changes: { field?: string; instruction: string }[],
+) {
+  const loaded = await loadApplicationForEmail(applicationId);
+  if (!loaded) return;
+  await sendEmployerDecisionEmail({
+    to: loaded.applicantEmail,
+    kind: "changes_requested",
+    payload: {
+      companyName: loaded.app.legal_name ?? "your company",
+      explanation,
+      changes,
+      ctaUrl: employerDecisionCtaUrl("/onboarding/employer"),
+    },
+  });
+}
+
+/** Best-effort; never blocks the reviewer action. */
+async function notifyEmployerApproved(applicationId: string) {
+  const loaded = await loadApplicationForEmail(applicationId);
+  if (!loaded) return;
+  const officeName = (await getOrganizationName(loaded.app.assigned_org_id)) ?? "Shugulika HQ";
+  await sendEmployerDecisionEmail({
+    to: loaded.applicantEmail,
+    kind: "approved",
+    payload: {
+      companyName: loaded.app.legal_name ?? "Your company",
+      officeName,
+      ctaUrl: employerDecisionCtaUrl("/employer/dashboard"),
+    },
+  });
+}
+
 export async function openEmployerApplicationReviewAction(
   applicationId: string,
 ): Promise<ReviewActionResult> {
@@ -64,6 +123,7 @@ export async function approveEmployerApplicationAction(
   });
   if (error) return { ok: false, error: error.message };
   revalidateReviewPaths(applicationId);
+  await notifyEmployerApproved(applicationId);
   return { ok: true, message: "Company approved and activated." };
 }
 
@@ -92,6 +152,7 @@ export async function requestEmployerApplicationChangesAction(
   });
   if (error) return { ok: false, error: error.message };
   revalidateReviewPaths(applicationId);
+  await notifyEmployerChangesRequested(applicationId, trimmed, cleaned);
   return { ok: true, message: "Application returned to the employer for changes." };
 }
 
