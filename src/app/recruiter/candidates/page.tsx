@@ -12,22 +12,23 @@ export const metadata: Metadata = { title: "Candidates" };
 export default async function RecruiterCandidatesPage({
   searchParams,
 }: {
-  searchParams: {
+  searchParams: Promise<{
     q?: string;
     skill?: string;
     country?: string;
     city?: string;
     availability?: string;
     experience_level?: string;
-  };
+  }>;
 }) {
+  const filters = await searchParams;
   const { candidates, error } = await searchTalentPool({
-    q: searchParams.q,
-    skill: searchParams.skill,
-    country: searchParams.country,
-    city: searchParams.city,
-    availability: searchParams.availability,
-    experience_level: searchParams.experience_level,
+    q: filters.q,
+    skill: filters.skill,
+    country: filters.country,
+    city: filters.city,
+    availability: filters.availability,
+    experience_level: filters.experience_level,
   });
 
   return (

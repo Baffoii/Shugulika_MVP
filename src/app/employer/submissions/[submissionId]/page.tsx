@@ -36,9 +36,10 @@ type Disclosed = {
 export default async function SubmissionDetailPage({
   params,
 }: {
-  params: { submissionId: string };
+  params: Promise<{ submissionId: string }>;
 }) {
-  const sub = await getSubmissionDetail(params.submissionId);
+  const { submissionId } = await params;
+  const sub = await getSubmissionDetail(submissionId);
   if (!sub) notFound();
   const supabase = createClient();
   const [{ data: comments }, { data: cvDoc }] = await Promise.all([

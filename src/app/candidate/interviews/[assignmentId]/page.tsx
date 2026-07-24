@@ -22,9 +22,10 @@ export const metadata: Metadata = { title: "Video interview" };
 export default async function InterviewInvitationPage({
   params,
 }: {
-  params: { assignmentId: string };
+  params: Promise<{ assignmentId: string }>;
 }) {
-  const detail = await getMyInterviewDetail(params.assignmentId);
+  const { assignmentId } = await params;
+  const detail = await getMyInterviewDetail(assignmentId);
   if (!detail) notFound();
   const { assignment, questions, jobTitle, employerName } = detail;
 

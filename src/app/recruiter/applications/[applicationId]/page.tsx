@@ -30,9 +30,10 @@ export const metadata: Metadata = { title: "Application" };
 export default async function ApplicationWorkspace({
   params,
 }: {
-  params: { applicationId: string };
+  params: Promise<{ applicationId: string }>;
 }) {
-  const detail = await getApplicationDetail(params.applicationId);
+  const { applicationId } = await params;
+  const detail = await getApplicationDetail(applicationId);
   if (!detail) notFound();
   const session = await requireSession();
   const canExportOriginal = isHqAdmin(session.roles);

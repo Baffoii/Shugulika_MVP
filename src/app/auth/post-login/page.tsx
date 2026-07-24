@@ -5,12 +5,12 @@ import { getApprovedEmployerOrg, getSessionContext, homeForRoles } from "@/lib/a
 export default async function PostLoginPage({
   searchParams,
 }: {
-  searchParams: { redirectTo?: string };
+  searchParams: Promise<{ redirectTo?: string }>;
 }) {
+  const { redirectTo } = await searchParams;
   const session = await getSessionContext();
   if (!session) redirect("/auth/sign-in");
-  if (searchParams.redirectTo && searchParams.redirectTo.startsWith("/"))
-    redirect(searchParams.redirectTo);
+  if (redirectTo && redirectTo.startsWith("/")) redirect(redirectTo);
   if (session.roles.length === 0) redirect("/onboarding");
   // Unapproved employers must finish company registration before the portal.
   if (session.roles.includes("employer_user") && !(await getApprovedEmployerOrg(session))) {

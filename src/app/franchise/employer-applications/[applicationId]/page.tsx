@@ -2,10 +2,11 @@ import { EmployerApplicationReviewPage } from "@/components/pages/EmployerApplic
 
 export const metadata = { title: "Review employer application" };
 
-export default function Page({ params }: { params: { applicationId: string } }) {
+export default async function Page({ params }: { params: Promise<{ applicationId: string }> }) {
+  const { applicationId } = await params;
   return (
     <EmployerApplicationReviewPage
-      applicationId={params.applicationId}
+      applicationId={applicationId}
       basePath="/franchise/employer-applications"
       canReassign={false}
     />

@@ -21,9 +21,10 @@ export const metadata = { title: "Interview results" };
 export default async function InterviewResultsPage({
   params,
 }: {
-  params: { assignmentId: string };
+  params: Promise<{ assignmentId: string }>;
 }) {
-  const results = await getInterviewResults(params.assignmentId);
+  const { assignmentId } = await params;
+  const results = await getInterviewResults(assignmentId);
   if (!results) notFound();
   const {
     assignment,

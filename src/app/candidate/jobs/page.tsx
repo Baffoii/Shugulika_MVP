@@ -6,13 +6,13 @@ export const metadata: Metadata = { title: "Browse jobs" };
 export default async function CandidateJobsPage({
   searchParams,
 }: {
-  searchParams: {
+  searchParams: Promise<{
     q?: string;
     country?: string;
     employment_type?: string;
     work_arrangement?: string;
     experience_level?: string;
-  };
+  }>;
 }) {
-  return <JobsBoard searchParams={searchParams} jobsBasePath="/candidate/jobs" />;
+  return <JobsBoard searchParams={await searchParams} jobsBasePath="/candidate/jobs" />;
 }
