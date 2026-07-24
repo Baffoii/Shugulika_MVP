@@ -174,7 +174,7 @@ jobs:
         # of upstream framework advisories (see scripts/audit-ci.mjs).
         run: npm run audit:ci
       - name: Secret scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
