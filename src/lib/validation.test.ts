@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import {
   signUpSchema,
+  updatePasswordSchema,
   stageChangeSchema,
   jobOrderSchema,
   candidateProfileSchema,
@@ -54,6 +55,31 @@ describe("sign-up validation", () => {
         email: "nope",
         password: "password1",
         role: "candidate",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("update-password validation", () => {
+  it("accepts matching passwords", () => {
+    expect(
+      updatePasswordSchema.safeParse({
+        password: "password1",
+        confirmPassword: "password1",
+      }).success,
+    ).toBe(true);
+  });
+  it("rejects mismatched or short passwords", () => {
+    expect(
+      updatePasswordSchema.safeParse({
+        password: "password1",
+        confirmPassword: "password2",
+      }).success,
+    ).toBe(false);
+    expect(
+      updatePasswordSchema.safeParse({
+        password: "short",
+        confirmPassword: "short",
       }).success,
     ).toBe(false);
   });

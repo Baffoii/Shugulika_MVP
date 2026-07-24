@@ -5,7 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/auth/post-login";
+  // Password-recovery emails pass next=/auth/update-password; confirmations default to post-login.
+  const type = searchParams.get("type");
+  const nextParam = searchParams.get("next");
+  const next = nextParam ?? (type === "recovery" ? "/auth/update-password" : "/auth/post-login");
 
   if (code) {
     const supabase = createClient();

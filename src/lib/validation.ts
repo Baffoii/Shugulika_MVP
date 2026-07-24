@@ -52,6 +52,17 @@ export const forgotPasswordSchema = z.object({
   email: z.string().email("Enter a valid email"),
 });
 
+export const updatePasswordSchema = z
+  .object({
+    password: z.string().min(8, "Use at least 8 characters"),
+    confirmPassword: z.string().min(1, "Confirm your password"),
+  })
+  .refine((v) => v.password === v.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+export type UpdatePasswordInput = z.infer<typeof updatePasswordSchema>;
+
 export const candidateProfileSchema = z.object({
   given_name: z.string().min(1, "Required").max(80),
   middle_name: z.string().max(80).optional().or(z.literal("")),

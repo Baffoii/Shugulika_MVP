@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Field, Input } from "@/components/ui/form";
+import { Field, Input, PasswordInput } from "@/components/ui/form";
 import { Button } from "@/components/ui/primitives";
 import { signInSchema, fieldErrors } from "@/lib/validation";
 
@@ -63,10 +63,9 @@ export function SignInForm({ redirectTo }: { redirectTo: string | null }) {
         />
       </Field>
       <Field label="Password" htmlFor="password" error={errors.password} required>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="current-password"
           placeholder="••••••••"
         />
