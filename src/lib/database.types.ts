@@ -63,7 +63,7 @@ export type MembershipRow = {
   role: string;
   country_code: string | null;
   /** Present for recruiter memberships: generic | head | junior */
-  recruiter_level: "generic" | "head" | "junior" | null;
+  recruiter_level: "junior" | "recruiter" | "senior" | "head_recruiter" | null;
   status: string;
   /** First employer administrator flag (company administration capability). */
   is_org_admin: boolean;
@@ -168,15 +168,32 @@ export type RecruiterRoleAssignmentRow = {
   updated_at: string;
 };
 
+export type RecruiterLevelDb = "junior" | "recruiter" | "senior" | "head_recruiter";
+
 export type RecruiterKpiTargetRow = {
   id: string;
-  recruiter_level: "generic" | "head" | "junior";
+  recruiter_level: RecruiterLevelDb;
   organization_id: string | null;
   target_time_to_fill_days: number;
   target_placement_rate_pct: number;
   target_apps_reviewed_per_week: number;
   target_offer_to_hire_ratio_pct: number;
   min_aptitude_test_score: number | null;
+  max_time_to_first_review_hours: number;
+  max_time_to_client_submission_days: number;
+  min_interview_conversion_pct: number;
+  min_client_submission_acceptance_pct: number;
+  max_active_workload: number;
+  max_stalled_application_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KpiStageAgeThresholdRow = {
+  id: string;
+  stage_key: string;
+  organization_id: string | null;
+  max_hours: number;
   created_at: string;
   updated_at: string;
 };
@@ -1045,6 +1062,7 @@ export type Database = {
       job_roles: Tbl<JobRoleRow>;
       recruiter_role_assignments: Tbl<RecruiterRoleAssignmentRow>;
       recruiter_kpi_targets: Tbl<RecruiterKpiTargetRow>;
+      kpi_stage_age_thresholds: Tbl<KpiStageAgeThresholdRow>;
       candidate_profiles: Tbl<CandidateProfileRow>;
       candidate_experiences: Tbl<CandidateExperienceRow>;
       candidate_education: Tbl<CandidateEducationRow>;

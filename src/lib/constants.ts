@@ -762,7 +762,8 @@ export const PLACEHOLDER_FEATURES: PlaceholderFeature[] = [
   {
     key: "advanced_analytics",
     title: "Advanced analytics",
-    description: "Cohort analysis, KPI targets, and placement-quality scoring.",
+    description:
+      "Cohort analysis and placement-quality scoring beyond the live KPI reports (recruiter / franchise / HQ).",
     status: "coming_soon",
     portals: ["franchise", "hq"],
   },

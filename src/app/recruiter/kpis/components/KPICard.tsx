@@ -1,17 +1,26 @@
 import { Badge, Card, type BadgeTone } from "@/components/ui/primitives";
-import type { KpiStatus } from "@/lib/data/recruiter-kpis";
+import type { KpiStatus } from "@/lib/kpi/definitions";
 import { cn } from "@/lib/cn";
 
 const statusTone: Record<KpiStatus, BadgeTone> = {
-  on_track: "success",
+  on_target: "success",
   at_risk: "warn",
-  exceeded: "brand",
+  off_target: "orange",
+  insufficient_data: "neutral",
 };
 
 const statusLabel: Record<KpiStatus, string> = {
-  on_track: "On track",
+  on_target: "On target",
   at_risk: "At risk",
-  exceeded: "Exceeded",
+  off_target: "Off target",
+  insufficient_data: "Insufficient data",
+};
+
+const statusIcon: Record<KpiStatus, string> = {
+  on_target: "✓",
+  at_risk: "!",
+  off_target: "✕",
+  insufficient_data: "—",
 };
 
 export function KPICard({
@@ -21,58 +30,75 @@ export function KPICard({
   targetLabel,
   status,
   hint,
-  progressPct,
+  sampleLabel,
+  definition,
 }: {
   label: string;
   value: string | number;
   unit?: string;
-  targetLabel: string;
+  targetLabel?: string;
   status: KpiStatus;
   hint?: string;
-  /** 0–100 for progress bar (apps reviewed). */
-  progressPct?: number;
+  sampleLabel?: string;
+  definition?: string;
 }) {
   const tone = statusTone[status];
-  const valueTone: Record<BadgeTone, string> = {
-    success: "text-emerald-700",
-    info: "text-blue-700",
-    warn: "text-amber-700",
-    orange: "text-orange-700",
-    danger: "text-red-700",
-    neutral: "text-ink",
-    brand: "text-brand-700",
-  };
 
   return (
-    <Card className="flex flex-col gap-3 p-4" aria-label={`${label}: ${value}${unit ?? ""}`}>
+    <Card
+      className="flex flex-col gap-2 p-4"
+      aria-label={`${label}: ${value}${unit ?? ""}, ${statusLabel[status]}`}
+    >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">{label}</p>
-        <Badge tone={tone}>{statusLabel[status]}</Badge>
+        <p
+          className="text-xs font-medium uppercase tracking-wide text-ink-subtle"
+          title={definition}
+        >
+          {label}
+        </p>
+        <Badge tone={tone}>
+          <span aria-hidden className="mr-1">
+            {statusIcon[status]}
+          </span>
+          {statusLabel[status]}
+        </Badge>
       </div>
-      <p className={cn("text-2xl font-semibold", valueTone[tone])}>
+      <p className="text-2xl font-semibold text-ink">
         {value}
         {unit ? <span className="ml-1 text-base font-medium text-ink-muted">{unit}</span> : null}
       </p>
-      <p className="text-xs text-ink-subtle">Target: {targetLabel}</p>
-      {typeof progressPct === "number" ? (
-        <div
-          className="h-2 w-full overflow-hidden rounded-full bg-surface-muted"
-          role="progressbar"
-          aria-valuenow={Math.round(Math.min(100, Math.max(0, progressPct)))}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`${label} progress`}
-        >
-          <div
-            className={cn(
-              "h-full rounded-full transition-all",
-              status === "exceeded" || status === "on_track" ? "bg-emerald-500" : "bg-amber-500",
-            )}
-            style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }}
-          />
-        </div>
-      ) : null}
+      {targetLabel ? <p className="text-xs text-ink-subtle">Target: {targetLabel}</p> : null}
+      {sampleLabel ? <p className="text-xs text-ink-muted">{sampleLabel}</p> : null}
       {hint ? <p className="text-xs text-ink-subtle">{hint}</p> : null}
+      {definition ? (
+        <p className="mt-auto border-t border-border/60 pt-2 text-[11px] leading-snug text-ink-subtle">
+          {definition}
+        </p>
+      ) : null}
     </Card>
+  );
+}
+
+export function metricDisplay(
+  value: number | null,
+  opts?: { pct?: boolean; suffix?: string },
+): string {
+  if (value == null) return "—";
+  if (opts?.pct) return `${value}%`;
+  if (opts?.suffix) return `${value}${opts.suffix}`;
+  return String(value);
+}
+
+export function sampleLine(numerator: number, denominator: number, label = "n"): string {
+  if (denominator <= 0) return "Not enough data (denominator 0)";
+  return `${label}: ${numerator} / ${denominator}`;
+}
+
+export function statusClass(status: KpiStatus): string {
+  return cn(
+    status === "on_target" && "text-emerald-800",
+    status === "at_risk" && "text-amber-800",
+    status === "off_target" && "text-orange-800",
+    status === "insufficient_data" && "text-ink-muted",
   );
 }

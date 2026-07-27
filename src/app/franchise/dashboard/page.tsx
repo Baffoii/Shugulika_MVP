@@ -27,7 +27,7 @@ export default async function FranchiseDashboard() {
         title="Franchise overview"
         description="Operational view for your country and franchise. You see only records within your authorized scope."
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active jobs" value={metrics.activeJobs} tone="brand" />
         <StatCard label="Applications" value={metrics.applications} tone="info" />
         <StatCard label="Submissions" value={metrics.submissions} tone="neutral" />
@@ -37,6 +37,14 @@ export default async function FranchiseDashboard() {
         <StatCard label="Employers" value={employers.length} tone="neutral" />
         <StatCard label="Open invoices" value={metrics.openInvoices} tone="warn" />
       </div>
+
+      <p className="mt-4 text-sm text-ink-muted">
+        Compare recruiter KPIs for your franchise on{" "}
+        <a href="/franchise/reports" className="font-medium text-brand-700 hover:underline">
+          Reports
+        </a>
+        .
+      </p>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Card>

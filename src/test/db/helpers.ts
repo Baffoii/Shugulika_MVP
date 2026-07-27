@@ -77,6 +77,7 @@ export interface SeedIds {
   employerUserA: string;
   employerUserB: string;
   hqAdmin: string;
+  franchiseAdminA: string;
   jobOrderA: string;
   applicationC1: string; // candidate1 application (owned by franchise A)
   submissionC1: string; // candidate1 submitted to employerA
@@ -156,6 +157,7 @@ export async function setupDb(client: Client): Promise<SeedIds> {
   const empUserA = "a0000000-0000-4000-8000-000000000021";
   const empUserB = "a0000000-0000-4000-8000-000000000022";
   const hqAdmin = "a0000000-0000-4000-8000-000000000031";
+  const franchiseAdminA = "a0000000-0000-4000-8000-000000000032";
   const users: Array<[string, string, string, string]> = [
     [c1, "cand1@test.io", "candidate", "Cand One"],
     [c2, "cand2@test.io", "candidate", "Cand Two"],
@@ -164,6 +166,7 @@ export async function setupDb(client: Client): Promise<SeedIds> {
     [empUserA, "empA@test.io", "employer_user", "Employer A User"],
     [empUserB, "empB@test.io", "employer_user", "Employer B User"],
     [hqAdmin, "hq@test.io", "hq_admin", "HQ Admin"],
+    [franchiseAdminA, "faA@test.io", "franchise_admin", "Franchise Admin A"],
   ];
   for (const [id, email, role, name] of users) {
     await client.query(
@@ -174,7 +177,7 @@ export async function setupDb(client: Client): Promise<SeedIds> {
 
   // Staff memberships (remove the trigger's clamped candidate rows first).
   // node-postgres allows one statement per parameterized query, so run each.
-  const staff = [recA, recB, empUserA, empUserB, hqAdmin];
+  const staff = [recA, recB, empUserA, empUserB, hqAdmin, franchiseAdminA];
   await client.query(`delete from public.memberships where user_id = any($1::uuid[])`, [staff]);
   await client.query(`delete from public.candidate_profiles where user_id = any($1::uuid[])`, [
     staff,
@@ -198,6 +201,10 @@ export async function setupDb(client: Client): Promise<SeedIds> {
   await client.query(
     `insert into public.memberships (user_id, organization_id, role, status) values ($1,$2,'hq_admin','active')`,
     [hqAdmin, hq],
+  );
+  await client.query(
+    `insert into public.memberships (user_id, organization_id, role, status, country_code) values ($1,$2,'franchise_admin','active','TZ')`,
+    [franchiseAdminA, franchiseA],
   );
 
   // A job order (franchise A / employer A) + candidate1 application owned by A.
@@ -243,6 +250,7 @@ export async function setupDb(client: Client): Promise<SeedIds> {
     employerUserA: empUserA,
     employerUserB: empUserB,
     hqAdmin,
+    franchiseAdminA,
     jobOrderA,
     applicationC1,
     submissionC1,

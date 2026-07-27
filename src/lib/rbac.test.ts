@@ -107,10 +107,59 @@ describe("recruiter role assignment permissions", () => {
         {
           ...franchiseMem,
           role: "recruiter",
-          recruiter_level: "head",
+          recruiter_level: "head_recruiter",
         },
       ]),
-    ).toBe("head");
-    expect(recruiterLevelFromMemberships([])).toBe("generic");
+    ).toBe("head_recruiter");
+    expect(
+      recruiterLevelFromMemberships([
+        {
+          ...franchiseMem,
+          role: "recruiter",
+          recruiter_level: "junior",
+        },
+      ]),
+    ).toBe("junior");
+    expect(
+      recruiterLevelFromMemberships([
+        {
+          ...franchiseMem,
+          role: "recruiter",
+          recruiter_level: "senior",
+        },
+      ]),
+    ).toBe("senior");
+    expect(
+      recruiterLevelFromMemberships([
+        {
+          ...franchiseMem,
+          role: "recruiter",
+          recruiter_level: "generic" as never,
+        },
+      ]),
+    ).toBe("recruiter");
+    expect(
+      recruiterLevelFromMemberships([
+        {
+          ...franchiseMem,
+          role: "recruiter",
+          recruiter_level: "head" as never,
+        },
+      ]),
+    ).toBe("head_recruiter");
+    expect(recruiterLevelFromMemberships([])).toBe("recruiter");
+  });
+
+  it("ignores inactive memberships and missing country codes when listing regions", () => {
+    expect(
+      assignableRegionCodes(
+        ["franchise_admin"],
+        [
+          { ...franchiseMem, status: "suspended", country_code: "TZ" },
+          { ...franchiseMem, country_code: null },
+          { ...franchiseMem, role: "recruiter", country_code: "UG" },
+        ],
+      ),
+    ).toEqual([]);
   });
 });
