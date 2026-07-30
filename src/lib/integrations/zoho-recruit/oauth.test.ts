@@ -5,6 +5,8 @@ import {
   normalizeZohoApiDomain,
   requireZohoRecruitConfig,
   resolveZohoRecruitApiDomain,
+  ZOHO_RECRUIT_ORG_SCOPE,
+  ZOHO_RECRUIT_SYNC_SCOPES,
 } from "@/lib/integrations/zoho-recruit/config";
 import {
   buildZohoAuthorizationUrl,
@@ -62,7 +64,8 @@ describe("Zoho Recruit OAuth foundation", () => {
     expect(state.redirectUri).toBe(
       "https://app.shugulika.test/api/integrations/zoho-recruit/callback",
     );
-    expect(state.scopes).toEqual(["ZohoRecruit.org.all"]);
+    expect(state.scopes).toEqual(expect.arrayContaining([...ZOHO_RECRUIT_SYNC_SCOPES]));
+    expect(state.scopes).toContain(ZOHO_RECRUIT_ORG_SCOPE);
   });
 
   it("becomes ready only with all server-side credentials", () => {
@@ -122,13 +125,16 @@ describe("Zoho Recruit OAuth foundation", () => {
     );
   });
 
-  it("builds a server authorization request with state and org-only scope", () => {
+  it("builds a server authorization request with state and sync scopes", () => {
     configure();
     const url = buildZohoAuthorizationUrl(requireZohoRecruitConfig(), "state-value");
     expect(url.origin).toBe("https://accounts.zoho.com");
     expect(url.pathname).toBe("/oauth/v2/auth");
     expect(url.searchParams.get("response_type")).toBe("code");
-    expect(url.searchParams.get("scope")).toBe("ZohoRecruit.org.all");
+    const scopes = (url.searchParams.get("scope") ?? "").split(",");
+    expect(scopes).toEqual(
+      expect.arrayContaining([ZOHO_RECRUIT_ORG_SCOPE, ...ZOHO_RECRUIT_SYNC_SCOPES]),
+    );
     expect(url.searchParams.get("access_type")).toBe("offline");
     expect(url.searchParams.get("prompt")).toBe("consent");
     expect(url.searchParams.get("state")).toBe("state-value");
