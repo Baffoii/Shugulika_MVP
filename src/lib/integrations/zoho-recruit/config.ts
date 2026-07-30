@@ -3,9 +3,29 @@ import "server-only";
 import { env } from "@/lib/env";
 
 export const ZOHO_RECRUIT_ORG_SCOPE = "ZohoRecruit.org.all";
-export const ZOHO_RECRUIT_SCOPES = [ZOHO_RECRUIT_ORG_SCOPE] as const;
+/** Minimum scopes for org verify + metadata + candidate/job projection. */
+export const ZOHO_RECRUIT_SYNC_SCOPES = [
+  ZOHO_RECRUIT_ORG_SCOPE,
+  "ZohoRecruit.settings.ALL",
+  "ZohoRecruit.modules.candidates.CREATE",
+  "ZohoRecruit.modules.candidates.UPDATE",
+  "ZohoRecruit.modules.candidates.READ",
+  "ZohoRecruit.modules.jobopening.CREATE",
+  "ZohoRecruit.modules.jobopening.UPDATE",
+  "ZohoRecruit.modules.jobopening.READ",
+] as const;
+/** Org-only scopes used by the current connected foundation until HQ reconnects. */
+export const ZOHO_RECRUIT_SCOPES = ZOHO_RECRUIT_SYNC_SCOPES;
 export const ZOHO_RECRUIT_CALLBACK_PATH = "/api/integrations/zoho-recruit/callback";
 export const ZOHO_OAUTH_STATE_COOKIE = "shugulika_zoho_recruit_oauth_state";
+
+export function scopesMissing(
+  granted: readonly string[],
+  required: readonly string[] = ZOHO_RECRUIT_SYNC_SCOPES,
+): string[] {
+  const have = new Set(granted.map((s) => s.trim()).filter(Boolean));
+  return required.filter((scope) => !have.has(scope));
+}
 
 const ACCOUNTS_HOSTS = new Set([
   "accounts.zoho.com",
@@ -160,7 +180,9 @@ export function resolveZohoRecruitApiDomain(input: {
   }
 
   if (input.accountsDomain) {
-    const accountsHost = new URL(normalizeZohoAccountsDomain(input.accountsDomain)).hostname.toLowerCase();
+    const accountsHost = new URL(
+      normalizeZohoAccountsDomain(input.accountsDomain),
+    ).hostname.toLowerCase();
     const suffix = accountsHost.replace(/^accounts\./, "");
     if (suffix === "zohocloud.ca") return "https://recruit.zohocloud.ca";
     if (suffix.startsWith("zoho.")) return `https://recruit.${suffix}`;
