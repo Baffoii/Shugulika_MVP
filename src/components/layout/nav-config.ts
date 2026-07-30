@@ -21,6 +21,7 @@ import {
   ScrollText,
   Target,
   Cpu,
+  Search,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,9 +69,11 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
     { href: "/employer/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/employer/company", label: "Company", icon: Building2 },
     { href: "/employer/job-orders", label: "Your roles", icon: Briefcase },
+    { href: "/employer/find-candidates", label: "Find candidates", icon: Search },
     { href: "/employer/submissions", label: "Candidate CVs", icon: Send },
     { href: "/employer/offers", label: "Offers", icon: ClipboardList },
-    { href: "/employer/billing", label: "Billing", icon: BadgeDollarSign },
+    { href: "/employer/plan", label: "Plan", icon: BadgeDollarSign },
+    { href: "/employer/billing", label: "Billing", icon: ScrollText },
     { href: "/employer/settings", label: "Settings", icon: Settings },
   ],
   franchise: [

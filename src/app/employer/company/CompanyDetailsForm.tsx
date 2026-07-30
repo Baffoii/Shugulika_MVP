@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { Alert, Button, Card, CardBody, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { COMPANY_SIZES } from "@/lib/constants";
@@ -15,7 +16,7 @@ function SaveButton() {
 }
 
 export function CompanyDetailsForm({ org }: { org: OrganizationRow }) {
-  const [state, formAction] = useFormState(updateEmployerCompanyAction, initial);
+  const [state, formAction] = useActionState(updateEmployerCompanyAction, initial);
   const errors = state.fieldErrors ?? {};
 
   return (

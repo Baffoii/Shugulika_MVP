@@ -510,8 +510,8 @@ export default async function HqIntegrationsPage({
               <li>Enable Multi-DC support if the Zoho organization is outside the client DC.</li>
             </ol>
             <p className="text-xs text-ink-subtle">
-              API Console only — do not change Zoho Recruit Modules/Fields for Shugulika. Self Client
-              is acceptable only for a disposable manual sandbox test.
+              API Console only — do not change Zoho Recruit Modules/Fields for Shugulika. Self
+              Client is acceptable only for a disposable manual sandbox test.
             </p>
           </CardBody>
         </Card>

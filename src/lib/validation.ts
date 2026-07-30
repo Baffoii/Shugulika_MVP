@@ -172,6 +172,10 @@ export const employerRoutingSectionSchema = z
     path: ["requested_franchise_id"],
   });
 
+export const employerPackageSectionSchema = z.object({
+  preferred_package_key: z.enum(["trial", "starter", "growth", "scale", ""]).optional(),
+});
+
 export const employerDeclarationsSectionSchema = z.object({
   declared_accurate: z.literal(true, {
     error: "Confirm the information is accurate",

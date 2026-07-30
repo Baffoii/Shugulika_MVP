@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getApprovedEmployerOrg, getSessionContext, homeForRoles } from "@/lib/auth";
+import { getEmployerPlanSnapshot } from "@/lib/employer-entitlements";
 
-/** Routes a freshly-signed-in user to the right portal (or onboarding). */
+/** Routes a freshly-signed-in user to the right portal (or onboarding / plan picker). */
 export default async function PostLoginPage({
   searchParams,
 }: {
@@ -12,9 +13,13 @@ export default async function PostLoginPage({
   if (!session) redirect("/auth/sign-in");
   if (redirectTo && redirectTo.startsWith("/")) redirect(redirectTo);
   if (session.roles.length === 0) redirect("/onboarding");
-  // Unapproved employers must finish company registration before the portal.
-  if (session.roles.includes("employer_user") && !(await getApprovedEmployerOrg(session))) {
-    redirect("/onboarding/employer");
+
+  if (session.roles.includes("employer_user")) {
+    const employerOrg = await getApprovedEmployerOrg(session);
+    if (!employerOrg) redirect("/onboarding/employer");
+    const plan = await getEmployerPlanSnapshot(employerOrg.id);
+    if (!plan.isActive) redirect("/employer/plan");
   }
+
   redirect(homeForRoles(session.roles));
 }

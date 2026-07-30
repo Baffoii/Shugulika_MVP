@@ -9,6 +9,7 @@ import {
   employerAddressSectionSchema,
   employerContactSectionSchema,
   employerRoutingSectionSchema,
+  employerPackageSectionSchema,
   employerDeclarationsSectionSchema,
   fieldErrors,
 } from "@/lib/validation";
@@ -123,6 +124,13 @@ export async function saveEmployerOnboardingSectionAction(
       requested_franchise_id:
         parsed.data.routing_mode === "franchise" ? parsed.data.requested_franchise_id : null,
     };
+  } else if (step === "package") {
+    const parsed = employerPackageSectionSchema.safeParse({
+      preferred_package_key: optional(formData, "preferred_package_key"),
+    });
+    if (!parsed.success) return { ok: false, fieldErrors: fieldErrors(parsed.error) };
+    const key = parsed.data.preferred_package_key ?? "";
+    payload = { preferred_package_key: key.length > 0 ? key : null };
   } else {
     const parsed = employerDeclarationsSectionSchema.safeParse({
       declared_accurate: formData.get("declared_accurate") === "on",

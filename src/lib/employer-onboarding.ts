@@ -9,7 +9,8 @@ import {
   type EmployerApplicationStatus,
 } from "@/lib/constants";
 
-export type OnboardingStepKey = "company" | "address" | "contact" | "routing" | "declarations";
+export type OnboardingStepKey =
+  "company" | "address" | "contact" | "routing" | "package" | "declarations";
 
 export interface OnboardingStep {
   key: OnboardingStepKey;
@@ -17,6 +18,23 @@ export interface OnboardingStep {
   description: string;
   /** Application columns that must be present before the step counts as done. */
   requiredFields: (keyof EmployerApplicationRow)[];
+}
+
+/** Soft plan interest during signup (hybrid Option C). Keys match active subscription packages. */
+export const PREFERRED_PACKAGE_OPTIONS: {
+  key: string;
+  label: string;
+  blurb: string;
+}[] = [
+  { key: "trial", label: "Free trial", blurb: "2 job slots · 5 CV unlocks · 14 days" },
+  { key: "starter", label: "Starter", blurb: "2 job slots · 5 CV unlocks" },
+  { key: "growth", label: "Growth", blurb: "5 job slots · 15 CV unlocks" },
+  { key: "scale", label: "Scale", blurb: "12 job slots · 40 CV unlocks" },
+];
+
+export function preferredPackageLabel(key: string | null | undefined): string {
+  if (!key) return "Not sure yet";
+  return PREFERRED_PACKAGE_OPTIONS.find((o) => o.key === key)?.label ?? key;
 }
 
 export const ONBOARDING_STEPS: OnboardingStep[] = [
@@ -48,6 +66,13 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     key: "routing",
     label: "Shugulika office",
     description: "The Shugulika office responsible for your company.",
+    requiredFields: [],
+  },
+  {
+    key: "package",
+    label: "Hiring plan",
+    description: "Optional interest — you confirm and activate after approval.",
+    // Soft interest: empty required fields so skipping is allowed.
     requiredFields: [],
   },
   {
@@ -123,7 +148,7 @@ export function applicationStatusDescription(app: EmployerApplicationRow): strin
     case "changes_requested":
       return "The reviewer asked for changes. Update the highlighted information and resubmit.";
     case "approved":
-      return "Your company is approved and the employer portal is unlocked.";
+      return "Your company is approved. Choose a free trial or package to start posting jobs and unlocking CVs.";
     case "rejected":
       return app.reapply_allowed
         ? "Your application was not approved. You may submit a revised application."

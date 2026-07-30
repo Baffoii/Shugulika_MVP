@@ -37,6 +37,7 @@ function makeApp(overrides: Partial<EmployerApplicationRow> = {}): EmployerAppli
     contact_is_authorized: true,
     routing_mode: "auto",
     requested_franchise_id: null,
+    preferred_package_key: null,
     assigned_org_id: null,
     declared_accurate: true,
     declared_authorized: true,
