@@ -5,21 +5,11 @@ import {
   requireZohoRecruitConfig,
   ZOHO_OAUTH_STATE_COOKIE,
 } from "@/lib/integrations/zoho-recruit/config";
-import { encryptZohoToken } from "@/lib/integrations/zoho-recruit/crypto";
-import {
-  exchangeZohoAuthorizationCode,
-  fetchZohoOrganization,
-  zohoOAuthStatesMatch,
-} from "@/lib/integrations/zoho-recruit/oauth";
-import { saveZohoRecruitConnection } from "@/lib/integrations/zoho-recruit/store";
+import { connectZohoRecruitWithRedirectCode } from "@/lib/integrations/zoho-recruit/connect";
+import { zohoOAuthStatesMatch } from "@/lib/integrations/zoho-recruit/oauth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function stringValue(value: string | number | undefined): string | null {
-  if (value === undefined) return null;
-  return String(value);
-}
 
 function finish(configuredRedirectUri: string, status: string): NextResponse {
   const url = new URL("/hq/integrations", configuredRedirectUri);
@@ -64,33 +54,12 @@ export async function GET(request: NextRequest) {
     const accountsDomain = normalizeZohoAccountsDomain(
       request.nextUrl.searchParams.get("accounts-server") || config.initialAccountsDomain,
     );
-    const location = request.nextUrl.searchParams.get("location");
-    const tokens = await exchangeZohoAuthorizationCode({
-      config,
+    await connectZohoRecruitWithRedirectCode({
+      actorId: ctx.userId,
       code,
       accountsDomain,
+      dataCenterLocation: request.nextUrl.searchParams.get("location"),
     });
-    const organization = await fetchZohoOrganization({
-      apiDomain: tokens.api_domain,
-      accessToken: tokens.access_token,
-    });
-    const now = Date.now();
-
-    await saveZohoRecruitConnection({
-      actorId: ctx.userId,
-      zohoOrgId: stringValue(organization.zgid ?? organization.id),
-      zohoOrgName: organization.company_name ?? null,
-      zohoOrgCountry: organization.country_code ?? organization.country ?? null,
-      zohoPlan: organization.license_details?.plan_type ?? null,
-      accountsDomain,
-      apiDomain: tokens.api_domain,
-      dataCenterLocation: location,
-      encryptedAccessToken: encryptZohoToken(tokens.access_token, config.encryptionKey),
-      encryptedRefreshToken: encryptZohoToken(tokens.refresh_token, config.encryptionKey),
-      accessTokenExpiresAt: new Date(now + tokens.expires_in * 1000).toISOString(),
-      grantedScopes: config.scopes,
-    });
-
     return finish(config.redirectUri, "connected");
   } catch (error) {
     console.error(

@@ -18,7 +18,10 @@ import { placeholdersForPortal } from "@/lib/constants";
 import { formatDateTime } from "@/lib/format";
 import { getZohoRecruitSetupState } from "@/lib/integrations/zoho-recruit/config";
 import { getZohoRecruitConnectionView } from "@/lib/integrations/zoho-recruit/store";
-import { disconnectZohoRecruitAction } from "@/app/hq/integrations/actions";
+import {
+  connectZohoRecruitWithCodeAction,
+  disconnectZohoRecruitAction,
+} from "@/app/hq/integrations/actions";
 
 export const metadata: Metadata = { title: "Integrations" };
 
@@ -155,9 +158,13 @@ export default async function HqIntegrationsPage({
               <p className="mt-1 font-medium text-ink">{connection.plan ?? "Not verified"}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-ink-subtle">Granted scope</p>
+              <p className="text-xs uppercase tracking-wide text-ink-subtle">
+                {connection.status === "connected" ? "Granted scope" : "Requested scope"}
+              </p>
               <p className="mt-1 font-medium text-ink">
-                {connection.scopes.join(", ") || setup.scopes.join(", ")}
+                {connection.status === "connected"
+                  ? connection.scopes.join(", ") || "None recorded"
+                  : setup.scopes.join(", ")}
               </p>
             </div>
             <div>
@@ -185,6 +192,7 @@ export default async function HqIntegrationsPage({
               <ButtonLink
                 href="/api/integrations/zoho-recruit/connect"
                 variant="primary"
+                prefetch={false}
                 className={
                   !setup.ready || !connection.storageReady ? "pointer-events-none opacity-50" : ""
                 }
@@ -193,6 +201,48 @@ export default async function HqIntegrationsPage({
               </ButtonLink>
             )}
           </div>
+
+          {connection.status !== "connected" && setup.ready && connection.storageReady ? (
+            <div className="space-y-3 rounded-lg border border-surface-border bg-surface-muted/40 p-4">
+              <Alert tone="warn" title="If Zoho shows “Invalid Redirect Uri”">
+                Open the{" "}
+                <a
+                  className="font-medium text-ink underline"
+                  href="https://api-console.zoho.com/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Zoho API Console
+                </a>
+                , select the <strong className="text-ink">Server-based</strong> client whose Client
+                ID is in your env, and set <strong className="text-ink">Authorized Redirect URI</strong>{" "}
+                to exactly:
+                <code className="mt-2 block break-all rounded bg-white px-2 py-1 text-xs text-ink">
+                  {setup.redirectUri}
+                </code>
+                Then click Update and use Connect again. Homepage URL alone is not enough.
+              </Alert>
+              <form action={connectZohoRecruitWithCodeAction} className="space-y-2">
+                <p className="text-sm text-ink-muted">
+                  Or paste a one-time grant code from Zoho API Console → Self Client → Generate Code
+                  (scope <code>{setup.scopes.join(",")}</code>):
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    name="code"
+                    required
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="1000.…"
+                    className="min-w-0 flex-1 rounded-md border border-surface-border bg-white px-3 py-2 font-mono text-sm text-ink"
+                  />
+                  <Button type="submit" variant="secondary">
+                    Connect with code
+                  </Button>
+                </div>
+              </form>
+            </div>
+          ) : null}
         </CardBody>
       </Card>
 

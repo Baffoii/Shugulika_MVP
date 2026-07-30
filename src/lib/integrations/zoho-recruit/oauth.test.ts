@@ -4,11 +4,13 @@ import {
   normalizeZohoAccountsDomain,
   normalizeZohoApiDomain,
   requireZohoRecruitConfig,
+  resolveZohoRecruitApiDomain,
 } from "@/lib/integrations/zoho-recruit/config";
 import {
   buildZohoAuthorizationUrl,
   createZohoOAuthState,
   exchangeZohoAuthorizationCode,
+  exchangeZohoGrantCode,
   fetchZohoOrganization,
   zohoOAuthStatesMatch,
 } from "@/lib/integrations/zoho-recruit/oauth";
@@ -107,6 +109,19 @@ describe("Zoho Recruit OAuth foundation", () => {
     expect(() => normalizeZohoApiDomain("http://www.zohoapis.com")).toThrow(/not allowed/);
   });
 
+  it("maps OAuth zohoapis domains onto Recruit API hosts", () => {
+    expect(
+      resolveZohoRecruitApiDomain({ apiDomain: "https://www.zohoapis.com" }),
+    ).toBe("https://recruit.zoho.com");
+    expect(resolveZohoRecruitApiDomain({ apiDomain: "https://www.zohoapis.eu" })).toBe(
+      "https://recruit.zoho.eu",
+    );
+    expect(resolveZohoRecruitApiDomain({ location: "in" })).toBe("https://recruit.zoho.in");
+    expect(
+      resolveZohoRecruitApiDomain({ accountsDomain: "https://accounts.zohocloud.ca" }),
+    ).toBe("https://recruit.zohocloud.ca");
+  });
+
   it("builds a server authorization request with state and org-only scope", () => {
     configure();
     const url = buildZohoAuthorizationUrl(requireZohoRecruitConfig(), "state-value");
@@ -117,7 +132,19 @@ describe("Zoho Recruit OAuth foundation", () => {
     expect(url.searchParams.get("access_type")).toBe("offline");
     expect(url.searchParams.get("prompt")).toBe("consent");
     expect(url.searchParams.get("state")).toBe("state-value");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://app.shugulika.test/api/integrations/zoho-recruit/callback",
+    );
     expect(url.toString()).not.toContain("client-secret");
+  });
+
+  it("normalizes a trailing slash on the configured redirect URI", () => {
+    configure();
+    process.env.ZOHO_RECRUIT_REDIRECT_URI =
+      "https://app.shugulika.test/api/integrations/zoho-recruit/callback/";
+    expect(getZohoRecruitSetupState().redirectUri).toBe(
+      "https://app.shugulika.test/api/integrations/zoho-recruit/callback",
+    );
   });
 
   it("uses constant-time comparable random state values", () => {
@@ -135,6 +162,9 @@ describe("Zoho Recruit OAuth foundation", () => {
       const body = init?.body as URLSearchParams;
       expect(body.get("code")).toBe("one-time-code");
       expect(body.get("client_secret")).toBe("client-secret");
+      expect(body.get("redirect_uri")).toBe(
+        "https://app.shugulika.test/api/integrations/zoho-recruit/callback",
+      );
       return new Response(
         JSON.stringify({
           access_token: "access",
@@ -155,9 +185,37 @@ describe("Zoho Recruit OAuth foundation", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("one-time-code");
   });
 
+  it("retries Self Client token exchange without redirect_uri", async () => {
+    configure();
+    const fetchMock = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      const body = init?.body as URLSearchParams;
+      if (body.get("redirect_uri")) {
+        return new Response(JSON.stringify({ error: "invalid_code" }), { status: 400 });
+      }
+      expect(body.get("redirect_uri")).toBeNull();
+      return new Response(
+        JSON.stringify({
+          access_token: "access",
+          refresh_token: "refresh",
+          api_domain: "https://www.zohoapis.com",
+          expires_in: 3600,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    const result = await exchangeZohoGrantCode({
+      config: requireZohoRecruitConfig(),
+      code: "self-client-code",
+      accountsDomain: "https://accounts.zoho.com",
+      fetchImpl: fetchMock as typeof fetch,
+    });
+    expect(result.access_token).toBe("access");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("verifies the connected Recruit organization without requesting records", async () => {
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
-      expect(String(url)).toBe("https://www.zohoapis.com/recruit/v2/org");
+      expect(String(url)).toBe("https://recruit.zoho.com/recruit/v2/org");
       expect(init?.headers).toEqual({ Authorization: "Zoho-oauthtoken access" });
       return new Response(
         JSON.stringify({

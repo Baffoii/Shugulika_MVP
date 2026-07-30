@@ -40,7 +40,9 @@ export async function GET() {
   if (connection.status === "connected") return integrationsRedirect("already_connected");
 
   const state = createZohoOAuthState();
-  const response = NextResponse.redirect(buildZohoAuthorizationUrl(config, state));
+  const authorizeUrl = buildZohoAuthorizationUrl(config, state);
+  // Use href so the Location header is a single, exactly-encoded authorize URL.
+  const response = NextResponse.redirect(authorizeUrl.href);
   response.cookies.set(ZOHO_OAUTH_STATE_COOKIE, state, {
     httpOnly: true,
     secure: config.redirectUri.startsWith("https://"),
@@ -48,5 +50,6 @@ export async function GET() {
     path: "/api/integrations/zoho-recruit",
     maxAge: 10 * 60,
   });
+  console.info("[zoho-recruit/connect] redirect_uri=", config.redirectUri);
   return response;
 }

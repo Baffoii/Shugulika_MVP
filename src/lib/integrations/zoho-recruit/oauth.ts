@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   normalizeZohoAccountsDomain,
   normalizeZohoApiDomain,
+  resolveZohoRecruitApiDomain,
   type ZohoRecruitConfig,
 } from "@/lib/integrations/zoho-recruit/config";
 
@@ -70,17 +71,20 @@ export async function exchangeZohoAuthorizationCode(input: {
   config: ZohoRecruitConfig;
   code: string;
   accountsDomain: string;
+  /** Server-based apps require this. Self Client grant codes omit it. */
+  includeRedirectUri?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<ZohoTokenResponse> {
   const fetchImpl = input.fetchImpl ?? fetch;
   const accountsDomain = normalizeZohoAccountsDomain(input.accountsDomain);
+  const includeRedirectUri = input.includeRedirectUri !== false;
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: input.config.clientId,
     client_secret: input.config.clientSecret,
-    redirect_uri: input.config.redirectUri,
     code: input.code,
   });
+  if (includeRedirectUri) body.set("redirect_uri", input.config.redirectUri);
   const response = await fetchImpl(`${accountsDomain}/oauth/v2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -91,23 +95,56 @@ export async function exchangeZohoAuthorizationCode(input: {
   if (!response.ok) throw new Error("Zoho did not accept the authorization code.");
   const parsed = TokenResponse.safeParse(payload);
   if (!parsed.success) throw new Error("Zoho returned an incomplete token response.");
-  return { ...parsed.data, api_domain: normalizeZohoApiDomain(parsed.data.api_domain) };
+  return {
+    ...parsed.data,
+    // Keep the OAuth-reported domain for diagnostics; callers map to Recruit.
+    api_domain: normalizeZohoApiDomain(parsed.data.api_domain),
+  };
+}
+
+/** Exchange a console-generated or redirect grant code (tries server-based, then Self Client). */
+export async function exchangeZohoGrantCode(input: {
+  config: ZohoRecruitConfig;
+  code: string;
+  accountsDomain: string;
+  fetchImpl?: typeof fetch;
+}): Promise<ZohoTokenResponse> {
+  try {
+    return await exchangeZohoAuthorizationCode({ ...input, includeRedirectUri: true });
+  } catch {
+    return exchangeZohoAuthorizationCode({ ...input, includeRedirectUri: false });
+  }
 }
 
 export async function fetchZohoOrganization(input: {
   apiDomain: string;
   accessToken: string;
+  location?: string | null;
+  accountsDomain?: string | null;
   fetchImpl?: typeof fetch;
 }): Promise<ZohoOrganization> {
   const fetchImpl = input.fetchImpl ?? fetch;
-  const apiDomain = normalizeZohoApiDomain(input.apiDomain);
+  const apiDomain = resolveZohoRecruitApiDomain({
+    apiDomain: input.apiDomain,
+    location: input.location,
+    accountsDomain: input.accountsDomain,
+  });
   const response = await fetchImpl(`${apiDomain}/recruit/v2/org`, {
     method: "GET",
     headers: { Authorization: `Zoho-oauthtoken ${input.accessToken}` },
     cache: "no-store",
   });
   const payload: unknown = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error("Zoho Recruit organization verification failed.");
+  if (!response.ok) {
+    const detail =
+      typeof payload === "object" &&
+      payload &&
+      "message" in payload &&
+      typeof (payload as { message: unknown }).message === "string"
+        ? (payload as { message: string }).message
+        : `HTTP ${response.status}`;
+    throw new Error(`Zoho Recruit organization verification failed (${detail}).`);
+  }
   const parsed = OrganizationResponse.safeParse(payload);
   if (!parsed.success) throw new Error("Zoho Recruit returned incomplete organization data.");
   return parsed.data.org[0]!;
