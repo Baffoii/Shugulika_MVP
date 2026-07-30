@@ -35,7 +35,7 @@ describe("no service-role key or secrets in browser-reachable code", () => {
       if (!isClient) continue;
       // Client bundles must never reference these env var names (server-only).
       expect(src, `${f} is a client component and must not read server secrets`).not.toMatch(
-        /SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY/,
+        /SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY|ZOHO_RECRUIT_CLIENT_SECRET|ZOHO_RECRUIT_TOKEN_ENCRYPTION_KEY/,
       );
     }
   });
@@ -44,7 +44,7 @@ describe("no service-role key or secrets in browser-reachable code", () => {
     for (const f of files) {
       const src = read(f);
       expect(src, `${f} exposes a secret via a NEXT_PUBLIC_ name`).not.toMatch(
-        /NEXT_PUBLIC_[A-Z_]*(SERVICE_ROLE|SECRET|PRIVATE_KEY|SERVICE_KEY)/,
+        /NEXT_PUBLIC_[A-Z_]*(SERVICE_ROLE|SECRET|PRIVATE_KEY|SERVICE_KEY|ZOHO)/,
       );
     }
   });
