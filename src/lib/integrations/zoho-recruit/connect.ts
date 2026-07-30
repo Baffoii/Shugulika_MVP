@@ -49,10 +49,7 @@ export async function persistZohoRecruitTokens(input: {
     apiDomain,
     dataCenterLocation: input.dataCenterLocation,
     encryptedAccessToken: encryptZohoToken(input.tokens.access_token, input.config.encryptionKey),
-    encryptedRefreshToken: encryptZohoToken(
-      input.tokens.refresh_token,
-      input.config.encryptionKey,
-    ),
+    encryptedRefreshToken: encryptZohoToken(input.tokens.refresh_token, input.config.encryptionKey),
     accessTokenExpiresAt: new Date(now + input.tokens.expires_in * 1000).toISOString(),
     grantedScopes: input.config.scopes,
   });
