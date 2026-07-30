@@ -19,6 +19,7 @@ import { formatDateTime } from "@/lib/format";
 import { getZohoRecruitSetupState } from "@/lib/integrations/zoho-recruit/config";
 import type { ZohoRecruitGateKey } from "@/lib/integrations/zoho-recruit/gates";
 import { getZohoRecruitOpsSnapshot } from "@/lib/integrations/zoho-recruit/ops";
+import { getZohoSandboxReadiness } from "@/lib/integrations/zoho-recruit/readiness";
 import { getZohoRecruitConnectionView } from "@/lib/integrations/zoho-recruit/store";
 import {
   connectZohoRecruitWithCodeAction,
@@ -34,7 +35,7 @@ export const metadata: Metadata = { title: "Integrations" };
 const STATUS_MESSAGES: Record<string, { tone: "success" | "warn" | "danger"; text: string }> = {
   connected: {
     tone: "success",
-    text: "Zoho Recruit is connected for organization verification. Record synchronization remains gated off until approvals land.",
+    text: "Zoho Recruit is connected. No Zoho portal customization is required; sync stays gated.",
   },
   disconnected: { tone: "success", text: "Zoho Recruit access was revoked and disconnected." },
   disconnected_unconfirmed: {
@@ -120,9 +121,10 @@ export default async function HqIntegrationsPage({
 }) {
   await requirePortal("hq");
   const setup = getZohoRecruitSetupState();
-  const [connection, ops] = await Promise.all([
+  const [connection, ops, readiness] = await Promise.all([
     getZohoRecruitConnectionView(),
     getZohoRecruitOpsSnapshot(),
+    getZohoSandboxReadiness(),
   ]);
   const params = await searchParams;
   const message = params.zoho ? STATUS_MESSAGES[params.zoho] : undefined;
@@ -186,9 +188,27 @@ export default async function HqIntegrationsPage({
         </CardHeader>
         <CardBody className="space-y-5">
           <Alert tone="success" title="Safe by default">
-            Database synchronization gates stay off until separate approvals land. Production
-            candidate export cannot be flipped from this page. Tokens and secrets never appear in
-            the HQ UI.
+            No Zoho Recruit portal customization is required. Sync gates stay off until separate
+            approvals land. Production candidate export cannot be flipped from this page. Tokens and
+            secrets never appear in the HQ UI.
+          </Alert>
+
+          <Alert
+            tone={readiness.readyForSandboxExperiments ? "success" : "neutral"}
+            title="Sandbox operating mode"
+          >
+            <p className="mb-2">
+              Identity uses <code>zoho_recruit_external_mappings</code> only (Shugulika UUID ↔ Zoho
+              record id). Prefer a sandbox Zoho org so day-to-day Recruit is untouched.
+            </p>
+            <ul className="list-disc space-y-1 pl-4 text-sm">
+              {readiness.checks.map((check) => (
+                <li key={check.id}>
+                  <span className="font-medium text-ink">{check.ok ? "OK" : "Check"}:</span>{" "}
+                  {check.detail}
+                </li>
+              ))}
+            </ul>
           </Alert>
 
           {!connection.storageReady ? (
@@ -490,9 +510,8 @@ export default async function HqIntegrationsPage({
               <li>Enable Multi-DC support if the Zoho organization is outside the client DC.</li>
             </ol>
             <p className="text-xs text-ink-subtle">
-              Do not choose Client-based, Mobile-based, or Non-browser Applications. Self Client is
-              acceptable only for a disposable manual sandbox test and is not used by this
-              implementation.
+              API Console only — do not change Zoho Recruit Modules/Fields for Shugulika. Self Client
+              is acceptable only for a disposable manual sandbox test.
             </p>
           </CardBody>
         </Card>
@@ -536,11 +555,12 @@ export default async function HqIntegrationsPage({
       </div>
 
       <div className="mt-6">
-        <Alert tone="info" title="Next controlled phase">
+        <Alert tone="info" title="Sandbox path">
           <span className="inline-flex items-center gap-2">
             <CloudOff className="h-4 w-4" aria-hidden />
-            Synthetic-data mapping and reconciliation can be added after the Zoho organization is
-            connected. Production candidate data remains blocked.
+            Connect a sandbox Zoho org, keep production-data gated off, and use mapping-table
+            identity only. Day-to-day Zoho Recruit UI stays unchanged. Production exports stay
+            blocked until real DPO/legal approval is recorded.
           </span>
         </Alert>
       </div>

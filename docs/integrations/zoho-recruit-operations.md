@@ -54,6 +54,14 @@ OAuth routes (HQ session, not worker secret):
 - `GET /api/integrations/zoho-recruit/connect`
 - `GET /api/integrations/zoho-recruit/callback`
 
+## Sandbox vs live Zoho
+
+- Prefer a **sandbox Zoho Recruit organization** and matching API Console client.
+- Do **not** customize Zoho Modules/Fields for Shugulika.
+- Correlation is `zoho_recruit_external_mappings` only (create → store Zoho id → update by id).
+- Keep `zoho_recruit_production_data_enabled` false while experimenting.
+- Disconnect/reconnect OAuth does not sign Zoho users out of Recruit.
+
 ## Gate meanings
 
 Database flags in `feature_flags` (all seeded false):

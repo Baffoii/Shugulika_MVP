@@ -25,6 +25,30 @@ function assertModule(module: string): string {
   return ModuleName.parse(module);
 }
 
+export async function insertRecords(
+  module: string,
+  data: Record<string, unknown>[],
+): Promise<ZohoRequestResult<unknown>> {
+  const mod = assertModule(module);
+  return zohoRecruitRequest({
+    method: "POST",
+    path: `/recruit/v2/${mod}`,
+    body: { data, trigger: [] },
+  });
+}
+
+export async function updateRecords(
+  module: string,
+  data: Record<string, unknown>[],
+): Promise<ZohoRequestResult<unknown>> {
+  const mod = assertModule(module);
+  return zohoRecruitRequest({
+    method: "PUT",
+    path: `/recruit/v2/${mod}`,
+    body: { data, trigger: [] },
+  });
+}
+
 export async function upsertRecords(
   module: string,
   data: Record<string, unknown>[],
@@ -33,7 +57,7 @@ export async function upsertRecords(
   return zohoRecruitRequest({
     method: "POST",
     path: `/recruit/v2/${mod}/upsert`,
-    body: { data },
+    body: { data, trigger: [] },
   });
 }
 

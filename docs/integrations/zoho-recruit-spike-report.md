@@ -33,7 +33,8 @@ validated until a controlled synthetic run records:
   (`ZOHO_RECRUIT_WEBHOOK_SECRET`) rather than a body HMAC.
 - Replay protection relies on inbox dedupe keys / payload hashes.
 - Offline cases are synthetic (`is_synthetic = true`) until an explicit production path is approved.
-- `Shugulika_ID` custom unique fields will be created manually in Zoho before projection is enabled.
+- Identity uses `zoho_recruit_external_mappings` only — **no Zoho custom fields / portal layout changes**.
+- Optional Zoho `Shugulika_ID` custom fields are deferred and not required for sandbox.
 - Portal UX and public site routes never depend on Zoho availability.
 
 ## Manual Zoho configuration steps
@@ -46,7 +47,8 @@ validated until a controlled synthetic run records:
 5. Apply foundation + sync migrations.
 6. Connect from `/hq/integrations` as an HQ administrator.
 7. If scopes are missing after a scope expansion, disconnect and reconnect to re-consent.
-8. Create unique custom fields `Shugulika_ID` on Candidates and Job Openings.
+8. Do **not** customize the live Zoho Recruit portal. Use a sandbox Zoho org / API credentials for writes.
+9. Rely on `zoho_recruit_external_mappings` for create/update identity (Zoho record id ↔ Shugulika UUID).
 
 See also `docs/integrations/zoho-recruit-setup.md` and `docs/integrations/zoho-recruit-operations.md`.
 
