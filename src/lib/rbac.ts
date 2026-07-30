@@ -9,7 +9,30 @@ import type { MembershipRow } from "@/lib/database.types";
 
 /** Pure role/permission helpers — no server-only imports, so they are unit-testable. */
 
-export type RecruiterLevel = "generic" | "head" | "junior";
+export type RecruiterLevel = "junior" | "recruiter" | "senior" | "head_recruiter";
+
+export const RECRUITER_LEVELS: RecruiterLevel[] = [
+  "junior",
+  "recruiter",
+  "senior",
+  "head_recruiter",
+];
+
+export const RECRUITER_LEVEL_LABELS: Record<RecruiterLevel, string> = {
+  junior: "Junior recruiter",
+  recruiter: "Recruiter",
+  senior: "Senior recruiter",
+  head_recruiter: "Head recruiter",
+};
+
+/** Map legacy DB values that may still appear before migration runs. */
+export function normalizeRecruiterLevel(raw: string | null | undefined): RecruiterLevel {
+  if (raw === "junior") return "junior";
+  if (raw === "senior") return "senior";
+  if (raw === "head" || raw === "head_recruiter") return "head_recruiter";
+  if (raw === "generic" || raw === "recruiter") return "recruiter";
+  return "recruiter";
+}
 
 export function rolesCanAccessPortal(roles: Role[], portal: Portal): boolean {
   return roles.some((r) => PORTAL_ROLES[portal].includes(r));
@@ -79,10 +102,8 @@ export function canAssignInRegion(
   return allowed.includes(regionCode);
 }
 
-/** Resolve recruiter KPI level from memberships (defaults to generic). */
+/** Resolve recruiter KPI level from memberships (defaults to recruiter). */
 export function recruiterLevelFromMemberships(memberships: MembershipRow[]): RecruiterLevel {
   const rec = memberships.find((m) => m.status === "active" && m.role === "recruiter");
-  const level = rec?.recruiter_level;
-  if (level === "head" || level === "junior" || level === "generic") return level;
-  return "generic";
+  return normalizeRecruiterLevel(rec?.recruiter_level);
 }

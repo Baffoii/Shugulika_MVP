@@ -581,4 +581,95 @@ d("Row-Level Security & tenant isolation", () => {
       ),
     ).rejects.toThrow();
   });
+
+  it("KPI targets: recruiters read, franchise writes own org only, HQ writes platform; changes audited", async () => {
+    // Recruiter can read platform targets
+    const readRec = await queryAs(
+      client,
+      ids.recruiterA,
+      `select count(*)::int c from public.recruiter_kpi_targets where organization_id is null`,
+    );
+    expect((readRec.rows[0]?.c as number) ?? 0).toBeGreaterThan(0);
+
+    // Recruiter cannot insert org override
+    await expect(
+      queryAs(
+        client,
+        ids.recruiterA,
+        `insert into public.recruiter_kpi_targets
+           (recruiter_level, organization_id, target_time_to_fill_days, target_placement_rate_pct,
+            target_apps_reviewed_per_week, target_offer_to_hire_ratio_pct)
+         values ('recruiter', $1, 9, 60, 15, 45)`,
+        [ids.franchiseA],
+      ),
+    ).rejects.toThrow();
+
+    // Franchise admin can insert org-scoped override for franchise A
+    await commitAs(
+      client,
+      ids.franchiseAdminA,
+      `insert into public.recruiter_kpi_targets
+         (recruiter_level, organization_id, target_time_to_fill_days, target_placement_rate_pct,
+          target_apps_reviewed_per_week, target_offer_to_hire_ratio_pct,
+          max_time_to_first_review_hours, max_time_to_client_submission_days,
+          min_interview_conversion_pct, min_client_submission_acceptance_pct,
+          max_active_workload, max_stalled_application_count)
+       values ('recruiter', $1, 9, 60, 15, 45, 40, 12, 35, 35, 35, 8)`,
+      [ids.franchiseA],
+    );
+
+    // Franchise A admin cannot write franchise B override
+    await expect(
+      queryAs(
+        client,
+        ids.franchiseAdminA,
+        `insert into public.recruiter_kpi_targets
+           (recruiter_level, organization_id, target_time_to_fill_days, target_placement_rate_pct,
+            target_apps_reviewed_per_week, target_offer_to_hire_ratio_pct)
+         values ('junior', $1, 30, 40, 10, 30)`,
+        [ids.franchiseB],
+      ),
+    ).rejects.toThrow();
+
+    // Franchise cannot write platform (null org) targets — insert should fail WITH CHECK
+    await expect(
+      queryAs(
+        client,
+        ids.franchiseAdminA,
+        `insert into public.recruiter_kpi_targets
+           (recruiter_level, organization_id, target_time_to_fill_days, target_placement_rate_pct,
+            target_apps_reviewed_per_week, target_offer_to_hire_ratio_pct)
+         values ('senior', null, 11, 77, 22, 55)`,
+      ),
+    ).rejects.toThrow();
+
+    // HQ can update platform target and audit row is written
+    await commitAs(
+      client,
+      ids.hqAdmin,
+      `update public.recruiter_kpi_targets
+         set target_placement_rate_pct = 71
+       where organization_id is null and recruiter_level = 'recruiter'`,
+    );
+    const audits = await queryAs(
+      client,
+      ids.hqAdmin,
+      `select count(*)::int c from public.audit_logs
+         where entity_type = 'recruiter_kpi_targets' and action = 'kpi_target.updated'`,
+    );
+    expect((audits.rows[0]?.c as number) ?? 0).toBeGreaterThan(0);
+
+    // Employer cannot write KPI targets
+    await expect(
+      queryAs(
+        client,
+        ids.employerUserA,
+        `insert into public.recruiter_kpi_targets
+           (recruiter_level, organization_id, target_time_to_fill_days, target_placement_rate_pct,
+            target_apps_reviewed_per_week, target_offer_to_hire_ratio_pct)
+         values ('recruiter', $1, 1, 1, 1, 1)`,
+        [ids.employerA],
+      ),
+    ).rejects.toThrow();
+  });
 });

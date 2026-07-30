@@ -53,6 +53,14 @@ const REQUIRED = {
   employer_submissions: ["employer_org_id", "submitting_org_id", "status", "access_revoked_at"],
   invoices: ["owning_org_id", "status", "payment_status"],
   audit_logs: ["actor_id", "action", "entity_type"],
+  recruiter_kpi_targets: [
+    "recruiter_level",
+    "organization_id",
+    "target_time_to_fill_days",
+    "max_time_to_first_review_hours",
+    "max_active_workload",
+  ],
+  kpi_stage_age_thresholds: ["stage_key", "organization_id", "max_hours"],
 };
 const REQUIRED_VIEWS = ["public_jobs", "apply_targets"];
 
@@ -102,6 +110,8 @@ for (const t of [
   "candidate_profiles",
   "invoices",
   "assessment_assignments",
+  "recruiter_kpi_targets",
+  "kpi_stage_age_thresholds",
 ]) {
   const row = rls.find((r) => r.relname === t);
   if (row && !row.relrowsecurity) errors.push(`RLS not enabled on public.${t}`);

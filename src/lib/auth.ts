@@ -122,6 +122,18 @@ export function memberOrgIds(memberships: MembershipRow[]): string[] {
     .map((m) => m.organization_id as string);
 }
 
+/** Prefer the franchise org for franchise_admin / operations memberships. */
+export function franchiseOrgId(memberships: MembershipRow[]): string | null {
+  const franchise = memberships.find(
+    (m) =>
+      m.status === "active" &&
+      m.organization_id &&
+      (m.role === "franchise_admin" || m.role === "operations"),
+  );
+  if (franchise?.organization_id) return franchise.organization_id;
+  return primaryOrgId(memberships);
+}
+
 /** Primary staff org (first franchise/hq/employer membership). */
 export function primaryOrgId(memberships: MembershipRow[]): string | null {
   const staff = memberships.find(

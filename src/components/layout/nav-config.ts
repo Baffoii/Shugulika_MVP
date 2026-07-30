@@ -94,6 +94,7 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
     { href: "/hq/countries", label: "Countries", icon: Globe2 },
     { href: "/hq/franchises", label: "Franchises", icon: Store },
     { href: "/hq/recruiters", label: "Assignments", icon: Target },
+    { href: "/hq/reports", label: "KPI reports", icon: BarChart3 },
     { href: "/hq/users", label: "Users & roles", icon: Users },
     { href: "/hq/employer-applications", label: "Employer applications", icon: ClipboardList },
     { href: "/hq/jobs", label: "Jobs", icon: Briefcase },

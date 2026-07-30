@@ -1,14 +1,14 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import type { AssignedRole, KpiCompany, KpiDateRange } from "@/lib/data/recruiter-kpis";
-import { cn } from "@/lib/cn";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useCallback } from "react";
+import type { AssignedRole, KpiCompany, KpiPeriod } from "@/lib/data/recruiter-kpis";
 
-const RANGES: { id: KpiDateRange; label: string }[] = [
-  { id: "week", label: "Week" },
-  { id: "month", label: "Month" },
-  { id: "quarter", label: "Quarter" },
+const PERIODS: { value: KpiPeriod; label: string }[] = [
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "90d", label: "Last 90 days" },
+  { value: "ytd", label: "Year to date" },
 ];
 
 export function KpiFilters({
@@ -17,93 +17,98 @@ export function KpiFilters({
   roles,
   companyId,
   companies,
+  showCustom = true,
 }: {
-  range: KpiDateRange;
-  roleId: string | undefined;
+  range: KpiPeriod;
+  roleId?: string;
   roles: AssignedRole[];
-  companyId: string | undefined;
+  companyId?: string;
   companies: KpiCompany[];
+  showCustom?: boolean;
 }) {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  function hrefFor(next: { range?: string; role?: string | null; company?: string | null }) {
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    if (next.range) params.set("range", next.range);
-    if (next.role === null) params.delete("role");
-    else if (next.role !== undefined) {
-      if (next.role) params.set("role", next.role);
-      else params.delete("role");
-    }
-    if (next.company === null) params.delete("company");
-    else if (next.company !== undefined) {
-      if (next.company) params.set("company", next.company);
-      else params.delete("company");
-    }
-    const qs = params.toString();
-    return qs ? `${pathname}?${qs}` : pathname;
-  }
+  const update = useCallback(
+    (patch: Record<string, string | undefined>) => {
+      const next = new URLSearchParams(searchParams.toString());
+      for (const [k, v] of Object.entries(patch)) {
+        if (!v) next.delete(k);
+        else next.set(k, v);
+      }
+      router.push(`${pathname}?${next.toString()}`);
+    },
+    [pathname, router, searchParams],
+  );
 
   const activeRoles = roles.filter((r) => r.status === "active");
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-      <div
-        className="inline-flex rounded-lg border border-surface-border bg-white p-0.5"
-        role="group"
-        aria-label="Date range"
-      >
-        {RANGES.map((r) => (
-          <Link
-            key={r.id}
-            href={hrefFor({ range: r.id })}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              range === r.id
-                ? "bg-brand-600 text-white"
-                : "text-ink-muted hover:bg-surface-muted hover:text-ink",
-            )}
-            aria-current={range === r.id ? "page" : undefined}
-          >
-            {r.label}
-          </Link>
-        ))}
-      </div>
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <label className="flex items-center gap-2 text-sm text-ink-muted">
-          <span className="whitespace-nowrap">Company</span>
+    <div className="flex flex-wrap items-end gap-3">
+      <label className="flex flex-col gap-1 text-xs text-ink-muted">
+        Period
+        <select
+          className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
+          value={range}
+          onChange={(e) => update({ range: e.target.value })}
+        >
+          {PERIODS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+          {showCustom ? <option value="custom">Custom</option> : null}
+        </select>
+      </label>
+      {range === "custom" ? (
+        <>
+          <label className="flex flex-col gap-1 text-xs text-ink-muted">
+            From
+            <input
+              type="date"
+              className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
+              defaultValue={searchParams.get("from") ?? ""}
+              onChange={(e) => update({ from: e.target.value || undefined, range: "custom" })}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-ink-muted">
+            To
+            <input
+              type="date"
+              className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
+              defaultValue={searchParams.get("to") ?? ""}
+              onChange={(e) => update({ to: e.target.value || undefined, range: "custom" })}
+            />
+          </label>
+        </>
+      ) : null}
+      {companies.length > 0 ? (
+        <label className="flex flex-col gap-1 text-xs text-ink-muted">
+          Company
           <select
-            className="max-w-[220px] rounded-lg border border-surface-border bg-white px-3 py-1.5 text-sm text-ink"
-            aria-label="Filter KPIs by company"
+            className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
             value={companyId ?? ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              window.location.href = hrefFor({ company: v || null });
-            }}
+            onChange={(e) => update({ company: e.target.value || undefined })}
           >
             <option value="">All companies</option>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
-                {c.applicationCount > 0 ? ` (${c.applicationCount})` : ""}
+                {c.name} ({c.applicationCount})
               </option>
             ))}
           </select>
         </label>
-
-        <label className="flex items-center gap-2 text-sm text-ink-muted">
-          <span className="whitespace-nowrap">Role</span>
+      ) : null}
+      {activeRoles.length > 0 ? (
+        <label className="flex flex-col gap-1 text-xs text-ink-muted">
+          Role
           <select
-            className="max-w-[220px] rounded-lg border border-surface-border bg-white px-3 py-1.5 text-sm text-ink"
-            aria-label="Filter KPIs by assigned role"
+            className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
             value={roleId ?? ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              window.location.href = hrefFor({ role: v || null });
-            }}
+            onChange={(e) => update({ role: e.target.value || undefined })}
           >
-            <option value="">All assigned roles</option>
+            <option value="">All roles</option>
             {activeRoles.map((r) => (
               <option key={r.roleId} value={r.roleId}>
                 {r.roleName}
@@ -111,7 +116,7 @@ export function KpiFilters({
             ))}
           </select>
         </label>
-      </div>
+      ) : null}
     </div>
   );
 }

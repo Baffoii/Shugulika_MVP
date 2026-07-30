@@ -372,10 +372,11 @@ scheduler or manual staff action.
   (shortlist / request interview / reject-with-reason) with audit; employer comments. Employers only ever see
   candidates submitted to them (enforced by RLS). Client Submission from the recruiter portal creates that pack
   after employer-specific consent is on file.
-- **Franchise & HQ**: metrics dashboards (RLS-scoped), franchise/employer/job/placement/invoice lists, **audit log**
+- **Franchise & HQ**: metrics dashboards (RLS-scoped), **KPI reports** (`/franchise/reports`, `/hq/reports`)
+  with shared definitions (see [`docs/kpi.md`](docs/kpi.md)), franchise/employer/job/placement/invoice lists, **audit log**
   viewer (append-only, HQ-only), and HQ **AI credits** (`/hq/ai-usage`) — estimated OpenAI spend by purpose
   (CV extraction, summary/headline drafts, role-fit screens) with links to the official OpenAI usage dashboard.
-  Requires migration `20260722093000_ai_usage_events.sql`.
+  Requires migration `20260722093000_ai_usage_events.sql`. Recruiter KPIs live at `/recruiter/kpis`.
 - **Cross-cutting**: notifications, activity events, append-only audit log, integration placeholders.
 - **Design system**: brand tokens (green on white), reusable UI kit (buttons, cards, badges, tables, forms,
   empty/loading/error states), role-aware sidebar + responsive shell.
