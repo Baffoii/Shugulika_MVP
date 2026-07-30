@@ -34,6 +34,7 @@ const FIELD_OPTIONS = [
   ["contact_email", "Contact email"],
   ["contact_phone", "Contact phone"],
   ["routing", "Shugulika office routing"],
+  ["preferred_package_key", "Preferred hiring plan"],
 ] as const;
 
 type Panel = "changes" | "reject" | "reassign" | "note" | null;

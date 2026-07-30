@@ -118,6 +118,8 @@ export type EmployerApplicationRow = {
   reapply_allowed: boolean | null;
   previous_application_id: string | null;
   resulting_org_id: string | null;
+  /** Soft plan interest captured during onboarding (optional). */
+  preferred_package_key: string | null;
   submitted_at: string | null;
   first_submitted_at: string | null;
   decided_at: string | null;
@@ -571,10 +573,33 @@ export type DiscoverableCandidateRow = {
   has_own_engagement: boolean;
 };
 
+/** Employer Path A pool hit — anonymized until unlocked. */
+export type EmployerPoolCandidateRow = {
+  candidate_id: string;
+  teaser_label: string;
+  headline: string | null;
+  country_code: string | null;
+  city: string | null;
+  skills: string[];
+  education_level: string | null;
+  experience_summary: string | null;
+  experience_years: number | null;
+  languages: string[];
+  availability: string | null;
+  desired_roles: string[];
+  approved_fields: string[];
+  open_to_work: boolean;
+  is_unlocked: boolean;
+  given_name: string | null;
+  family_name: string | null;
+  full_name: string | null;
+  primary_cv_document_id: string | null;
+};
+
 export type CandidateSearchAccessEventRow = {
   id: number;
   actor_id: string | null;
-  candidate_id: string;
+  candidate_id: string | null;
   org_context_id: string | null;
   access_kind: string;
   metadata: Json;
@@ -628,6 +653,8 @@ export type EmployerSubmissionRow = {
   is_masked: boolean;
   summary: string | null;
   disclosed_profile: Json;
+  /** Full identity pack; only surface after CV unlock. */
+  full_disclosed_profile: Json | null;
   disclosed_fields: string[];
   cv_document_id: string | null;
   submitted_at: string | null;
@@ -696,6 +723,8 @@ export type PackageRow = {
   name: string;
   tier: number;
   is_active: boolean;
+  description: string | null;
+  package_kind: "subscription" | "addon";
 };
 export type PackageEntitlementRow = {
   id: string;
@@ -710,10 +739,38 @@ export type EmployerSubscriptionRow = {
   package_id: string;
   status: string;
   is_trial: boolean;
+  trial_started_on: string | null;
   trial_ends_on: string | null;
+  auto_activate_intent: boolean;
   starts_on: string;
   expires_on: string | null;
   created_at: string;
+};
+export type EmployerCvUnlockBalanceRow = {
+  employer_org_id: string;
+  balance: number;
+  updated_at: string;
+};
+export type EmployerCvUnlockLedgerRow = {
+  id: string;
+  employer_org_id: string;
+  entry_type: "grant" | "spend" | "adjust" | "expire";
+  amount: number;
+  balance_after: number;
+  reason: string | null;
+  package_key: string | null;
+  candidate_id: string | null;
+  submission_id: string | null;
+  actor_user_id: string | null;
+  created_at: string;
+};
+export type EmployerCvUnlockRow = {
+  id: string;
+  employer_org_id: string;
+  candidate_id: string;
+  submission_id: string | null;
+  ledger_entry_id: string | null;
+  unlocked_at: string;
 };
 export type InvoiceRow = {
   id: string;
@@ -1205,6 +1262,9 @@ export type Database = {
       packages: Tbl<PackageRow>;
       package_entitlements: Tbl<PackageEntitlementRow>;
       employer_subscriptions: Tbl<EmployerSubscriptionRow>;
+      employer_cv_unlock_balances: Tbl<EmployerCvUnlockBalanceRow>;
+      employer_cv_unlock_ledger: Tbl<EmployerCvUnlockLedgerRow>;
+      employer_cv_unlocks: Tbl<EmployerCvUnlockRow>;
       invoices: Tbl<InvoiceRow>;
       invoice_items: Tbl<InvoiceItemRow>;
       payment_records: Tbl<PaymentRecordRow>;
@@ -1402,6 +1462,23 @@ export type Database = {
         Args: { p_candidate: string };
         Returns: DiscoverableCandidateRow[];
       };
+      search_employer_talent_pool: {
+        Args: {
+          p_job_order_id: string;
+          p_q?: string | null;
+          p_skill?: string | null;
+          p_country?: string | null;
+          p_city?: string | null;
+          p_availability?: string | null;
+          p_experience_level?: string | null;
+          p_limit?: number | null;
+        };
+        Returns: EmployerPoolCandidateRow[];
+      };
+      open_employer_pool_candidate: {
+        Args: { p_candidate_id: string; p_job_order_id: string };
+        Returns: EmployerPoolCandidateRow[];
+      };
       eligible_employer_franchises: {
         Args: { p_country: string; p_region?: string | null };
         Returns: EligibleFranchiseRow[];
@@ -1447,6 +1524,30 @@ export type Database = {
       start_revised_employer_application: {
         Args: { p_previous_id: string };
         Returns: string;
+      };
+      count_employer_active_job_slots: {
+        Args: { p_employer_org: string };
+        Returns: number;
+      };
+      employer_job_slot_limit: {
+        Args: { p_employer_org: string };
+        Returns: number;
+      };
+      activate_employer_package: {
+        Args: { p_package_key: string; p_as_trial?: boolean };
+        Returns: Json;
+      };
+      purchase_employer_addon: {
+        Args: { p_addon_key: string };
+        Returns: Json;
+      };
+      spend_cv_unlock: {
+        Args: { p_candidate_id: string; p_submission_id?: string | null };
+        Returns: Json;
+      };
+      expire_stale_employer_trials: {
+        Args: Record<string, never>;
+        Returns: number;
       };
     };
     Enums: Record<string, never>;

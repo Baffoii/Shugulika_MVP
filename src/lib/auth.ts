@@ -115,6 +115,21 @@ export async function requireApprovedEmployer(): Promise<{
   return { ctx, employerOrg };
 }
 
+/**
+ * Require an active subscription or trial. Redirects to the plan picker when
+ * the employer has not chosen a package yet (hybrid Option C — hard gate after approval).
+ */
+export async function requireEmployerSubscription(): Promise<{
+  ctx: SessionContext;
+  employerOrg: OrganizationRow;
+}> {
+  const { ctx, employerOrg } = await requireApprovedEmployer();
+  const { getEmployerPlanSnapshot } = await import("@/lib/employer-entitlements");
+  const plan = await getEmployerPlanSnapshot(employerOrg.id);
+  if (!plan.isActive) redirect("/employer/plan");
+  return { ctx, employerOrg };
+}
+
 /** The org ids a user is a member of (used to scope org-owned reads/writes). */
 export function memberOrgIds(memberships: MembershipRow[]): string[] {
   return memberships

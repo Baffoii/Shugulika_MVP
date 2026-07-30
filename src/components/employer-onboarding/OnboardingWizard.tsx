@@ -12,6 +12,8 @@ import { Checkbox, Field, Input, Select } from "@/components/ui/form";
 import { COUNTRIES, COMPANY_SIZES, ORGANIZATION_TYPES } from "@/lib/constants";
 import {
   applicationReadyToSubmit,
+  preferredPackageLabel,
+  PREFERRED_PACKAGE_OPTIONS,
   type OnboardingStepKey,
   type RequestedChangeItem,
 } from "@/lib/employer-onboarding";
@@ -466,6 +468,61 @@ export function DeclarationsSection({ app }: SectionProps) {
   );
 }
 
+export function PackageSection({ app }: SectionProps) {
+  const [raw, action] = useFormState(saveEmployerOnboardingSectionAction, initial);
+  const state = formState(raw);
+  const selected = app?.preferred_package_key ?? "";
+  return (
+    <SectionShell
+      title="Hiring plan interest"
+      description="Optional — tell us what you might want. After approval you will activate a free trial or package (no card charge in this MVP)."
+      step="package"
+      state={state}
+      action={action}
+    >
+      <div className="md:col-span-2 space-y-3">
+        <Alert tone="info">
+          CV unlocks work like chapter coins: browse masked teasers free, spend an unlock to open a
+          full candidate pack. Job slots are separate capacity limits.
+        </Alert>
+        <label className="flex items-start gap-2 rounded-lg border border-surface-border bg-white p-3 text-sm text-ink">
+          <input
+            type="radio"
+            name="preferred_package_key"
+            value=""
+            defaultChecked={!selected}
+            className="mt-1"
+          />
+          <span>
+            <span className="font-medium">I&apos;m not sure yet</span>
+            <span className="block text-xs text-ink-subtle">
+              You can pick a plan after your company is approved.
+            </span>
+          </span>
+        </label>
+        {PREFERRED_PACKAGE_OPTIONS.map((opt) => (
+          <label
+            key={opt.key}
+            className="flex items-start gap-2 rounded-lg border border-surface-border bg-white p-3 text-sm text-ink"
+          >
+            <input
+              type="radio"
+              name="preferred_package_key"
+              value={opt.key}
+              defaultChecked={selected === opt.key}
+              className="mt-1"
+            />
+            <span>
+              <span className="font-medium">{opt.label}</span>
+              <span className="block text-xs text-ink-subtle">{opt.blurb}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </SectionShell>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Review & submit
 // ---------------------------------------------------------------------------
@@ -557,6 +614,11 @@ export function ReviewScreen({
       title: "Shugulika office",
       step: "routing",
       rows: [["Routing", routingLabel]],
+    },
+    {
+      title: "Hiring plan interest",
+      step: "package",
+      rows: [["Preferred plan", preferredPackageLabel(app.preferred_package_key)]],
     },
     {
       title: "Declarations",
