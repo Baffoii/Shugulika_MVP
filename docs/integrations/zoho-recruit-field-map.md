@@ -1,70 +1,64 @@
 # Zoho Recruit field map
 
-This document describes the default rows seeded into `zoho_recruit_field_mappings` by
-`supabase/migrations/20260730122000_zoho_recruit_satellite_sync.sql`. Every row is inserted with
-`enabled = false`. Unmapped fields do **not** sync. Enabling a row still requires open sync gates,
-offline-case eligibility, and recorded approvals for production data.
+Default rows in `zoho_recruit_field_mappings` are seeded **disabled**. Unmapped fields do not sync.
+Enabling a row still requires open sync gates, offline-case eligibility, and (for real people)
+recorded production approvals.
 
-Shugulika/Supabase remains the authoritative system for portal workflow state. Zoho Recruit is an
-offline-recruitment satellite only.
+Shugulika/Supabase remains authoritative. Zoho Recruit is an offline satellite only.
 
-## Correlation key (manual Zoho setup)
+## Identity (no Zoho portal customization required)
 
-Before any candidate or job projection can succeed, create a custom unique field in Zoho Recruit:
+**Sandbox / current rule:** do **not** create custom fields in Zoho Recruit.
 
-| Zoho module | API name | Type | Unique | Purpose |
-| --- | --- | --- | --- | --- |
-| Candidates | `Shugulika_ID` | Text (single line) | Yes | Immutable correlation to `candidates.id` |
-| Job Openings | `Shugulika_ID` | Text (single line) | Yes | Immutable correlation to local job id |
+Correlation is stored only in Shugulika:
 
-Setup notes:
+| Store | Key |
+| --- | --- |
+| `zoho_recruit_external_mappings` | `local_entity_id` (Shugulika UUID) ↔ `zoho_record_id` (Zoho’s own id) |
 
-1. In Zoho Recruit → Setup → Customization → Modules → Candidates / Job Openings, add the field.
-2. Set the API name exactly to `Shugulika_ID` (case-sensitive for the mapper).
-3. Mark the field unique. Do not use email or phone as a match key.
-4. Do not map any other Zoho field as the correlation key.
+Outbound worker behavior:
+
+1. If a mapping exists → **update** that Zoho record by id.
+2. If not → **create** in Zoho, then save the returned Zoho id in the mapping table.
+3. Never match on email, phone, or name.
+
+Optional later hardening (not required): a Zoho custom unique `Shugulika_ID` field. That is a Zoho
+UI change and is **out of scope** while operating against an untouched Recruit portal / sandbox.
 
 ## Default mapped fields
 
-Retention defaults for every seeded row:
+Retention defaults:
 
 - `retention_behavior`: `mirror_local`
 - `deletion_behavior`: `restrict_then_delete`
 
-| Local entity | Local field | Zoho module | Zoho field | Owner (authoritative) | Direction | Purpose | Sensitivity | Retention |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| candidate | `id` | Candidates | `Shugulika_ID` | shugulika | outbound | Immutable external correlation id | internal | mirror_local / restrict_then_delete |
-| candidate | `full_name` | Candidates | `Full_Name` | shugulika | outbound | Offline recruiter identification | confidential | mirror_local / restrict_then_delete |
-| candidate | `email` | Candidates | `Email` | shugulika | outbound | Offline recruiter contact for approved cases only | confidential | mirror_local / restrict_then_delete |
-| candidate | `phone` | Candidates | `Mobile` | shugulika | outbound | Offline recruiter contact for approved cases only | confidential | mirror_local / restrict_then_delete |
-| candidate | `city` | Candidates | `City` | shugulika | outbound | Location context for offline sourcing | internal | mirror_local / restrict_then_delete |
-| candidate | `country` | Candidates | `Country` | shugulika | outbound | Location context for offline sourcing | internal | mirror_local / restrict_then_delete |
-| job | `id` | Job_Openings | `Shugulika_ID` | shugulika | outbound | Immutable external correlation id | internal | mirror_local / restrict_then_delete |
-| job | `title` | Job_Openings | `Job_Opening_Name` | shugulika | outbound | Offline requisition title | internal | mirror_local / restrict_then_delete |
-| candidate | `zoho_offline_status` | Candidates | `Candidate_Status` | zoho_recruit | inbound | Zoho-owned offline status/outcome summary only | internal | mirror_local / restrict_then_delete |
+| Local entity | Local field | Zoho module | Zoho field | Owner | Direction | Purpose | Sensitivity |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| candidate | `id` | Candidates | *(mapping table only)* | shugulika | outbound | Correlation via `zoho_recruit_external_mappings` | internal |
+| candidate | `full_name` | Candidates | `Full_Name` | shugulika | outbound | Offline recruiter identification | confidential |
+| candidate | `email` | Candidates | `Email` | shugulika | outbound | Offline contact for approved cases only — **not** a match key | confidential |
+| candidate | `phone` | Candidates | `Mobile` | shugulika | outbound | Offline contact for approved cases only | confidential |
+| candidate | `city` | Candidates | `City` | shugulika | outbound | Location context | internal |
+| candidate | `country` | Candidates | `Country` | shugulika | outbound | Location context | internal |
+| job | `id` | Job_Openings | *(mapping table only)* | shugulika | outbound | Correlation via mapping table | internal |
+| job | `title` | Job_Openings | `Job_Opening_Name` | shugulika | outbound | Offline requisition title | internal |
+| candidate | `zoho_offline_status` | Candidates | `Candidate_Status` | zoho_recruit | inbound | Zoho-owned offline status summary only | internal |
 
-Inbound `Candidate_Status` never overwrites portal application stage, pipeline, assessment, interview,
-billing, or other Shugulika workflow fields.
+Inbound `Candidate_Status` never overwrites portal application stage, pipeline, assessments,
+interviews, billing, or other Shugulika workflow fields.
+
+Seeded DB rows that still mention `Shugulika_ID` remain **disabled** legacy placeholders; the
+runtime path ignores them.
 
 ## Unmapped fields
 
-Any local or Zoho field that is not listed above (or not present as an enabled row in
-`zoho_recruit_field_mappings`) does **not** sync in either direction. Examples that stay local-only
-unless explicitly approved and mapped later:
-
-- resumes / documents / attachments
-- assessments, interview scores, and video responses
-- portal application stage and pipeline history
-- billing, invoices, and commercial terms
-- franchise org internals beyond approved offline-case metadata
-- free-text recruiter notes not covered by an enabled mapping
-
-Do not invent ad-hoc field projection outside this registry.
+Anything not enabled in `zoho_recruit_field_mappings` does not sync, including resumes, media,
+assessments, interviews, billing, and portal pipeline state.
 
 ## Enabling a mapping
 
-1. Confirm DPO/legal and product ownership for the field and direction.
-2. Confirm sensitivity and retention are acceptable for the Zoho tenant and data center.
-3. Ensure the Zoho custom field exists when required (`Shugulika_ID`).
+1. Prefer a **sandbox Zoho org** (separate Client ID / connection) for experiments.
+2. Keep production Recruit day-to-day org free of Shugulika writes until gates + approvals say otherwise.
+3. Confirm ownership, sensitivity, and retention.
 4. Set `enabled = true` only through a controlled change with gates still respected.
-5. Keep `zoho_recruit_production_data_enabled` false until production approval evidence is recorded.
+5. Keep `zoho_recruit_production_data_enabled` false until real DPO/legal approval is recorded.
