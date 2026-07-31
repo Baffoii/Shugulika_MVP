@@ -54,10 +54,14 @@ Apply in order:
 1. Keep DB sync gates **false**.
 2. Set `ZOHO_RECRUIT_ENABLED=true` and restart.
 3. HQ admin → `/hq/integrations` → **Connect Zoho Recruit**.
-4. Approve scopes (org + settings + candidates/jobopening read/create/update).
+4. Approve scopes (`ZohoRecruit.org.all`, `ZohoRecruit.settings.ALL`, `ZohoRecruit.modules.ALL`).
+   Prefer these group scopes — per-module scope names are inconsistently accepted by Zoho Accounts.
 5. If scopes are missing later: Disconnect → Connect again (does not log out Zoho users).
 
-OAuth alone does **not** export candidates or jobs.
+OAuth alone does **not** export or import candidates. For employer Find candidates sync, also enable
+DB gates `zoho_recruit_enabled`, `zoho_recruit_data_sync_enabled`, and either
+`zoho_recruit_production_data_enabled` or `zoho_recruit_sandbox_sync_enabled`, then run
+**Sync candidates from Zoho** on this page.
 
 ## 5. How identity works (no Zoho UI fields)
 

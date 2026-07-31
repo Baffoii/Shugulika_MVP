@@ -5,7 +5,7 @@ import {
   Alert,
   Badge,
   Button,
-  ButtonLink,
+  buttonClass,
   Card,
   CardBody,
   CardHeader,
@@ -28,7 +28,9 @@ import {
   resumeZohoSyncAction,
   retryZohoDeadLetterAction,
   runZohoDryRunReconcileAction,
+  syncZohoCandidatesAction,
 } from "@/app/hq/integrations/actions";
+import { probeZohoCandidateAccess } from "@/lib/integrations/zoho-recruit/candidate-probe";
 
 export const metadata: Metadata = { title: "Integrations" };
 
@@ -91,6 +93,18 @@ const STATUS_MESSAGES: Record<string, { tone: "success" | "warn" | "danger"; tex
     tone: "warn",
     text: "No primary Zoho Recruit connection row is available.",
   },
+  candidate_sync_ok: {
+    tone: "success",
+    text: "Zoho candidate search cache sync completed.",
+  },
+  candidate_sync_skipped: {
+    tone: "warn",
+    text: "Candidate sync was skipped (gates, connection, scopes, or another run in progress).",
+  },
+  candidate_sync_failed: {
+    tone: "danger",
+    text: "Candidate sync failed. Check server logs for a non-sensitive error summary.",
+  },
 };
 
 const GATE_LABELS: Record<ZohoRecruitGateKey, string> = {
@@ -121,10 +135,11 @@ export default async function HqIntegrationsPage({
 }) {
   await requirePortal("hq");
   const setup = getZohoRecruitSetupState();
-  const [connection, ops, readiness] = await Promise.all([
+  const [connection, ops, readiness, candidateAccess] = await Promise.all([
     getZohoRecruitConnectionView(),
     getZohoRecruitOpsSnapshot(),
     getZohoSandboxReadiness(),
+    probeZohoCandidateAccess(),
   ]);
   const params = await searchParams;
   const message = params.zoho ? STATUS_MESSAGES[params.zoho] : undefined;
@@ -276,16 +291,20 @@ export default async function HqIntegrationsPage({
                 </Button>
               </form>
             ) : (
-              <ButtonLink
+              // Plain <a>: this hits an API route that 307s to Zoho. Next.js Link
+              // tries an RSC fetch first and surfaces a noisy "Failed to fetch".
+              <a
                 href="/api/integrations/zoho-recruit/connect"
-                variant="primary"
-                prefetch={false}
-                className={
-                  !setup.ready || !connection.storageReady ? "pointer-events-none opacity-50" : ""
-                }
+                className={buttonClass(
+                  "primary",
+                  "md",
+                  !setup.ready || !connection.storageReady
+                    ? "pointer-events-none opacity-50"
+                    : undefined,
+                )}
               >
                 Connect Zoho Recruit
-              </ButtonLink>
+              </a>
             )}
           </div>
 
@@ -434,6 +453,24 @@ export default async function HqIntegrationsPage({
               </div>
             </div>
 
+            <Alert
+              tone={candidateAccess.ready ? "success" : "warn"}
+              title="Inbound candidate search cache"
+            >
+              <p className="mb-2 text-sm">
+                Experimental: pull Zoho Candidates into a local searchable cache for Employer Find
+                candidates. Requires OAuth connect, candidate READ scopes, and open sync gates.
+              </p>
+              <ul className="list-disc space-y-1 pl-4 text-sm">
+                {candidateAccess.checks.map((check) => (
+                  <li key={check.id}>
+                    <span className="font-medium text-ink">{check.ok ? "OK" : "Check"}:</span>{" "}
+                    {check.detail}
+                  </li>
+                ))}
+              </ul>
+            </Alert>
+
             <div className="flex flex-wrap gap-2 border-t border-surface-border pt-4">
               {syncPaused ? (
                 <form action={resumeZohoSyncAction}>
@@ -457,6 +494,11 @@ export default async function HqIntegrationsPage({
               <form action={runZohoDryRunReconcileAction}>
                 <Button type="submit" variant="secondary">
                   Run dry-run reconcile
+                </Button>
+              </form>
+              <form action={syncZohoCandidatesAction}>
+                <Button type="submit" variant="primary" disabled={!candidateAccess.ready}>
+                  Sync candidates from Zoho
                 </Button>
               </form>
             </div>

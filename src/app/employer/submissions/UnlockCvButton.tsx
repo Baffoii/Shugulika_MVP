@@ -3,16 +3,19 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Button, Alert } from "@/components/ui/primitives";
-import { unlockEmployerCvAction } from "@/app/employer/plan-actions";
+import { unlockEmployerCvAction, unlockEmployerZohoCvAction } from "@/app/employer/plan-actions";
 
 export function UnlockCvButton({
   candidateId,
+  zohoCandidateId,
   submissionId,
   jobOrderId,
   balance,
   teaserCopy,
 }: {
   candidateId: string;
+  /** Zoho-backed pool unlock (experimental). When set, uses the Zoho unlock wallet bridge. */
+  zohoCandidateId?: string;
   /** Path B submission unlock. Omit for Path A pool unlocks. */
   submissionId?: string;
   /** Path A job scope — used to revalidate pool pages after unlock. */
@@ -26,7 +29,9 @@ export function UnlockCvButton({
   function unlock() {
     setError(null);
     startTransition(async () => {
-      const result = await unlockEmployerCvAction(candidateId, submissionId ?? null, jobOrderId);
+      const result = zohoCandidateId
+        ? await unlockEmployerZohoCvAction(zohoCandidateId, candidateId, jobOrderId)
+        : await unlockEmployerCvAction(candidateId, submissionId ?? null, jobOrderId);
       if (!result.ok) setError(result.error ?? "Could not unlock this CV.");
     });
   }

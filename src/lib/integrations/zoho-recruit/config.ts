@@ -3,28 +3,48 @@ import "server-only";
 import { env } from "@/lib/env";
 
 export const ZOHO_RECRUIT_ORG_SCOPE = "ZohoRecruit.org.all";
-/** Minimum scopes for org verify + metadata + candidate/job projection. */
+/**
+ * Scopes for org verify + metadata + candidate/job access.
+ *
+ * Prefer Zoho’s documented *group* scopes — per-module strings like
+ * `modules.candidates.ALL` / `modules.jobopening.ALL` are inconsistently
+ * accepted by Accounts and often return “Invalid OAuth Scope”.
+ * @see https://www.zoho.com/recruit/developer-guide/apiv2/oauth-overview.html
+ */
 export const ZOHO_RECRUIT_SYNC_SCOPES = [
   ZOHO_RECRUIT_ORG_SCOPE,
   "ZohoRecruit.settings.ALL",
-  "ZohoRecruit.modules.candidates.CREATE",
-  "ZohoRecruit.modules.candidates.UPDATE",
-  "ZohoRecruit.modules.candidates.READ",
-  "ZohoRecruit.modules.jobopening.CREATE",
-  "ZohoRecruit.modules.jobopening.UPDATE",
-  "ZohoRecruit.modules.jobopening.READ",
+  "ZohoRecruit.modules.ALL",
 ] as const;
-/** Org-only scopes used by the current connected foundation until HQ reconnects. */
+/** Scopes requested on Connect / Self Client grant. */
 export const ZOHO_RECRUIT_SCOPES = ZOHO_RECRUIT_SYNC_SCOPES;
 export const ZOHO_RECRUIT_CALLBACK_PATH = "/api/integrations/zoho-recruit/callback";
 export const ZOHO_OAUTH_STATE_COOKIE = "shugulika_zoho_recruit_oauth_state";
+
+/** True when granted scopes cover a required scope (exact or module `.ALL`). */
+export function scopeSatisfied(granted: ReadonlySet<string>, required: string): boolean {
+  if (granted.has(required)) return true;
+  const parts = required.split(".");
+  if (parts.length >= 3) {
+    const moduleAll = [...parts.slice(0, -1), "ALL"].join(".");
+    if (granted.has(moduleAll)) return true;
+  }
+  // Broader group scopes from Zoho docs.
+  if (required.startsWith("ZohoRecruit.modules.") && granted.has("ZohoRecruit.modules.ALL")) {
+    return true;
+  }
+  if (required.startsWith("ZohoRecruit.settings.") && granted.has("ZohoRecruit.settings.ALL")) {
+    return true;
+  }
+  return false;
+}
 
 export function scopesMissing(
   granted: readonly string[],
   required: readonly string[] = ZOHO_RECRUIT_SYNC_SCOPES,
 ): string[] {
   const have = new Set(granted.map((s) => s.trim()).filter(Boolean));
-  return required.filter((scope) => !have.has(scope));
+  return required.filter((scope) => !scopeSatisfied(have, scope));
 }
 
 const ACCOUNTS_HOSTS = new Set([

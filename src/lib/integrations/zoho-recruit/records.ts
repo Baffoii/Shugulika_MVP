@@ -1,7 +1,12 @@
 import "server-only";
 
 import { z } from "zod";
-import { zohoRecruitRequest, type ZohoRequestResult } from "@/lib/integrations/zoho-recruit/client";
+import {
+  zohoRecruitDownload,
+  zohoRecruitRequest,
+  type ZohoBinaryResult,
+  type ZohoRequestResult,
+} from "@/lib/integrations/zoho-recruit/client";
 
 /**
  * Thin Zoho Recruit record helpers.
@@ -84,17 +89,26 @@ export async function searchRecords(
 
 export async function listRecords(
   module: string,
-  options: { page?: number; per_page?: number } = {},
+  options: { page?: number; per_page?: number; fields?: string[] } = {},
 ): Promise<ZohoRequestResult<unknown>> {
   const mod = assertModule(module);
   const page = options.page ?? 1;
   const perPage = options.per_page ?? 200;
+  const fields =
+    options.fields && options.fields.length > 0
+      ? options.fields
+          .map((f) => f.trim())
+          .filter(Boolean)
+          .slice(0, 100)
+          .join(",")
+      : undefined;
   return zohoRecruitRequest({
     method: "GET",
     path: `/recruit/v2/${mod}`,
     query: {
       page: z.number().int().positive().parse(page),
       per_page: z.number().int().positive().max(200).parse(perPage),
+      fields,
     },
   });
 }
@@ -112,5 +126,31 @@ export async function getFields(module: string): Promise<ZohoRequestResult<unkno
     method: "GET",
     path: "/recruit/v2/settings/fields",
     query: { module: mod },
+  });
+}
+
+export async function listAttachments(
+  module: string,
+  recordId: string,
+): Promise<ZohoRequestResult<unknown>> {
+  const mod = assertModule(module);
+  const id = z.string().min(1).max(100).parse(recordId);
+  return zohoRecruitRequest({
+    method: "GET",
+    path: `/recruit/v2/${mod}/${encodeURIComponent(id)}/Attachments`,
+  });
+}
+
+export async function downloadAttachment(
+  module: string,
+  recordId: string,
+  attachmentId: string,
+): Promise<ZohoBinaryResult> {
+  const mod = assertModule(module);
+  const id = z.string().min(1).max(100).parse(recordId);
+  const att = z.string().min(1).max(100).parse(attachmentId);
+  return zohoRecruitDownload({
+    method: "GET",
+    path: `/recruit/v2/${mod}/${encodeURIComponent(id)}/Attachments/${encodeURIComponent(att)}`,
   });
 }

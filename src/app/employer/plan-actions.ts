@@ -89,3 +89,22 @@ export async function unlockEmployerCvAction(
   revalidatePath("/employer/billing");
   return { ok: true, message: "CV unlocked." };
 }
+
+/** Spend one CV unlock for a Zoho-synced pool candidate (same wallet, separate unlock table). */
+export async function unlockEmployerZohoCvAction(
+  zohoCandidateId: string,
+  searchRowId: string,
+  jobOrderId?: string | null,
+): Promise<PlanActionResult> {
+  await requireApprovedEmployer();
+  const supabase = createClient();
+  const { error } = await supabase.rpc("spend_zoho_cv_unlock", {
+    p_zoho_candidate_id: zohoCandidateId,
+    p_job_order_id: jobOrderId ?? null,
+  });
+  if (error) return { ok: false, error: rpcErrorMessage(error) };
+  revalidatePath("/employer/find-candidates");
+  revalidatePath(`/employer/find-candidates/${searchRowId}`);
+  revalidatePath("/employer/billing");
+  return { ok: true, message: "CV unlocked." };
+}

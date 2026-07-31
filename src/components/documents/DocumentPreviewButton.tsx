@@ -12,9 +12,12 @@ export type PreviewOpenParams = {
   applicationId?: string;
   submissionId?: string;
   jobOrderId?: string;
+  /** Optional absolute path for alternate preview endpoints (same watermark UX). */
+  previewHref?: string;
 };
 
 function previewUrl(params: PreviewOpenParams): string {
+  if (params.previewHref) return params.previewHref;
   const q = new URLSearchParams({
     source: params.source,
     id: params.id,
@@ -33,6 +36,7 @@ export function DocumentPreviewButton({
   applicationId,
   submissionId,
   jobOrderId,
+  previewHref,
   variant = "ghost",
   size = "sm",
 }: PreviewOpenParams & {
@@ -71,6 +75,7 @@ export function DocumentPreviewButton({
           applicationId,
           submissionId,
           jobOrderId,
+          previewHref,
         }),
       );
       setOpen(true);

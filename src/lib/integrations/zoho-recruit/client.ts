@@ -35,6 +35,16 @@ export interface ZohoRequestOptions {
   skipAuthRetry?: boolean;
 }
 
+export interface ZohoBinaryResult {
+  bytes: Uint8Array;
+  contentType: string | null;
+  contentDisposition: string | null;
+  status: number;
+  rateLimit: ZohoRateLimitInfo;
+  correlationId: string;
+  apiDomain: string;
+}
+
 export interface ZohoRequestResult<T> {
   data: T;
   status: number;
@@ -300,4 +310,87 @@ export async function zohoRecruitRequest<T = unknown>(
   }
 
   throw lastError instanceof Error ? lastError : new Error("Zoho Recruit request failed.");
+}
+
+/**
+ * Authenticated binary download (attachments). Never logs body contents.
+ * Uses the same token refresh / host allowlist as JSON requests.
+ */
+export async function zohoRecruitDownload(
+  options: Omit<ZohoRequestOptions, "body">,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ZohoBinaryResult> {
+  const maxAttempts = options.maxAttempts ?? 4;
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const correlationId = createZohoCorrelationId();
+    const tokens = await ensureFreshToken();
+    const url = buildUrl(tokens.apiDomain, options.path, options.query);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const onAbort = () => controller.abort();
+    options.signal?.addEventListener("abort", onAbort);
+
+    try {
+      const response = await fetchImpl(url, {
+        method: options.method ?? "GET",
+        headers: {
+          Authorization: `Zoho-oauthtoken ${tokens.accessToken}`,
+          "X-ZOHO-SERVICE": "shugulika-satellite",
+          "X-Correlation-Id": correlationId,
+        },
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      const rateLimit = parseZohoRateLimitHeaders(response.headers);
+
+      if (response.status === 401 && !options.skipAuthRetry && attempt === 0) {
+        await refreshZohoAccessToken(fetchImpl);
+        continue;
+      }
+
+      if (!response.ok) {
+        const payload: unknown = await response.json().catch(() => ({}));
+        const err = classifyZohoHttpError({
+          status: response.status,
+          body: payload,
+          correlationId,
+          rateLimit,
+        });
+        if (!err.retryable || attempt === maxAttempts - 1) throw err;
+        lastError = err;
+        await new Promise((r) =>
+          setTimeout(
+            r,
+            err.rateLimit?.retryAfterSeconds
+              ? err.rateLimit.retryAfterSeconds * 1000
+              : zohoBackoffDelayMs(attempt),
+          ),
+        );
+        continue;
+      }
+
+      const buffer = new Uint8Array(await response.arrayBuffer());
+      return {
+        bytes: buffer,
+        contentType: response.headers.get("content-type"),
+        contentDisposition: response.headers.get("content-disposition"),
+        status: response.status,
+        rateLimit,
+        correlationId,
+        apiDomain: tokens.apiDomain,
+      };
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts - 1) throw error;
+      await new Promise((r) => setTimeout(r, zohoBackoffDelayMs(attempt)));
+    } finally {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Zoho Recruit download failed.");
 }

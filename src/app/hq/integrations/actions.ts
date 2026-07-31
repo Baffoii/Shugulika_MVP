@@ -10,6 +10,7 @@ import {
 import { connectZohoRecruitWithGrantCode } from "@/lib/integrations/zoho-recruit/connect";
 import { decryptZohoToken } from "@/lib/integrations/zoho-recruit/crypto";
 import { revokeZohoRefreshToken } from "@/lib/integrations/zoho-recruit/oauth";
+import { syncZohoCandidatesToSearchCache } from "@/lib/integrations/zoho-recruit/candidate-sync";
 import { runZohoRecruitReconciliation } from "@/lib/integrations/zoho-recruit/reconcile";
 import {
   disconnectZohoRecruitConnection,
@@ -17,6 +18,16 @@ import {
   getZohoRecruitCredentialRecord,
 } from "@/lib/integrations/zoho-recruit/store";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+
+function isNextRedirectError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    typeof (error as { digest?: unknown }).digest === "string" &&
+    String((error as { digest: string }).digest).startsWith("NEXT_REDIRECT")
+  );
+}
 
 async function requireHqAdmin() {
   const ctx = await requirePortal("hq");
@@ -215,5 +226,46 @@ export async function runZohoDryRunReconcileAction(): Promise<void> {
       error instanceof Error ? error.message : "Unknown reconciliation error",
     );
     redirect("/hq/integrations?zoho=reconcile_failed");
+  }
+}
+
+/** HQ-only inbound sync of Zoho Candidates into the employer search cache. */
+export async function syncZohoCandidatesAction(): Promise<void> {
+  const ctx = await requireHqAdmin();
+  const client = createServiceRoleClient();
+  if (!client) redirect("/hq/integrations?zoho=storage_required");
+
+  try {
+    const result = await syncZohoCandidatesToSearchCache({
+      lockedBy: `hq:${ctx.userId}`,
+    });
+
+    await client.from("audit_logs").insert({
+      actor_id: ctx.userId,
+      action: "integration.zoho_recruit.candidate_sync",
+      entity_type: "zoho_recruit_candidate_sync_run",
+      entity_id: result.runId ?? null,
+      after_value: {
+        status: result.status,
+        skipped: Boolean(result.skipped),
+        pages_fetched: result.pagesFetched,
+        candidates_seen: result.candidatesSeen,
+        candidates_upserted: result.candidatesUpserted,
+        candidates_inactivated: result.candidatesInactivated,
+      },
+      metadata: { provider: "zoho_recruit", reason: result.reason ?? null },
+    });
+
+    if (result.skipped) redirect("/hq/integrations?zoho=candidate_sync_skipped");
+    if (result.status === "failed") redirect("/hq/integrations?zoho=candidate_sync_failed");
+    redirect("/hq/integrations?zoho=candidate_sync_ok");
+  } catch (error) {
+    // `redirect()` throws NEXT_REDIRECT — must not be treated as sync failure.
+    if (isNextRedirectError(error)) throw error;
+    console.error(
+      "[zoho-recruit/candidate-sync]",
+      error instanceof Error ? error.message : "Unknown candidate sync error",
+    );
+    redirect("/hq/integrations?zoho=candidate_sync_failed");
   }
 }

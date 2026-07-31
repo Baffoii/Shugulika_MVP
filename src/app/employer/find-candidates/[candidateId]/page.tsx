@@ -10,7 +10,7 @@ import {
   Badge,
   Alert,
 } from "@/components/ui/primitives";
-import { ViewCvButton } from "@/components/documents/ViewCvButton";
+import { DocumentPreviewButton } from "@/components/documents/DocumentPreviewButton";
 import { UnlockCvButton } from "@/app/employer/submissions/UnlockCvButton";
 import { requireEmployerSubscription } from "@/lib/auth";
 import { openEmployerPoolCandidate } from "@/lib/data/employer-talent-search";
@@ -82,6 +82,7 @@ export default async function EmployerPoolCandidatePage({
     COUNTRIES.find((x) => x.code === candidate.country_code)?.name ?? candidate.country_code;
   const location = [candidate.city, countryName].filter(Boolean).join(", ");
   const backHref = `/employer/find-candidates?job=${encodeURIComponent(jobOrderId)}`;
+  const zohoPreviewHref = `/api/documents/zoho-cv-preview?searchRowId=${encodeURIComponent(candidate.candidate_id)}&jobOrderId=${encodeURIComponent(jobOrderId)}`;
 
   return (
     <div className="space-y-6">
@@ -113,13 +114,15 @@ export default async function EmployerPoolCandidatePage({
               {!unlocked ? (
                 <UnlockCvButton
                   candidateId={candidate.candidate_id}
+                  zohoCandidateId={candidate.zoho_candidate_id}
                   jobOrderId={jobOrderId}
                   balance={plan.cvUnlockBalance}
-                  teaserCopy="This is an anonymized pool teaser. Spend 1 CV unlock to reveal their name and watermarked CV inside Shugulika"
+                  teaserCopy="This is an anonymized pool teaser from the Zoho sync cache. Spend 1 CV unlock to reveal their name and watermarked CV inside Shugulika"
                 />
               ) : null}
               {unlocked ? <Field label="Name" value={displayName} /> : null}
               <Field label="Headline" value={candidate.headline} />
+              <Field label="Industry" value={candidate.industry} />
               <Field label="Location" value={location || null} />
               <Field label="Availability" value={candidate.availability} />
               <Field
@@ -161,29 +164,28 @@ export default async function EmployerPoolCandidatePage({
                   </div>
                 </div>
               ) : null}
-              {candidate.languages.length > 0 ? (
-                <Field label="Languages" value={candidate.languages.join(", ")} />
-              ) : null}
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
                   Resume
                 </p>
-                {unlocked && candidate.primary_cv_document_id ? (
+                {unlocked && candidate.has_resume ? (
                   <div className="mt-1 flex items-center justify-between gap-3 rounded-lg border border-surface-border px-3 py-2">
                     <span className="flex items-center gap-2 text-sm text-ink">
                       <FileText className="h-4 w-4 text-ink-subtle" aria-hidden />
                       Watermarked CV
                     </span>
-                    <ViewCvButton
-                      documentId={candidate.primary_cv_document_id}
-                      jobOrderId={jobOrderId}
+                    <DocumentPreviewButton
+                      source="candidate_document"
+                      id={candidate.candidate_id}
                       label="Preview CV"
+                      jobOrderId={jobOrderId}
+                      previewHref={zohoPreviewHref}
                     />
                   </div>
                 ) : (
                   <p className="mt-0.5 text-ink-muted">
                     {unlocked
-                      ? "No CV on file for this candidate."
+                      ? "No CV attachment available for this candidate."
                       : "Unlock to preview the watermarked CV."}
                   </p>
                 )}
