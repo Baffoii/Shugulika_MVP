@@ -19,6 +19,7 @@ const mapping: CandidateFieldMapping = {
   status: "Candidate_Status",
   availability: "Availability",
   converted: "$converted",
+  attachmentPresent: "Is_Attachment_Present",
 };
 
 describe("normalizeZohoCandidateRecord", () => {
@@ -41,6 +42,22 @@ describe("normalizeZohoCandidateRecord", () => {
     expect(normalized!.skills).toEqual(["ICU", "Triage"]);
     expect(normalized!.searchEligible).toBe(true);
     expect(normalized!.teaserLabel).toBe("Nurse");
+    expect(normalized!.hasResume).toBe(false);
+  });
+
+  it("sets hasResume from Is_Attachment_Present when Resume file field is absent", () => {
+    const normalized = normalizeZohoCandidateRecord(
+      {
+        id: "497983000000876145",
+        Current_Job_Title: "Technical IT Support Officer",
+        Is_Attachment_Present: true,
+        $converted: false,
+        Candidate_Status: "New",
+      },
+      mapping,
+    );
+    expect(normalized!.hasResume).toBe(true);
+    expect(normalized!.zohoAttachmentId).toBeNull();
   });
 
   it("never uses full name as the locked teaser when a title exists", () => {

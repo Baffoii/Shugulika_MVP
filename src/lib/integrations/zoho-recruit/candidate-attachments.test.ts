@@ -45,7 +45,28 @@ describe("isSupportedResumeContentType", () => {
     ).toBe(true);
   });
 
+  it("accepts Zoho application/x-download when the extension is a resume type", () => {
+    expect(
+      isSupportedResumeContentType(
+        "application/x-downLoad;charset=UTF-8",
+        "59afb1cf9554815b2dfff191e1f5bb0c.docx",
+      ),
+    ).toBe(true);
+  });
+
   it("rejects unsafe types", () => {
     expect(isSupportedResumeContentType("application/x-msdownload", "x.exe")).toBe(false);
+  });
+});
+
+describe("fileNameFromContentDisposition", () => {
+  it("parses RFC 5987 filenames from Zoho downloads", async () => {
+    const { fileNameFromContentDisposition } =
+      await import("@/lib/integrations/zoho-recruit/candidate-attachments");
+    expect(
+      fileNameFromContentDisposition(
+        "attachment;filename*=UTF-8''59afb1cf9554815b2dfff191e1f5bb0c.docx",
+      ),
+    ).toBe("59afb1cf9554815b2dfff191e1f5bb0c.docx");
   });
 });

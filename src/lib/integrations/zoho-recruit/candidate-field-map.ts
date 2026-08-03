@@ -28,7 +28,9 @@ export type InternalCandidateField =
   | "consentStatus"
   | "createdTime"
   | "modifiedTime"
-  | "resumeFileId";
+  | "resumeFileId"
+  /** Zoho boolean: candidate has at least one attachment (common when Resume file field is absent). */
+  | "attachmentPresent";
 
 /** Preferred Zoho API names when metadata confirms them. */
 export const PREFERRED_ZOHO_API_NAMES: Record<InternalCandidateField, string[]> = {
@@ -55,6 +57,7 @@ export const PREFERRED_ZOHO_API_NAMES: Record<InternalCandidateField, string[]> 
   createdTime: ["Created_Time", "Created_Time__s"],
   modifiedTime: ["Modified_Time", "Modified_Time__s"],
   resumeFileId: ["Resume", "CV", "Attachment_Id"],
+  attachmentPresent: ["Is_Attachment_Present", "Attachment_Present"],
 };
 
 /** Label fragments used to discover fields when preferred API names are absent. */
@@ -82,6 +85,7 @@ export const FIELD_LABEL_HINTS: Record<InternalCandidateField, string[]> = {
   createdTime: ["created time", "created"],
   modifiedTime: ["modified time", "modified", "updated"],
   resumeFileId: ["resume", "cv", "curriculum"],
+  attachmentPresent: ["is attachment present", "attachment present"],
 };
 
 export type ZohoFieldMeta = {

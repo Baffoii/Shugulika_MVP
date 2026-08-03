@@ -120,13 +120,18 @@ export default async function SubmissionDetailPage({
                       <FileText className="h-4 w-4 text-ink-subtle" aria-hidden />
                       {cv.title ?? cv.object_path.split("/").pop()}
                     </span>
-                    <ViewCvButton documentId={cv.id} submissionId={sub.id} label="Preview CV" />
+                    <ViewCvButton
+                      documentId={cv.id}
+                      submissionId={sub.id}
+                      label="Preview CV"
+                      allowDownload
+                    />
                   </div>
                 ) : (
                   <p className="mt-0.5 text-ink-muted">
                     {unlocked
                       ? "No resume attached to this submission."
-                      : "Unlock to preview the watermarked CV."}
+                      : "Unlock to preview or download the watermarked CV."}
                   </p>
                 )}
               </div>
@@ -137,8 +142,8 @@ export default async function SubmissionDetailPage({
                 </div>
               ) : null}
               <Alert tone="info">
-                Contact details and internal recruiter notes stay inside Shugulika. Unlocked CVs
-                open as watermarked, view-only previews — originals cannot be downloaded.
+                Contact details and internal recruiter notes stay inside Shugulika. Unlocked CVs can
+                be previewed or downloaded as watermarked PDFs — every access is audited.
               </Alert>
             </CardBody>
           </Card>

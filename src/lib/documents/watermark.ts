@@ -264,7 +264,7 @@ export async function unsupportedPreviewPdf(
 ): Promise<Uint8Array> {
   return noticePdf(
     "Preview unavailable for this file type",
-    `This file (${mimeType ?? "unknown type"}) cannot be rendered as a watermarked preview. Ask the uploader to provide a PDF or image. Original download is restricted to Super Admin export.`,
+    `This file (${mimeType ?? "unknown type"}) could not be converted into a watermarked preview. Try Download for the watermarked PDF when available, or ask the candidate for a PDF/DOCX resume.`,
     formatWatermarkLines(ctx),
   );
 }

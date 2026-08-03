@@ -168,11 +168,18 @@ export default async function EmployerPoolCandidatePage({
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
                   Resume
                 </p>
-                {unlocked && candidate.has_resume ? (
+                {unlocked ? (
                   <div className="mt-1 flex items-center justify-between gap-3 rounded-lg border border-surface-border px-3 py-2">
-                    <span className="flex items-center gap-2 text-sm text-ink">
-                      <FileText className="h-4 w-4 text-ink-subtle" aria-hidden />
-                      Watermarked CV
+                    <span className="flex min-w-0 flex-col gap-0.5 text-sm text-ink">
+                      <span className="inline-flex items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0 text-ink-subtle" aria-hidden />
+                        Watermarked CV
+                      </span>
+                      {!candidate.has_resume ? (
+                        <span className="text-xs text-ink-subtle">
+                          Fetches from Zoho on preview if an attachment exists.
+                        </span>
+                      ) : null}
                     </span>
                     <DocumentPreviewButton
                       source="candidate_document"
@@ -180,19 +187,18 @@ export default async function EmployerPoolCandidatePage({
                       label="Preview CV"
                       jobOrderId={jobOrderId}
                       previewHref={zohoPreviewHref}
+                      allowDownload
                     />
                   </div>
                 ) : (
                   <p className="mt-0.5 text-ink-muted">
-                    {unlocked
-                      ? "No CV attachment available for this candidate."
-                      : "Unlock to preview the watermarked CV."}
+                    Unlock to preview or download the watermarked CV.
                   </p>
                 )}
               </div>
               <Alert tone="info">
-                Email and phone are never shared with employers in this release. Reach out through
-                Shugulika after unlock.
+                Email and phone are never shared with employers in this release. Unlocked CVs can be
+                previewed or downloaded as watermarked PDFs — every access is audited.
               </Alert>
             </CardBody>
           </Card>
@@ -205,7 +211,10 @@ export default async function EmployerPoolCandidatePage({
             </CardHeader>
             <CardBody className="text-sm text-ink-muted">
               {unlocked ? (
-                <p>You can reopen this watermarked CV anytime without spending another unlock.</p>
+                <p>
+                  You can reopen or download this watermarked CV anytime without spending another
+                  unlock.
+                </p>
               ) : plan.cvUnlockBalance < 1 ? (
                 <p>
                   No unlocks left.{" "}

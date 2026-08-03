@@ -28,10 +28,18 @@ describe("buildCandidateFieldMapping", () => {
     expect(mapping.city).toBe("Custom_City");
   });
 
-  it("leaves unconfirmed fields unset rather than inventing names", () => {
-    const mapping = buildCandidateFieldMapping([{ api_name: "id", field_label: "Record Id" }]);
-    expect(mapping.portalEligible).toBeUndefined();
-    expect(mapping.consentStatus).toBeUndefined();
+  it("maps Is_Attachment_Present for orgs without a Resume file field", () => {
+    const mapping = buildCandidateFieldMapping([
+      { api_name: "id", field_label: "Record Id" },
+      {
+        api_name: "Is_Attachment_Present",
+        field_label: "Is Attachment Present",
+        data_type: "boolean",
+      },
+    ]);
+    expect(mapping.attachmentPresent).toBe("Is_Attachment_Present");
+    expect(mapping.resumeFileId).toBeUndefined();
+    expect(zohoListFields(mapping)).toContain("Is_Attachment_Present");
   });
 });
 

@@ -17,7 +17,7 @@ const SOURCE_KINDS = new Set<DocumentSourceKind>(["candidate_document", "assessm
 
 /**
  * GET /api/documents/preview?source=candidate_document&id=...&applicationId=...&submissionId=...
- * Streams a watermarked PDF with Content-Disposition: inline (no download affordance).
+ * Optional: &download=1 → Content-Disposition: attachment (still watermarked).
  */
 export async function GET(request: NextRequest) {
   const ctx = await getSessionContext();
@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const source = url.searchParams.get("source") as DocumentSourceKind | null;
   const id = url.searchParams.get("id");
+  const asDownload =
+    url.searchParams.get("download") === "1" || url.searchParams.get("download") === "true";
   if (!source || !SOURCE_KINDS.has(source) || !id) {
     return NextResponse.json({ error: "Missing source or id." }, { status: 400 });
   }
@@ -47,17 +49,21 @@ export async function GET(request: NextRequest) {
       resolved.watermark,
     );
 
-    await writeDocumentAccessEvent(ctx, resolved, "preview");
+    await writeDocumentAccessEvent(ctx, resolved, "preview", {
+      disposition: asDownload ? "attachment" : "inline",
+      watermarked_download: asDownload,
+    });
 
-    const filename = `${(resolved.title ?? "preview").replace(/[^\w.\-]+/g, "_")}.preview.pdf`;
+    const filename = `${(resolved.title ?? "preview").replace(/[^\w.\-]+/g, "_")}${asDownload ? ".cv.pdf" : ".preview.pdf"}`;
     return new NextResponse(Buffer.from(preview.bytes), {
       status: 200,
       headers: {
         "Content-Type": preview.contentType,
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": asDownload
+          ? `attachment; filename="${filename}"`
+          : `inline; filename="${filename}"`,
         "Cache-Control": "no-store, no-cache, must-revalidate, private",
         "X-Content-Type-Options": "nosniff",
-        // Discourage casual save-as / embedding caches; not absolute DRM.
         "X-Robots-Tag": "noindex, nofollow",
       },
     });

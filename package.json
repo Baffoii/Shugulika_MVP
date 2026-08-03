@@ -38,6 +38,7 @@
     "react-dom": "^19.2.8",
     "recharts": "^3.10.0",
     "tailwind-merge": "^3.6.0",
+    "word-extractor": "^1.0.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -50,6 +51,7 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/word-extractor": "^1.0.6",
     "@vitejs/plugin-react": "^6.0.4",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9.39.0",

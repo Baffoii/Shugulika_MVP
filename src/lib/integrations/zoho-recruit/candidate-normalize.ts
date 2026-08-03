@@ -121,6 +121,22 @@ function teaserFrom(record: { jobTitle: string | null; zohoCandidateId: string }
   return `Candidate ${short.toUpperCase()}`;
 }
 
+function asBool(value: unknown): boolean | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return null;
+  }
+  if (typeof value === "string") {
+    const t = value.trim().toLowerCase();
+    if (["true", "1", "yes", "y"].includes(t)) return true;
+    if (["false", "0", "no", "n"].includes(t)) return false;
+  }
+  return null;
+}
+
 function resumeMeta(value: unknown): { hasResume: boolean; attachmentId: string | null } {
   if (value == null || value === false || value === "") {
     return { hasResume: false, attachmentId: null };
@@ -165,6 +181,7 @@ export function normalizeZohoCandidateRecord(
   const currentEmployer = asText(readMappedValue(record, mapping, "currentEmployer"));
   const industry = asText(readMappedValue(record, mapping, "industry"));
   const resume = resumeMeta(readMappedValue(record, mapping, "resumeFileId"));
+  const attachmentPresent = asBool(readMappedValue(record, mapping, "attachmentPresent"));
   const country = asText(readMappedValue(record, mapping, "country"));
 
   return {
@@ -186,7 +203,9 @@ export function normalizeZohoCandidateRecord(
     countryCode: guessCountryCode(country),
     candidateStatus: eligibility.status,
     availability: asText(readMappedValue(record, mapping, "availability")),
-    hasResume: resume.hasResume,
+    // Many Zoho orgs store CVs only on the Attachments related list and expose
+    // Is_Attachment_Present on the candidate — not a Resume file field.
+    hasResume: resume.hasResume || attachmentPresent === true,
     zohoAttachmentId: resume.attachmentId,
     searchEligible: eligibility.eligible,
     consentOrVisibility: eligibility.consentOrVisibility,

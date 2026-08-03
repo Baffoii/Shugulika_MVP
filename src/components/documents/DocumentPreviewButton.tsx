@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState, useTransition } from "react";
-import { X, FileText, ShieldAlert } from "lucide-react";
+import { X, FileText, ShieldAlert, Download } from "lucide-react";
 import { Button } from "@/components/ui/primitives";
 import type { DocumentSourceKind } from "@/lib/documents/access-types";
 
@@ -14,6 +14,8 @@ export type PreviewOpenParams = {
   jobOrderId?: string;
   /** Optional absolute path for alternate preview endpoints (same watermark UX). */
   previewHref?: string;
+  /** When true, show a Download control that fetches the watermarked PDF as an attachment. */
+  allowDownload?: boolean;
 };
 
 function previewUrl(params: PreviewOpenParams): string {
@@ -28,7 +30,13 @@ function previewUrl(params: PreviewOpenParams): string {
   return `/api/documents/preview?${q.toString()}`;
 }
 
-/** Opens a watermarked, view-only in-app preview (no ordinary download). */
+function withDownloadParam(href: string): string {
+  const url = new URL(href, "http://local.invalid");
+  url.searchParams.set("download", "1");
+  return `${url.pathname}?${url.searchParams.toString()}`;
+}
+
+/** Opens a watermarked in-app preview; optionally allows downloading the same watermarked PDF. */
 export function DocumentPreviewButton({
   source,
   id,
@@ -37,6 +45,7 @@ export function DocumentPreviewButton({
   submissionId,
   jobOrderId,
   previewHref,
+  allowDownload = false,
   variant = "ghost",
   size = "sm",
 }: PreviewOpenParams & {
@@ -45,9 +54,20 @@ export function DocumentPreviewButton({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
+  const [downloading, startDownload] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [src, setSrc] = useState<string | null>(null);
   const titleId = useId();
+
+  const href = previewUrl({
+    source,
+    id,
+    label,
+    applicationId,
+    submissionId,
+    jobOrderId,
+    previewHref,
+  });
 
   const close = useCallback(() => {
     setOpen(false);
@@ -67,26 +87,38 @@ export function DocumentPreviewButton({
   function openPreview() {
     setError(null);
     start(() => {
-      setSrc(
-        previewUrl({
-          source,
-          id,
-          label,
-          applicationId,
-          submissionId,
-          jobOrderId,
-          previewHref,
-        }),
-      );
+      setSrc(href);
       setOpen(true);
+    });
+  }
+
+  function downloadPdf() {
+    setError(null);
+    startDownload(() => {
+      // Full navigation so the browser receives Content-Disposition: attachment.
+      window.location.assign(withDownloadParam(href));
     });
   }
 
   return (
     <>
-      <Button variant={variant} size={size} onClick={openPreview} disabled={pending}>
-        {pending ? "Opening…" : label}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant={variant} size={size} onClick={openPreview} disabled={pending}>
+          {pending ? "Opening…" : label}
+        </Button>
+        {allowDownload ? (
+          <Button
+            variant="outline"
+            size={size}
+            onClick={downloadPdf}
+            disabled={downloading}
+            aria-label="Download watermarked CV"
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            {downloading ? "Downloading…" : "Download"}
+          </Button>
+        ) : null}
+      </div>
       {open && src ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-3 sm:p-6"
@@ -105,17 +137,32 @@ export function DocumentPreviewButton({
                 </p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-subtle">
                   <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Watermarked view-only preview · access is audited · no download
+                  Watermarked PDF · access is audited
+                  {allowDownload ? " · download available" : ""}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={close}
-                className="rounded-md p-1.5 text-ink-subtle hover:bg-surface-muted hover:text-ink"
-                aria-label="Close preview"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                {allowDownload ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={downloadPdf}
+                    disabled={downloading}
+                    aria-label="Download watermarked CV"
+                  >
+                    <Download className="h-4 w-4" aria-hidden />
+                    {downloading ? "Downloading…" : "Download"}
+                  </Button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={close}
+                  className="rounded-md p-1.5 text-ink-subtle hover:bg-surface-muted hover:text-ink"
+                  aria-label="Close preview"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
             {error ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
@@ -147,12 +194,14 @@ export function ViewCvButton({
   applicationId,
   submissionId,
   jobOrderId,
+  allowDownload = false,
 }: {
   documentId: string;
   label: string;
   applicationId?: string;
   submissionId?: string;
   jobOrderId?: string;
+  allowDownload?: boolean;
   /** @deprecated Ignored — originals are never exposed via signed URL. */
   bucketId?: string;
   /** @deprecated Ignored — originals are never exposed via signed URL. */
@@ -166,6 +215,7 @@ export function ViewCvButton({
       applicationId={applicationId}
       submissionId={submissionId}
       jobOrderId={jobOrderId}
+      allowDownload={allowDownload}
     />
   );
 }

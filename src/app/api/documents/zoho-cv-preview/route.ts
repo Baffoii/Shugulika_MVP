@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSessionContext } from "@/lib/auth";
 import {
   downloadCandidateResumeAttachment,
+  fileNameFromContentDisposition,
   isSupportedResumeContentType,
   resolveCandidateResumeAttachment,
 } from "@/lib/integrations/zoho-recruit/candidate-attachments";
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/documents/zoho-cv-preview?searchRowId=…&jobOrderId=…
- * Downloads a Zoho candidate attachment server-side, watermarks it, streams inline PDF.
+ * Optional: &download=1 → Content-Disposition: attachment (still watermarked).
+ * Downloads a Zoho candidate attachment server-side, watermarks it, streams PDF.
  * Never exposes Zoho URLs, tokens, or raw unwatermarked bytes.
  */
 export async function GET(request: NextRequest) {
@@ -26,12 +28,12 @@ export async function GET(request: NextRequest) {
 
   const searchRowId = request.nextUrl.searchParams.get("searchRowId")?.trim() ?? "";
   const jobOrderId = request.nextUrl.searchParams.get("jobOrderId")?.trim() ?? "";
-  if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      searchRowId,
-    ) ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobOrderId)
-  ) {
+  const asDownload =
+    request.nextUrl.searchParams.get("download") === "1" ||
+    request.nextUrl.searchParams.get("download") === "true";
+  // Accept any UUID-shaped id (demo seeds use non-RFC variant/version nibbles).
+  const uuidShape = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidShape.test(searchRowId) || !uuidShape.test(jobOrderId)) {
     return NextResponse.json({ error: "Missing searchRowId or jobOrderId." }, { status: 400 });
   }
 
@@ -46,11 +48,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No approved employer organization." }, { status: 403 });
   }
 
-  const { data: ownsJob } = await supabase.rpc("employer_owns_path_a_job", {
-    p_employer_org: orgId as string,
-    p_job_order: jobOrderId,
-  });
-  if (!ownsJob) {
+  // Check ownership via service role after org is established. Do not rely solely on
+  // employer_owns_path_a_job EXECUTE grants (search RPCs call it as DEFINER).
+  const { data: pathAJob } = await service
+    .from("job_orders")
+    .select("id")
+    .eq("id", jobOrderId)
+    .eq("employer_org_id", orgId as string)
+    .eq("recruitment_path", "A")
+    .in("status", ["submitted", "approved", "active", "on_hold", "partially_filled"])
+    .maybeSingle();
+  if (!pathAJob) {
     return NextResponse.json(
       { error: "Select one of your Direct (Path A) jobs." },
       { status: 403 },
@@ -120,7 +128,9 @@ export async function GET(request: NextRequest) {
     }
 
     const downloaded = await downloadCandidateResumeAttachment(row.zoho_candidate_id, attachmentId);
-    if (!isSupportedResumeContentType(downloaded.contentType, fileName)) {
+    const effectiveFileName =
+      fileName ?? fileNameFromContentDisposition(downloaded.contentDisposition) ?? "resume";
+    if (!isSupportedResumeContentType(downloaded.contentType, effectiveFileName)) {
       return NextResponse.json({ error: "Unsupported resume file type." }, { status: 415 });
     }
 
@@ -134,11 +144,9 @@ export async function GET(request: NextRequest) {
     const candidateLabel =
       row.full_name?.trim() || row.teaser_label || `Candidate ${row.zoho_candidate_id.slice(-8)}`;
     const preview = await buildWatermarkedPreview(
-      new Blob([Buffer.from(downloaded.bytes)], {
-        type: downloaded.contentType ?? "application/octet-stream",
-      }),
+      downloaded.bytes,
       downloaded.contentType,
-      fileName ?? "resume",
+      effectiveFileName,
       row.job_title ?? "Resume",
       {
         candidateLabel,
@@ -154,7 +162,7 @@ export async function GET(request: NextRequest) {
 
     await service.from("audit_logs").insert({
       actor_id: ctx.userId,
-      action: "document.zoho_cv_preview",
+      action: asDownload ? "document.zoho_cv_download" : "document.zoho_cv_preview",
       entity_type: "zoho_recruit_candidate_search",
       entity_id: row.id,
       metadata: {
@@ -162,14 +170,24 @@ export async function GET(request: NextRequest) {
         org_context_id: orgId,
         watermarked: true,
         provider: "zoho_recruit",
+        disposition: asDownload ? "attachment" : "inline",
       },
     } as never);
+
+    const safeBase = candidateLabel
+      .replace(/[^\w.\- ]+/g, "")
+      .trim()
+      .replace(/\s+/g, "_")
+      .slice(0, 80);
+    const filename = `${safeBase || "candidate"}.cv.pdf`;
 
     return new NextResponse(Buffer.from(preview.bytes), {
       status: 200,
       headers: {
         "Content-Type": preview.contentType,
-        "Content-Disposition": 'inline; filename="resume.preview.pdf"',
+        "Content-Disposition": asDownload
+          ? `attachment; filename="${filename}"`
+          : `inline; filename="${filename}"`,
         "Cache-Control": "no-store, no-cache, must-revalidate, private",
         "X-Content-Type-Options": "nosniff",
         "X-Robots-Tag": "noindex, nofollow",

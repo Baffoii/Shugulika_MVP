@@ -103,8 +103,29 @@ export function isSupportedResumeContentType(
   ) {
     return true;
   }
-  if (!ct || ct.includes("octet-stream")) {
+  // Zoho attachment downloads often use application/x-download; trust the extension.
+  if (
+    !ct ||
+    ct.includes("octet-stream") ||
+    ct.includes("x-download") ||
+    /(^|\/)download([;+]|$)/.test(ct)
+  ) {
     return !name || SUPPORTED_EXT.test(name);
   }
   return false;
+}
+
+/** Extract a filename from a Content-Disposition header when list metadata is incomplete. */
+export function fileNameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const utf8 = header.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (utf8?.[1]) {
+    try {
+      return decodeURIComponent(utf8[1].trim().replace(/^"|"$/g, "")) || null;
+    } catch {
+      return utf8[1].trim().replace(/^"|"$/g, "") || null;
+    }
+  }
+  const plain = header.match(/filename\s*=\s*("?)([^";]+)\1/i);
+  return plain?.[2]?.trim() || null;
 }
