@@ -128,10 +128,7 @@ export async function runZohoRecruitReconciliation(
           keys: Object.keys(data).sort(),
         });
 
-        if (
-          mapping.last_external_fingerprint &&
-          mapping.last_external_fingerprint !== externalFp
-        ) {
+        if (mapping.last_external_fingerprint && mapping.last_external_fingerprint !== externalFp) {
           differencesFound += 1;
           moduleSummaries[zohoModule].diffs += 1;
           conflictNotes.push(`fingerprint_mismatch:${zohoModule}:${mapping.zoho_record_id}`);

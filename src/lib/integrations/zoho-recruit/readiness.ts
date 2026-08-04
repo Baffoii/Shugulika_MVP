@@ -63,12 +63,11 @@ export async function getZohoSandboxReadiness(): Promise<SandboxReadinessCheck> 
   checks.push({
     id: "scopes",
     ok: connected && missing.length === 0,
-    detail:
-      !connected
-        ? "Connect first, then reconnect if scopes are missing."
-        : missing.length === 0
-          ? "Granted scopes cover sandbox projection."
-          : `Missing scopes: ${missing.join(", ")}. Disconnect and reconnect to re-consent.`,
+    detail: !connected
+      ? "Connect first, then reconnect if scopes are missing."
+      : missing.length === 0
+        ? "Granted scopes cover sandbox projection."
+        : `Missing scopes: ${missing.join(", ")}. Disconnect and reconnect to re-consent.`,
   });
 
   checks.push({
