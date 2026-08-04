@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/primitives";
 import { purchaseEmployerAddonAction } from "@/app/employer/plan-actions";
 import type { PackageRow } from "@/lib/database.types";
 
-export function AddonShop({ addons }: { addons: PackageRow[] }) {
+export function AddonShop({
+  addons,
+  sandbox = false,
+}: {
+  addons: PackageRow[];
+  sandbox?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -21,13 +27,18 @@ export function AddonShop({ addons }: { addons: PackageRow[] }) {
         setError(result.error ?? "Could not apply top-up.");
         return;
       }
-      setMessage(result.message ?? "Top-up applied.");
+      setMessage(result.message ?? "Sandbox top-up applied.");
       router.refresh();
     });
   }
 
   return (
     <div className="space-y-3">
+      {sandbox ? (
+        <p className="text-xs text-ink-subtle">
+          Sandbox/demo activation only — not a real charge. Grants apply immediately for demos.
+        </p>
+      ) : null}
       {error ? <p className="text-sm text-status-danger">{error}</p> : null}
       {message ? <p className="text-sm text-status-success">{message}</p> : null}
       <ul className="space-y-2">
@@ -41,7 +52,7 @@ export function AddonShop({ addons }: { addons: PackageRow[] }) {
               <p className="text-xs text-ink-subtle">{addon.description}</p>
             </div>
             <Button size="sm" disabled={pending} onClick={() => buy(addon.key)}>
-              {pending ? "…" : "Add"}
+              {pending ? "…" : sandbox ? "Add (sandbox)" : "Add"}
             </Button>
           </li>
         ))}

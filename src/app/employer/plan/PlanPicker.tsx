@@ -6,10 +6,22 @@ import { activateEmployerPackageAction } from "@/app/employer/plan-actions";
 import type { PackageRow } from "@/lib/database.types";
 
 const PACKAGE_BLURBS: Record<string, { jobs: string; unlocks: string }> = {
-  trial: { jobs: "2 job slots", unlocks: "5 CV unlocks · 14 days" },
-  starter: { jobs: "2 job slots", unlocks: "5 CV unlocks / month" },
-  growth: { jobs: "5 job slots", unlocks: "15 CV unlocks / month" },
-  scale: { jobs: "12 job slots", unlocks: "40 CV unlocks / month" },
+  trial: {
+    jobs: "2 job slots for 14 days",
+    unlocks: "5 CV unlocks (expire with the trial period)",
+  },
+  starter: {
+    jobs: "2 job slots / 30-day period",
+    unlocks: "5 CV unlocks (expire with the plan period)",
+  },
+  growth: {
+    jobs: "5 job slots / 30-day period",
+    unlocks: "15 CV unlocks (expire with the plan period)",
+  },
+  scale: {
+    jobs: "12 job slots / 30-day period",
+    unlocks: "40 CV unlocks (expire with the plan period)",
+  },
 };
 
 export function PlanPicker({
@@ -17,11 +29,13 @@ export function PlanPicker({
   preferredKey,
   currentPackageKey,
   mode = "choose",
+  openPaymentsAllowed = false,
 }: {
   packages: PackageRow[];
   preferredKey: string | null;
   currentPackageKey?: string | null;
   mode?: "choose" | "upgrade";
+  openPaymentsAllowed?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -65,10 +79,19 @@ export function PlanPicker({
         className={`grid gap-4 md:grid-cols-2 ${packages.length >= 3 ? "xl:grid-cols-3" : packages.length === 4 ? "xl:grid-cols-4" : ""}`}
       >
         {packages.map((pkg) => {
-          const blurb = PACKAGE_BLURBS[pkg.key] ?? { jobs: "Job slots", unlocks: "CV unlocks" };
+          const blurb = PACKAGE_BLURBS[pkg.key] ?? {
+            jobs: "Job slots",
+            unlocks: "CV unlocks",
+          };
           const isPreferred = preferredKey === pkg.key && pkg.key !== currentPackageKey;
           const isCurrent = Boolean(currentPackageKey && pkg.key === currentPackageKey);
           const isTrial = pkg.key === "trial";
+          const paidBlocked = !isTrial && !openPaymentsAllowed;
+          const note = isTrial
+            ? "Free trial — no payment required"
+            : openPaymentsAllowed
+              ? "Sandbox demo activation — not a real charge"
+              : "Paid activation not available";
           return (
             <Card
               key={pkg.id}
@@ -102,24 +125,31 @@ export function PlanPicker({
                 <ul className="space-y-1 text-sm text-ink">
                   <li>{blurb.jobs}</li>
                   <li>{blurb.unlocks}</li>
+                  <li className="text-ink-subtle">{note}</li>
                 </ul>
                 <Button
-                  disabled={pending || isCurrent}
+                  disabled={pending || isCurrent || paidBlocked}
                   onClick={() => activate(pkg.key)}
                   className="w-full"
-                  variant={isCurrent ? "outline" : "primary"}
+                  variant={isCurrent || paidBlocked ? "outline" : "primary"}
                 >
                   {isCurrent
                     ? "Current plan"
-                    : pending
-                      ? mode === "upgrade"
-                        ? "Upgrading…"
-                        : "Activating…"
-                      : isTrial
-                        ? "Start free trial"
-                        : mode === "upgrade"
-                          ? `Upgrade to ${pkg.name}`
-                          : `Choose ${pkg.name}`}
+                    : paidBlocked
+                      ? "Paid activation unavailable"
+                      : pending
+                        ? mode === "upgrade"
+                          ? "Upgrading…"
+                          : "Activating…"
+                        : isTrial
+                          ? "Start free trial"
+                          : openPaymentsAllowed
+                            ? mode === "upgrade"
+                              ? `Upgrade to ${pkg.name} (sandbox)`
+                              : `Choose ${pkg.name} (sandbox)`
+                            : mode === "upgrade"
+                              ? `Upgrade to ${pkg.name}`
+                              : `Choose ${pkg.name}`}
                 </Button>
               </CardBody>
             </Card>
