@@ -14,12 +14,17 @@ const GRAINS: { value: FranchisePeriodGrain; label: string }[] = [
   { value: "ytd", label: "YTD" },
 ];
 
-const SORTS: { value: FranchiseSortMode; label: string }[] = [
+const ALL_SORTS: { value: FranchiseSortMode; label: string }[] = [
   { value: "sla_first", label: "SLA due first" },
   { value: "alpha_asc", label: "Name A–Z" },
   { value: "alpha_desc", label: "Name Z–A" },
   { value: "newest", label: "Newest first" },
   { value: "oldest", label: "Oldest first" },
+];
+
+const NAME_SORTS: { value: FranchiseSortMode; label: string }[] = [
+  { value: "alpha_asc", label: "Name A–Z" },
+  { value: "alpha_desc", label: "Name Z–A" },
 ];
 
 /**
@@ -30,11 +35,15 @@ export function FranchisePeriodBar({
   grain,
   sort,
   showSort = true,
+  sortModes = "all",
 }: {
   grain: FranchisePeriodGrain;
   sort?: FranchiseSortMode;
   showSort?: boolean;
+  /** Employer-name lists only support A–Z / Z–A; queue pages use the full set. */
+  sortModes?: "all" | "name";
 }) {
+  const sorts = sortModes === "name" ? NAME_SORTS : ALL_SORTS;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -67,10 +76,10 @@ export function FranchisePeriodBar({
           Sort
           <select
             className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
-            value={sort ?? "sla_first"}
+            value={sort && sorts.some((s) => s.value === sort) ? sort : sorts[0]!.value}
             onChange={(e) => set("sort", e.target.value)}
           >
-            {SORTS.map((s) => (
+            {sorts.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>

@@ -71,7 +71,7 @@ export default async function FranchiseDashboard({
       />
 
       <Suspense fallback={<Skeleton className="mb-6 h-10 w-64" />}>
-        <FranchisePeriodBar grain={grain} sort={sort} />
+        <FranchisePeriodBar grain={grain} sort={sort} sortModes="name" />
       </Suspense>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

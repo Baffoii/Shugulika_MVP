@@ -34,7 +34,7 @@ export default async function FranchiseEmployerHealthPage({
         description="Active employers, open jobs, recent activity, overdue approvals, stalled vacancies, and repeat placements — scoped to your franchise by database policies."
       />
       <Suspense fallback={<Skeleton className="mb-6 h-10 w-64" />}>
-        <FranchisePeriodBar grain={grain} sort={sort} />
+        <FranchisePeriodBar grain={grain} sort={sort} sortModes="name" />
       </Suspense>
       <FranchiseEmployerHealthPanel summary={summary} />
     </div>

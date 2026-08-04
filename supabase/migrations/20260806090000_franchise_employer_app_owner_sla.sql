@@ -45,9 +45,20 @@ language plpgsql
 as $$
 declare
   v_base timestamptz;
+  -- On UPDATE, NEW.next_action retains the prior column value unless the
+  -- statement explicitly set it. Recompute from status in that case so
+  -- submitted → under_review → approved does not freeze at 'open_review'.
+  v_recompute_next_action boolean :=
+    tg_op = 'INSERT'
+    or (
+      tg_op = 'UPDATE'
+      and new.status is distinct from old.status
+      and new.next_action is not distinct from old.next_action
+    )
+    or (new.next_action is null);
 begin
   if tg_op = 'INSERT' or (tg_op = 'UPDATE' and new.status is distinct from old.status) then
-    if new.next_action is null then
+    if v_recompute_next_action then
       new.next_action := case new.status
         when 'submitted' then 'open_review'
         when 'under_review' then 'decide'
@@ -69,7 +80,7 @@ begin
 
     if new.status in ('approved', 'rejected', 'withdrawn', 'draft') then
       new.sla_due_at := null;
-      if new.next_action is null then
+      if v_recompute_next_action then
         new.next_action := case when new.status = 'draft' then 'none' else 'close_out' end;
       end if;
     end if;
