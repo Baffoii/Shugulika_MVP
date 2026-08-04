@@ -141,11 +141,13 @@ export function ViewCvButton({
   label,
   applicationId,
   submissionId,
+  jobOrderId,
 }: {
   documentId: string;
   label: string;
   applicationId?: string;
   submissionId?: string;
+  jobOrderId?: string;
   /** @deprecated Ignored — originals are never exposed via signed URL. */
   bucketId?: string;
   /** @deprecated Ignored — originals are never exposed via signed URL. */
@@ -158,6 +160,7 @@ export function ViewCvButton({
       label={label}
       applicationId={applicationId}
       submissionId={submissionId}
+      jobOrderId={jobOrderId}
     />
   );
 }

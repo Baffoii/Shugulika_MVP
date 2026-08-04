@@ -1,7 +1,11 @@
 import { JobOrdersPage } from "@/components/pages/StaffLists";
 import { JobOrderSubmissionForm } from "@/components/jobs/JobOrderSubmissionForm";
+import { requireEmployerSubscription } from "@/lib/auth";
+
 export const metadata = { title: "Job orders" };
-export default function Page() {
+
+export default async function Page() {
+  await requireEmployerSubscription();
   return (
     <JobOrdersPage
       title="Your roles"

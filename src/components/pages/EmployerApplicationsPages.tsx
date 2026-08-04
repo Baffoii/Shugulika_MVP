@@ -21,6 +21,7 @@ import {
   APPLICATION_EVENT_LABELS,
   applicationStatusLabel,
   parseRequestedChanges,
+  preferredPackageLabel,
 } from "@/lib/employer-onboarding";
 import {
   COUNTRIES,
@@ -319,6 +320,10 @@ export async function EmployerApplicationReviewPage({
                   }
                 />
                 <DetailRow label="Current assignment" value={app.assigned_org_name} />
+                <DetailRow
+                  label="Preferred hiring plan"
+                  value={preferredPackageLabel(app.preferred_package_key)}
+                />
                 <DetailRow
                   label="Eligible offices"
                   value={

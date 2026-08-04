@@ -62,7 +62,9 @@ create or replace function storage.foldername(name text) returns text[] language
 
 const RESET = `drop schema if exists public cascade; create schema public;
 grant usage on schema public to anon, authenticated, service_role;
-grant all on schema public to service_role;`;
+grant all on schema public to service_role;
+-- Private SECURITY DEFINER helpers must not leak across harness resets.
+drop schema if exists private cascade;`;
 
 export interface SeedIds {
   hq: string;
@@ -110,11 +112,17 @@ export async function setupDb(client: Client): Promise<SeedIds> {
   //          submissions. It inserts real auth.users (instance_id,
   //          encrypted_password, identities) and demo data only — no schema/RLS —
   //          so skipping it keeps harness schema parity.
+  //   20260730150000 — demo employer package tiers / locked teasers keyed to
+  //          0015+0030 org and job IDs (skipped above). Schema/RPCs live in
+  //          20260730140000+; this file is data-only.
+  //   20260730171000 — Path A flip for Kilimanjaro IT Support demo job only.
   const SKIP = new Set([
     "0000_reset_public_schema.sql",
     "0005_seed_test_users.sql",
     "0015_demo_expansion.sql",
     "0030_employer_accounts_submissions.sql",
+    "20260730150000_demo_employer_package_tiers.sql",
+    "20260730171000_kilimanjaro_it_support_path_a.sql",
   ]);
   // Match both the legacy 4-digit (`0001_…`) and the newer timestamp
   // (`20260721140000_…`) migration prefixes. `.sort()` orders them correctly:

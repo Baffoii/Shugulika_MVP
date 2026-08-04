@@ -10,8 +10,13 @@ import { AVAILABILITY_PRESETS, COUNTRIES, EXPERIENCE_LEVELS } from "@/lib/consta
 /** Talent-pool filter bar — pushes filters into the URL query string. */
 export function CandidateSearchFilters({
   basePath = "/recruiter/candidates",
+  preserveParams = [],
+  keywordPlaceholder = "Name, role, skill…",
 }: {
   basePath?: string;
+  /** Query keys to keep when clearing (e.g. employer job scope). */
+  preserveParams?: string[];
+  keywordPlaceholder?: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -25,6 +30,18 @@ export function CandidateSearchFilters({
       else sp.delete(k);
     }
     router.push(`${basePath}?${sp.toString()}`);
+  }
+
+  function clearFilters() {
+    setQ("");
+    setSkill("");
+    const sp = new URLSearchParams();
+    for (const key of preserveParams) {
+      const v = params.get(key);
+      if (v) sp.set(key, v);
+    }
+    const qs = sp.toString();
+    router.push(qs ? `${basePath}?${qs}` : basePath);
   }
 
   return (
@@ -50,7 +67,7 @@ export function CandidateSearchFilters({
               id="cand-q"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Name, role, skill…"
+              placeholder={keywordPlaceholder}
               className="pl-9"
             />
           </div>
@@ -138,15 +155,7 @@ export function CandidateSearchFilters({
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="submit">Search</Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setQ("");
-            setSkill("");
-            router.push(basePath);
-          }}
-        >
+        <Button type="button" variant="outline" onClick={clearFilters}>
           Clear
         </Button>
       </div>

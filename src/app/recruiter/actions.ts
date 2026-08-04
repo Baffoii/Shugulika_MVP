@@ -25,6 +25,7 @@ import {
   type StoredAssessmentResponses,
 } from "@/lib/assessments/grade-shugulika";
 import { isOpenAiConfigured } from "@/lib/env";
+import { asJson, buildEmployerDisclosedProfiles } from "@/lib/employer-entitlements";
 
 export interface ActionResult {
   ok: boolean;
@@ -1076,21 +1077,17 @@ async function ensureEmployerSubmission(
     .eq("id", app.candidate_id)
     .maybeSingle();
   const c = cand as CandidateProfileRow | null;
-  const fullName = [c?.given_name, c?.family_name].filter(Boolean).join(" ").trim() || null;
-
-  // Employer-facing snapshot at Client Submission: identity, profile, CV, and
-  // skills-test result (null score → N/A in the employer UI).
-  const disclosed = {
-    full_name: fullName,
+  const { masked, full } = buildEmployerDisclosedProfiles({
     given_name: c?.given_name ?? null,
     family_name: c?.family_name ?? null,
     headline: c?.headline ?? null,
-    location: [c?.city, c?.country_code].filter(Boolean).join(", "),
+    city: c?.city ?? null,
+    country_code: c?.country_code ?? null,
     summary: c?.summary ?? null,
     availability: c?.availability ?? null,
     test_name: app.test_name ?? null,
     test_score: app.test_score ?? null,
-  };
+  });
 
   const { data: sub, error } = await supabase
     .from("employer_submissions")
@@ -1103,13 +1100,11 @@ async function ensureEmployerSubmission(
       submitting_recruiter_id: await actor(),
       consent_id: consentId,
       status: "submitted",
-      is_masked: false,
+      is_masked: true,
       summary: summary.trim() || null,
-      disclosed_profile: disclosed as never,
+      disclosed_profile: asJson(masked),
+      full_disclosed_profile: asJson(full),
       disclosed_fields: [
-        "full_name",
-        "given_name",
-        "family_name",
         "headline",
         "location",
         "summary",
