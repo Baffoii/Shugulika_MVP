@@ -130,11 +130,15 @@ function configuredRedirect(): { uri: string; valid: boolean } {
 }
 
 export function normalizeZohoAccountsDomain(value: string): string {
-  return normalizeZohoOrigin(value, ACCOUNTS_HOSTS, "Zoho Accounts");
+  return normalizeZohoOrigin(value, ACCOUNTS_ORIGINS, "Zoho Accounts");
 }
 
 export function normalizeZohoApiDomain(value: string): string {
-  return normalizeZohoOrigin(value, API_HOSTS, "Zoho API");
+  return normalizeZohoOrigin(value, API_ORIGINS, "Zoho API");
+}
+
+function recruitOriginForHost(host: string): string | null {
+  return RECRUIT_ORIGINS.get(host) ?? null;
 }
 
 /**
@@ -150,13 +154,18 @@ export function resolveZohoRecruitApiDomain(input: {
     const normalized = normalizeZohoApiDomain(input.apiDomain);
     const host = new URL(normalized).hostname.toLowerCase();
     const mapped = ZOHOAPIS_TO_RECRUIT_HOST[host];
-    if (mapped) return `https://${mapped}`;
-    if (host.startsWith("recruit.")) return normalized;
+    if (mapped) {
+      const origin = recruitOriginForHost(mapped);
+      if (origin) return origin;
+    }
+    const recruit = recruitOriginForHost(host);
+    if (recruit) return recruit;
   }
 
   const location = input.location?.trim().toLowerCase();
   if (location && LOCATION_TO_RECRUIT_HOST[location]) {
-    return `https://${LOCATION_TO_RECRUIT_HOST[location]}`;
+    const origin = recruitOriginForHost(LOCATION_TO_RECRUIT_HOST[location]);
+    if (origin) return origin;
   }
 
   if (input.accountsDomain) {
@@ -164,23 +173,45 @@ export function resolveZohoRecruitApiDomain(input: {
       normalizeZohoAccountsDomain(input.accountsDomain),
     ).hostname.toLowerCase();
     const suffix = accountsHost.replace(/^accounts\./, "");
-    if (suffix === "zohocloud.ca") return "https://recruit.zohocloud.ca";
-    if (suffix.startsWith("zoho.")) return `https://recruit.${suffix}`;
+    if (suffix === "zohocloud.ca") {
+      return recruitOriginForHost("recruit.zohocloud.ca") ?? "https://recruit.zoho.com";
+    }
+    if (suffix.startsWith("zoho.")) {
+      const origin = recruitOriginForHost(`recruit.${suffix}`);
+      if (origin) return origin;
+    }
   }
 
   return "https://recruit.zoho.com";
 }
 
-function normalizeZohoOrigin(value: string, hosts: Set<string>, label: string): string {
+/** Canonical https origins keyed by allowlisted host — returned instead of user input. */
+function canonicalHttpsOrigins(hosts: Set<string>): ReadonlyMap<string, string> {
+  return new Map([...hosts].map((host) => [host, `https://${host}`]));
+}
+
+const ACCOUNTS_ORIGINS = canonicalHttpsOrigins(ACCOUNTS_HOSTS);
+const API_ORIGINS = canonicalHttpsOrigins(API_HOSTS);
+const RECRUIT_ORIGINS = canonicalHttpsOrigins(
+  new Set([...API_HOSTS].filter((host) => host.startsWith("recruit."))),
+);
+
+function normalizeZohoOrigin(
+  value: string,
+  origins: ReadonlyMap<string, string>,
+  label: string,
+): string {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     throw new Error(`${label} domain is invalid.`);
   }
+  const host = url.hostname.toLowerCase();
+  const canonical = origins.get(host);
   if (
     url.protocol !== "https:" ||
-    !hosts.has(url.hostname.toLowerCase()) ||
+    !canonical ||
     url.username ||
     url.password ||
     (url.pathname !== "/" && url.pathname !== "") ||
@@ -189,7 +220,8 @@ function normalizeZohoOrigin(value: string, hosts: Set<string>, label: string): 
   ) {
     throw new Error(`${label} domain is not allowed.`);
   }
-  return url.origin;
+  // Return the precomputed constant origin so fetch URLs are not user-tainted.
+  return canonical;
 }
 
 export function getZohoRecruitSetupState(): ZohoRecruitSetupState {
