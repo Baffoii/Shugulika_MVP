@@ -161,3 +161,38 @@ export async function addEmployerApplicationNoteAction(
   revalidateReviewPaths(applicationId);
   return { ok: true, message: "Internal note added." };
 }
+
+/**
+ * Franchise/HQ owner reassignment within the same assigned_org_id.
+ * Cross-franchise queue moves remain HQ-only via reassignEmployerApplicationAction.
+ */
+export async function reassignEmployerApplicationOwnerAction(
+  applicationId: string,
+  ownerUserId: string | null,
+): Promise<ReviewActionResult> {
+  const ctx = await requireSession();
+  const can =
+    ctx.roles.includes("hq_admin") ||
+    ctx.roles.includes("franchise_admin") ||
+    ctx.roles.includes("operations");
+  if (!can) {
+    return { ok: false, error: "You do not have permission to assign application owners." };
+  }
+  const supabase = createClient();
+  // RPC not yet in generated Database types (frozen); call via untyped client.
+  const { error } = await (supabase as unknown as {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ error: { message: string } | null }>;
+  }).rpc("reassign_employer_application_owner", {
+    p_application_id: applicationId,
+    p_owner_user_id: ownerUserId,
+  });
+  if (error) {
+    const { sanitizeFranchiseError } = await import("@/lib/franchise/employer-app-ops");
+    return { ok: false, error: sanitizeFranchiseError(error.message) };
+  }
+  revalidateReviewPaths(applicationId);
+  return { ok: true, message: "Owner updated." };
+}

@@ -1,10 +1,10 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requirePortal, franchiseOrgId } from "@/lib/auth";
 import {
   getFranchiseKpiDashboard,
   listKpiTargets,
-  type KpiPeriod,
 } from "@/lib/data/recruiter-kpis";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -17,21 +17,26 @@ import {
   Alert,
   ButtonLink,
 } from "@/components/ui/primitives";
-import { PeriodSelect } from "@/components/kpis/PeriodSelect";
 import { RecruiterComparisonTable } from "@/components/kpis/RecruiterComparisonTable";
 import { RecruiterKpiCards } from "@/components/kpis/RecruiterKpiCards";
 import { KpiTargetsForm } from "@/components/kpis/KpiTargetsForm";
 import { StageFunnel } from "@/app/recruiter/kpis/components/StageFunnel";
 import { formatDurationHours } from "@/lib/kpi/definitions";
 import { saveFranchiseKpiTargetsAction } from "./actions";
+import { FranchisePeriodBar } from "@/components/franchise/FranchisePeriodBar";
+import { FranchiseTargetHistoryPanel } from "@/components/franchise/FranchiseTargetHistoryPanel";
+import { FranchiseFinanceAttributionGate } from "@/components/franchise/FranchiseEmployerHealthPanel";
+import {
+  franchiseGrainToKpiPeriod,
+  parseFranchisePeriodGrain,
+  parseFranchiseSort,
+} from "@/lib/franchise/period";
+import {
+  isFranchiseFinanceAttributionEnabled,
+  listFranchiseKpiTargetHistory,
+} from "@/lib/data/franchise-ops";
 
 export const metadata: Metadata = { title: "Reports" };
-
-function parsePeriod(raw: string | string[] | undefined): KpiPeriod {
-  const v = Array.isArray(raw) ? raw[0] : raw;
-  if (v === "7d" || v === "90d" || v === "ytd") return v;
-  return "30d";
-}
 
 export default async function FranchiseReportsPage({
   searchParams,
@@ -42,7 +47,9 @@ export default async function FranchiseReportsPage({
 }) {
   const ctx = await requirePortal("franchise");
   const params = await Promise.resolve(searchParams ?? {});
-  const range = parsePeriod(params.range);
+  const grain = parseFranchisePeriodGrain(params.range);
+  const sort = parseFranchiseSort(params.sort);
+  const range = franchiseGrainToKpiPeriod(grain);
   const orgId = franchiseOrgId(ctx.memberships);
 
   if (!orgId) {
@@ -57,12 +64,15 @@ export default async function FranchiseReportsPage({
   }
 
   const supabase = createClient();
-  const [{ data: org }, dash, targets, platformTargets] = await Promise.all([
-    supabase.from("organizations").select("name,country_code").eq("id", orgId).maybeSingle(),
-    getFranchiseKpiDashboard(orgId, range),
-    listKpiTargets(orgId),
-    listKpiTargets(null),
-  ]);
+  const [{ data: org }, dash, targets, platformTargets, history, financeEnabled] =
+    await Promise.all([
+      supabase.from("organizations").select("name,country_code").eq("id", orgId).maybeSingle(),
+      getFranchiseKpiDashboard(orgId, range),
+      listKpiTargets(orgId),
+      listKpiTargets(null),
+      listFranchiseKpiTargetHistory(orgId),
+      isFranchiseFinanceAttributionEnabled(),
+    ]);
 
   const orgMeta = org as { name: string; country_code: string | null } | null;
   const franchiseLabel = orgMeta?.name ?? "Your franchise";
@@ -70,6 +80,15 @@ export default async function FranchiseReportsPage({
     ...targets,
     ...platformTargets.filter((p) => !targets.some((t) => t.recruiter_level === p.recruiter_level)),
   ];
+
+  // Alphabetical sort for recruiter cards when requested (local; does not edit shared KPI components).
+  const recruiters =
+    sort === "alpha_asc" || sort === "alpha_desc"
+      ? [...dash.recruiters].sort((a, b) => {
+          const cmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+          return sort === "alpha_desc" ? -cmp : cmp;
+        })
+      : dash.recruiters;
 
   return (
     <div>
@@ -81,7 +100,7 @@ export default async function FranchiseReportsPage({
       />
 
       <Suspense fallback={<Skeleton className="mb-6 h-10 w-64" />}>
-        <PeriodSelect range={range} />
+        <FranchisePeriodBar grain={grain} sort={sort} />
       </Suspense>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -89,7 +108,24 @@ export default async function FranchiseReportsPage({
           <h2 className="text-base font-semibold text-ink">Recruiter comparison</h2>
           <p className="text-sm text-ink-muted">
             {dash.recruiterHeadcount} active recruiter
-            {dash.recruiterHeadcount === 1 ? "" : "s"} · sorted by SLA overdue items first
+            {dash.recruiterHeadcount === 1 ? "" : "s"} · drill into{" "}
+            <Link href="/franchise/capacity" className="font-medium text-brand-700 hover:underline">
+              capacity
+            </Link>
+            ,{" "}
+            <Link
+              href="/franchise/employers/health"
+              className="font-medium text-brand-700 hover:underline"
+            >
+              employer health
+            </Link>
+            , or{" "}
+            <Link
+              href="/franchise/employer-applications"
+              className="font-medium text-brand-700 hover:underline"
+            >
+              employer applications
+            </Link>
           </p>
         </div>
         <ButtonLink href="/franchise/recruiters" variant="secondary" size="sm">
@@ -97,7 +133,7 @@ export default async function FranchiseReportsPage({
         </ButtonLink>
       </div>
 
-      {dash.recruiters.length === 0 ? (
+      {recruiters.length === 0 ? (
         <div className="mb-6">
           <Alert tone="warn" title="No recruiters found for this franchise">
             Confirm recruiters have an active <code>recruiter</code> membership on{" "}
@@ -108,7 +144,7 @@ export default async function FranchiseReportsPage({
       ) : null}
 
       <div className="mb-6">
-        <RecruiterKpiCards rows={dash.recruiters} manageBasePath="/franchise/recruiters" />
+        <RecruiterKpiCards rows={recruiters} manageBasePath="/franchise/recruiters" />
       </div>
 
       <div className="mb-8">
@@ -116,7 +152,7 @@ export default async function FranchiseReportsPage({
           <CardHeader>
             <CardTitle>Detailed comparison table</CardTitle>
           </CardHeader>
-          <RecruiterComparisonTable rows={dash.recruiters} manageBasePath="/franchise/recruiters" />
+          <RecruiterComparisonTable rows={recruiters} manageBasePath="/franchise/recruiters" />
         </Card>
       </div>
 
@@ -208,6 +244,11 @@ export default async function FranchiseReportsPage({
         </Card>
       </div>
 
+      <div className="mt-8">
+        <h2 className="mb-3 text-base font-semibold text-ink">Finance attribution</h2>
+        <FranchiseFinanceAttributionGate enabled={financeEnabled} />
+      </div>
+
       <div className="mt-6">
         <KpiTargetsForm
           initial={allTargets}
@@ -215,6 +256,11 @@ export default async function FranchiseReportsPage({
           sourceLabel={`franchise overrides (${franchiseLabel})`}
           saveAction={saveFranchiseKpiTargetsAction}
         />
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-3 text-base font-semibold text-ink">Target change history</h2>
+        <FranchiseTargetHistoryPanel entries={history} />
       </div>
     </div>
   );

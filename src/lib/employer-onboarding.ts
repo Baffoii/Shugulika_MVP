@@ -180,6 +180,7 @@ export const APPLICATION_EVENT_LABELS: Record<string, string> = {
   approved: "Approved — company activated",
   rejected: "Not approved",
   reassigned: "Responsible office updated",
+  owner_reassigned: "Review owner updated",
   withdrawn: "Withdrawn",
   revision_started: "Revised application started",
   note: "Internal note",

@@ -32,10 +32,16 @@ import {
   type EmployerApplicationStatus,
 } from "@/lib/constants";
 import { formatDateTime } from "@/lib/format";
+import { FRANCHISE_NEXT_ACTION_LABELS, type EmployerAppNextAction } from "@/lib/franchise/types";
+import { FranchiseOwnerAssignPanel } from "@/components/franchise/FranchiseOwnerAssignPanel";
 
 export interface QueueSearchParams {
   status?: string;
   country?: string;
+  owner?: string;
+  next_action?: string;
+  sla?: string;
+  sort?: string;
 }
 
 /**
@@ -47,16 +53,31 @@ export async function EmployerApplicationsQueuePage({
   basePath,
   description,
   searchParams,
+  owners,
 }: {
   basePath: string;
   description: string;
   searchParams: QueueSearchParams;
+  /** Optional owner filter options (franchise-scoped). */
+  owners?: { id: string; name: string }[];
 }) {
   const status = searchParams.status || undefined;
   const country = searchParams.country || undefined;
-  const items = await listEmployerApplicationsForReview({ status, country });
+  const ownerUserId = searchParams.owner || undefined;
+  const nextAction = searchParams.next_action || undefined;
+  const slaOnly = searchParams.sla === "1" || searchParams.sla === "overdue";
+  const sort = searchParams.sort || "sla_first";
+  const items = await listEmployerApplicationsForReview({
+    status,
+    country,
+    ownerUserId,
+    nextAction,
+    slaOnly,
+    sort,
+  });
 
   const awaiting = items.filter((i) => i.status === "submitted" || i.status === "under_review");
+  const overdue = items.filter((i) => i.sla_overdue).length;
 
   return (
     <div>
@@ -64,9 +85,12 @@ export async function EmployerApplicationsQueuePage({
         title="Employer applications"
         description={description}
         actions={
-          <Badge tone={awaiting.length > 0 ? "warn" : "neutral"}>
-            {awaiting.length} awaiting decision
-          </Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={awaiting.length > 0 ? "warn" : "neutral"}>
+              {awaiting.length} awaiting decision
+            </Badge>
+            <Badge tone={overdue > 0 ? "danger" : "neutral"}>{overdue} SLA overdue</Badge>
+          </div>
         }
       />
 
@@ -102,10 +126,74 @@ export async function EmployerApplicationsQueuePage({
             ))}
           </select>
         </div>
+        {owners ? (
+          <div>
+            <label htmlFor="owner" className="label-base">
+              Owner
+            </label>
+            <select
+              id="owner"
+              name="owner"
+              defaultValue={ownerUserId ?? ""}
+              className="input-base pr-8"
+            >
+              <option value="">All owners</option>
+              <option value="unassigned">Unassigned</option>
+              {owners.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        <div>
+          <label htmlFor="next_action" className="label-base">
+            Next action
+          </label>
+          <select
+            id="next_action"
+            name="next_action"
+            defaultValue={nextAction ?? ""}
+            className="input-base pr-8"
+          >
+            <option value="">All actions</option>
+            {Object.entries(FRANCHISE_NEXT_ACTION_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="sort" className="label-base">
+            Sort
+          </label>
+          <select id="sort" name="sort" defaultValue={sort} className="input-base pr-8">
+            <option value="sla_first">SLA due first</option>
+            <option value="alpha_asc">Name A–Z</option>
+            <option value="alpha_desc">Name Z–A</option>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2 pb-2">
+          <input
+            id="sla"
+            name="sla"
+            type="checkbox"
+            value="overdue"
+            defaultChecked={slaOnly}
+            className="h-4 w-4 rounded border-surface-border"
+          />
+          <label htmlFor="sla" className="text-sm text-ink">
+            SLA overdue only
+          </label>
+        </div>
         <button className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
           Filter
         </button>
-        {status || country ? (
+        {status || country || ownerUserId || nextAction || slaOnly || sort !== "sla_first" ? (
           <Link href={basePath} className="text-sm text-brand-700 hover:underline">
             Clear
           </Link>
@@ -122,12 +210,13 @@ export async function EmployerApplicationsQueuePage({
           <THead>
             <TR>
               <TH>Company</TH>
+              <TH>State</TH>
+              <TH>Age</TH>
+              <TH>Owner</TH>
+              <TH>Next action</TH>
+              <TH>SLA</TH>
               <TH>Geography</TH>
-              <TH>Industry</TH>
-              <TH>Submitted by</TH>
               <TH>Submitted</TH>
-              <TH>Assigned office</TH>
-              <TH>Status</TH>
               <TH />
             </TR>
           </THead>
@@ -143,21 +232,32 @@ export async function EmployerApplicationsQueuePage({
                   ) : null}
                 </TD>
                 <TD>
+                  <StatusBadge status={item.status} label={applicationStatusLabel(item.status)} />
+                </TD>
+                <TD className="tabular-nums text-ink-muted">
+                  {item.age_hours == null ? "—" : `${item.age_hours}h`}
+                </TD>
+                <TD>{item.owner_name ?? "Unassigned"}</TD>
+                <TD>
+                  {item.next_action
+                    ? (FRANCHISE_NEXT_ACTION_LABELS[item.next_action as EmployerAppNextAction] ??
+                      item.next_action)
+                    : "—"}
+                </TD>
+                <TD>
+                  {item.sla_due_at ? (
+                    <span className={item.sla_overdue ? "font-medium text-status-danger" : ""}>
+                      {formatDateTime(item.sla_due_at)}
+                      {item.sla_overdue ? " · overdue" : ""}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </TD>
+                <TD>
                   {[item.country_code, item.region, item.city].filter(Boolean).join(" · ") || "—"}
                 </TD>
-                <TD>{item.industry ?? "—"}</TD>
-                <TD>
-                  <p>{item.applicant_name}</p>
-                  <p className="text-xs text-ink-subtle">{item.applicant_email}</p>
-                </TD>
                 <TD>{item.submitted_at ? formatDateTime(item.submitted_at) : "—"}</TD>
-                <TD>{item.assigned_org_name}</TD>
-                <TD>
-                  <StatusBadge status={item.status} label={applicationStatusLabel(item.status)} />
-                  {item.version > 1 ? (
-                    <p className="mt-1 text-xs text-ink-subtle">v{item.version}</p>
-                  ) : null}
-                </TD>
                 <TD>
                   <Link
                     href={`${basePath}/${item.id}`}
@@ -189,10 +289,14 @@ export async function EmployerApplicationReviewPage({
   applicationId,
   basePath,
   canReassign,
+  canAssignOwner = false,
+  assignableOwners = [],
 }: {
   applicationId: string;
   basePath: string;
   canReassign: boolean;
+  canAssignOwner?: boolean;
+  assignableOwners?: { id: string; name: string; email: string }[];
 }) {
   const detail = await getEmployerApplicationForReview(applicationId);
   if (!detail) notFound();
@@ -401,6 +505,16 @@ export async function EmployerApplicationReviewPage({
             assignedOrgId={app.assigned_org_id}
             eligibleFranchises={eligibleFranchises.map((f) => ({ id: f.id, name: f.name }))}
           />
+
+          {canAssignOwner ? (
+            <FranchiseOwnerAssignPanel
+              applicationId={app.id}
+              currentOwnerId={
+                (app as { owner_user_id?: string | null }).owner_user_id ?? null
+              }
+              owners={assignableOwners}
+            />
+          ) : null}
 
           <Card>
             <CardHeader>
