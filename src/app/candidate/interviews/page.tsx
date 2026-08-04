@@ -68,6 +68,11 @@ export default async function CandidateInterviewsPage() {
       <PageHeader
         title="Interviews"
         description="Video interviews and scheduled interview steps across your applications."
+        actions={
+          <ButtonLink href="/candidate/help" size="sm" variant="outline">
+            Device check & help
+          </ButtonLink>
+        }
       />
 
       <section className="mb-8">

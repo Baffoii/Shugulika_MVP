@@ -7,6 +7,7 @@ import {
   CardTitle,
   CardBody,
   Alert,
+  ButtonLink,
 } from "@/components/ui/primitives";
 import { PlaceholderInline } from "@/components/PlaceholderCard";
 import { createClient } from "@/lib/supabase/server";
@@ -45,6 +46,25 @@ export default async function CandidateSettingsPage() {
               initialSearchable={v?.is_searchable ?? false}
               initialFields={v?.approved_fields ?? []}
             />
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Sharing and account corrections</CardTitle>
+          </CardHeader>
+          <CardBody className="space-y-3 text-sm text-ink-muted">
+            <p>
+              CVs are shared only after job-specific consent and only by protected portal link. This
+              settings page never sends raw CV attachments over WhatsApp.
+            </p>
+            <p>
+              If you think you have a duplicate account, request a staff review. Shugulika will
+              never merge accounts automatically from this request.
+            </p>
+            <ButtonLink href="/candidate/help" size="sm" variant="outline">
+              Help, rescheduling, or duplicate review
+            </ButtonLink>
           </CardBody>
         </Card>
 
