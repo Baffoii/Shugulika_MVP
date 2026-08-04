@@ -77,6 +77,32 @@ const REQUIRED = {
   zoho_recruit_inbox: ["connection_id", "dedupe_key", "signature_verified", "status"],
   zoho_recruit_conflicts: ["connection_id", "field_name", "authoritative_system", "status"],
   zoho_recruit_reconciliations: ["connection_id", "status", "records_checked", "differences_found"],
+  zoho_recruit_field_mappings: [
+    "local_entity_type",
+    "local_field",
+    "zoho_module",
+    "zoho_field_api_name",
+    "sync_direction",
+    "authoritative_system",
+    "purpose",
+    "enabled",
+  ],
+  zoho_recruit_offline_cases: [
+    "connection_id",
+    "local_entity_type",
+    "local_entity_id",
+    "status",
+    "is_synthetic",
+    "processing_purpose",
+  ],
+  zoho_recruit_production_approvals: [
+    "connection_id",
+    "dpo_name",
+    "legal_reference",
+    "approval_note",
+    "status",
+  ],
+  zoho_recruit_sync_observations: ["connection_id", "kind", "metrics"],
   recruiter_kpi_targets: [
     "recruiter_level",
     "organization_id",
@@ -142,6 +168,10 @@ for (const t of [
   "zoho_recruit_inbox",
   "zoho_recruit_conflicts",
   "zoho_recruit_reconciliations",
+  "zoho_recruit_field_mappings",
+  "zoho_recruit_offline_cases",
+  "zoho_recruit_production_approvals",
+  "zoho_recruit_sync_observations",
 ]) {
   const row = rls.find((r) => r.relname === t);
   if (row && !row.relrowsecurity) errors.push(`RLS not enabled on public.${t}`);

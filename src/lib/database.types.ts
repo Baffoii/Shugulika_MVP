@@ -904,6 +904,10 @@ export type ZohoRecruitConnectionRow = {
   disconnected_at: string | null;
   last_verified_at: string | null;
   last_error: string | null;
+  token_refresh_lock_until: string | null;
+  last_rate_limit: Json;
+  sync_paused_at: string | null;
+  sync_paused_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -941,6 +945,10 @@ export type ZohoRecruitOutboxRow = {
   processing_started_at: string | null;
   processed_at: string | null;
   last_error: string | null;
+  claim_token: string | null;
+  claim_expires_at: string | null;
+  max_attempts: number;
+  superseded_by: string | null;
   created_at: string;
 };
 
@@ -950,11 +958,75 @@ export type ZohoRecruitInboxRow = {
   dedupe_key: string;
   event_type: string | null;
   payload: Json;
+  payload_hash: string | null;
   signature_verified: boolean;
   status: "received" | "processing" | "succeeded" | "ignored" | "failed";
   received_at: string;
   processed_at: string | null;
   last_error: string | null;
+  claim_token: string | null;
+  claim_expires_at: string | null;
+};
+
+export type ZohoRecruitFieldMappingRow = {
+  id: string;
+  connection_id: string | null;
+  local_entity_type: string;
+  local_field: string;
+  zoho_module: string;
+  zoho_field_api_name: string;
+  sync_direction: "outbound" | "inbound" | "none";
+  authoritative_system: "shugulika" | "zoho_recruit";
+  purpose: string;
+  transformation_version: number;
+  enabled: boolean;
+  sensitivity: "public" | "internal" | "confidential" | "restricted";
+  retention_behavior: string;
+  deletion_behavior: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ZohoRecruitOfflineCaseRow = {
+  id: string;
+  connection_id: string;
+  local_entity_type: "candidate" | "job";
+  local_entity_id: string;
+  franchise_org_id: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  status: "draft" | "approved" | "restricted" | "withdrawn" | "closed";
+  is_synthetic: boolean;
+  processing_purpose: string;
+  restriction_reason: string | null;
+  legal_hold: boolean;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ZohoRecruitProductionApprovalRow = {
+  id: string;
+  connection_id: string;
+  requested_by: string | null;
+  approved_by: string | null;
+  dpo_name: string;
+  legal_reference: string;
+  approval_note: string;
+  evidence_uri: string | null;
+  status: "recorded" | "revoked";
+  recorded_at: string;
+  revoked_at: string | null;
+  metadata: Json;
+};
+
+export type ZohoRecruitSyncObservationRow = {
+  id: string;
+  connection_id: string;
+  observed_at: string;
+  kind: string;
+  metrics: Json;
 };
 
 export type ZohoRecruitConflictRow = {
@@ -1288,6 +1360,10 @@ export type Database = {
       zoho_recruit_inbox: Tbl<ZohoRecruitInboxRow>;
       zoho_recruit_conflicts: Tbl<ZohoRecruitConflictRow>;
       zoho_recruit_reconciliations: Tbl<ZohoRecruitReconciliationRow>;
+      zoho_recruit_field_mappings: Tbl<ZohoRecruitFieldMappingRow>;
+      zoho_recruit_offline_cases: Tbl<ZohoRecruitOfflineCaseRow>;
+      zoho_recruit_production_approvals: Tbl<ZohoRecruitProductionApprovalRow>;
+      zoho_recruit_sync_observations: Tbl<ZohoRecruitSyncObservationRow>;
       interview_templates: Tbl<InterviewTemplateRow>;
       interview_template_questions: Tbl<InterviewTemplateQuestionRow>;
       interview_assignments: Tbl<InterviewAssignmentRow>;

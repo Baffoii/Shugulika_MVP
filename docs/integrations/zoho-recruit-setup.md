@@ -1,113 +1,80 @@
 # Zoho Recruit satellite setup
 
-This setup connects Zoho Recruit for HQ organization verification only. It does **not** synchronize
-candidates, jobs, applications, documents, assessments, interviews, billing, or pipeline stages.
-Shugulika/Supabase remains authoritative.
+Connect Zoho Recruit as an offline satellite. Shugulika/Supabase remains authoritative.
 
-## 1. Create the correct Zoho client
+**Hard rule for the current phase:** do **not** change the Zoho Recruit portal (no custom modules,
+fields, layouts, or workflows). Use a **sandbox Zoho organization** and API Console OAuth only.
+Identity is stored in Shugulika (`zoho_recruit_external_mappings`).
 
-In the [Zoho API Console](https://api-console.zoho.com/), choose:
+## 1. Create the OAuth client (API Console only)
 
-**Server-based Applications**
-
-Use:
+In the [Zoho API Console](https://api-console.zoho.com/), choose **Server-based Applications**:
 
 | Field | Value |
 | --- | --- |
 | Client name | `Shugulika Zoho Recruit Satellite` |
-| Homepage URL | The deployed Shugulika origin, for example `https://app.example.com` |
-| Authorized redirect URI | `<Shugulika origin>/api/integrations/zoho-recruit/callback` |
+| Homepage URL | Your Shugulika origin (e.g. `http://localhost:3000`) |
+| Authorized redirect URI | `<origin>/api/integrations/zoho-recruit/callback` |
 
-For local testing, add:
+Local example redirect:
 
 `http://localhost:3000/api/integrations/zoho-recruit/callback`
 
-The redirect URI must match `ZOHO_RECRUIT_REDIRECT_URI` exactly. Enable Multi-DC support in the
-Zoho client if the connected Zoho organization may live outside the client registration data center.
+Prefer registering this client against a **sandbox** Zoho Recruit org so live recruiter work is
+untouched. Enable Multi-DC if needed.
 
-Do not use:
+Do not use Client-based, Mobile-based, or Non-browser app types for this integration.
 
-- **Client-based Applications** — these cannot safely hold the Client Secret.
-- **Mobile-based Applications** — Shugulika is not using an installed-app OAuth flow.
-- **Non-browser Applications** — this is for limited-input devices.
-- **Self Client** — suitable only for temporary manual tests without a redirect flow, not this
-  production integration.
-
-## 2. Store credentials on the server
-
-After creating the client, Zoho displays a **Client ID** and **Client Secret**. Store them in the
-deployment's server environment. Never commit them, paste them into chat, or prefix them with
-`NEXT_PUBLIC_`.
+## 2. Server environment
 
 ```dotenv
 ZOHO_RECRUIT_ENABLED=false
 ZOHO_RECRUIT_CLIENT_ID=<Zoho Client ID>
 ZOHO_RECRUIT_CLIENT_SECRET=<Zoho Client Secret>
 ZOHO_RECRUIT_TOKEN_ENCRYPTION_KEY=<base64 32-byte key>
-ZOHO_RECRUIT_REDIRECT_URI=https://<host>/api/integrations/zoho-recruit/callback
+ZOHO_RECRUIT_REDIRECT_URI=http://localhost:3000/api/integrations/zoho-recruit/callback
 ZOHO_RECRUIT_ACCOUNTS_DOMAIN=https://accounts.zoho.com
+# Optional workers / webhooks
+# ZOHO_RECRUIT_WORKER_SECRET=
+# ZOHO_RECRUIT_WEBHOOK_SECRET=
 ```
 
-Generate the encryption key once:
+Also require `SUPABASE_SERVICE_ROLE_KEY` on the server. Never use `NEXT_PUBLIC_` for Zoho secrets.
 
-```sh
-openssl rand -base64 32
-```
+## 3. Migrations
 
-The existing `SUPABASE_SERVICE_ROLE_KEY` must also be present on the server so the connection can
-write to the server-only credential ledger. It must never reach the browser.
+Apply in order:
 
-## 3. Apply the database migration
-
-Apply:
-
-`supabase/migrations/20260730105827_zoho_recruit_satellite_foundation.sql`
-
-It creates:
-
-- encrypted OAuth connection storage;
-- local-to-Zoho mapping records;
-- outbound and inbound ledgers;
-- conflict and reconciliation evidence; and
-- three disabled feature gates.
-
-All six Zoho integration tables revoke access from `anon` and `authenticated`. Even an HQ user's
-browser session cannot read them; the HQ page receives only sanitized status through checked server
-code.
+1. `20260730105827_zoho_recruit_satellite_foundation.sql`
+2. `20260730122000_zoho_recruit_satellite_sync.sql`
+3. `20260730130000_zoho_recruit_mapping_identity.sql` (clarifies mapping-only identity)
 
 ## 4. Authorize from HQ
 
-1. Deploy once with `ZOHO_RECRUIT_ENABLED=false`.
-2. Confirm the existing website behaves normally.
-3. Set `ZOHO_RECRUIT_ENABLED=true` and redeploy.
-4. Sign in as an HQ administrator.
-5. Open `/hq/integrations`.
-6. Select **Connect Zoho Recruit** and approve the Zoho consent screen.
+1. Keep DB sync gates **false**.
+2. Set `ZOHO_RECRUIT_ENABLED=true` and restart.
+3. HQ admin → `/hq/integrations` → **Connect Zoho Recruit**.
+4. Approve scopes (org + settings + candidates/jobopening read/create/update).
+5. If scopes are missing later: Disconnect → Connect again (does not log out Zoho users).
 
-The current implementation requests only:
+OAuth alone does **not** export candidates or jobs.
 
-`ZohoRecruit.org.all`
+## 5. How identity works (no Zoho UI fields)
 
-It verifies the organization, plan, and data-center metadata. It does not request candidate,
-application, job-opening, interview, assessment, document, or billing scopes.
+| Step | Behavior |
+| --- | --- |
+| First export | Create Zoho record with standard fields only → store Zoho id in `zoho_recruit_external_mappings` |
+| Later export | Update that Zoho id from the mapping table |
+| Match key | Never email/phone/name |
 
-## 5. Safety gates
-
-These database flags are inserted as `false` and must remain false for this release:
+## 6. Gates (remain false by default)
 
 - `zoho_recruit_enabled`
 - `zoho_recruit_data_sync_enabled`
-- `zoho_recruit_production_data_enabled`
+- `zoho_recruit_sandbox_sync_enabled` — synthetic/sandbox cases only
+- `zoho_recruit_production_data_enabled` — requires real DPO/legal evidence; leave off
 
-The server environment switch enables OAuth setup only. It does not change these database gates and
-does not activate synchronization.
+## 7. Disconnect
 
-Production candidate export requires a separate implementation and review covering consent,
-field-level ownership, DPO/legal approval, cross-border processing, deletion, reconciliation, and
-tenant-isolation tests.
-
-## 6. Disconnect
-
-Use **Disconnect and revoke** on `/hq/integrations`. Shugulika asks Zoho to revoke the refresh token,
-then clears both encrypted tokens locally. If Zoho revocation cannot be confirmed, the page warns
-the administrator to revoke Shugulika manually under Zoho Accounts → Sessions → Connected Apps.
+**Disconnect and revoke** on `/hq/integrations` clears Shugulika’s tokens only. Zoho Recruit users
+stay signed in.
