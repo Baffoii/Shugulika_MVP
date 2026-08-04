@@ -81,7 +81,11 @@ async function jobMeta(
 async function assertCandidateDocumentPreview(
   ctx: SessionContext,
   documentId: string,
-  opts: { applicationId?: string | null; submissionId?: string | null },
+  opts: {
+    applicationId?: string | null;
+    submissionId?: string | null;
+    jobOrderId?: string | null;
+  },
 ): Promise<ResolvedDocument> {
   const supabase = createClient();
   const { data: doc, error } = await supabase
@@ -147,6 +151,42 @@ async function assertCandidateDocumentPreview(
     const meta = await jobMeta(supabase, app.job_order_id);
     jobLabel = meta.title;
     employerLabel = meta.employerName;
+    entitled = true;
+  } else if (opts.jobOrderId && ctx.roles.includes("employer_user")) {
+    // Path A pool unlock: employer must own the Direct job and have unlocked this candidate.
+    const { data: job } = await supabase
+      .from("job_orders")
+      .select("id,title,employer_org_id,recruitment_path")
+      .eq("id", opts.jobOrderId)
+      .maybeSingle();
+    if (!job || job.recruitment_path !== "A") {
+      throw new DocumentAccessError("Pool CV preview requires a Direct (Path A) job.", 403);
+    }
+    const scoped = ctx.memberships.some(
+      (m) =>
+        m.status === "active" &&
+        m.role === "employer_user" &&
+        m.organization_id === job.employer_org_id,
+    );
+    if (!scoped) throw new DocumentAccessError("Not permitted to preview this document.", 403);
+
+    const { data: unlock } = await supabase
+      .from("employer_cv_unlocks")
+      .select("id")
+      .eq("employer_org_id", job.employer_org_id)
+      .eq("candidate_id", doc.candidate_id)
+      .maybeSingle();
+    if (!unlock) {
+      throw new DocumentAccessError("Unlock this candidate before previewing their CV.", 403);
+    }
+    if (doc.doc_type !== "cv") {
+      throw new DocumentAccessError("Only CV documents are available after unlock.", 403);
+    }
+
+    jobOrderId = job.id;
+    orgContextId = job.employer_org_id;
+    jobLabel = job.title?.trim() || "—";
+    employerLabel = await orgName(supabase, job.employer_org_id);
     entitled = true;
   } else if (!entitled) {
     const isStaff = ctx.roles.some((r: Role) =>

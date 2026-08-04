@@ -17,6 +17,7 @@ import {
   CompanySection,
   ContactSection,
   DeclarationsSection,
+  PackageSection,
   ReviewScreen,
   RoutingSection,
   type WizardStep,
@@ -142,6 +143,7 @@ export default async function EmployerOnboardingPage({
               {step === "routing" ? (
                 <RoutingSection app={app} guidance={guidance} franchises={franchises} />
               ) : null}
+              {step === "package" ? <PackageSection app={app} guidance={guidance} /> : null}
               {step === "declarations" ? (
                 <DeclarationsSection app={app} guidance={guidance} />
               ) : null}
@@ -245,7 +247,10 @@ function StatusPanel({
 
           {app.status === "approved" ? (
             <div className="flex flex-wrap gap-2">
-              <ButtonLink href="/employer/dashboard" size="sm">
+              <ButtonLink href="/employer/plan" size="sm">
+                Choose a plan or start free trial
+              </ButtonLink>
+              <ButtonLink href="/employer/dashboard" size="sm" variant="secondary">
                 Open employer dashboard
               </ButtonLink>
             </div>
