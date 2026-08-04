@@ -44,7 +44,8 @@ for (const key of REQUIRED_PUBLIC) {
 }
 
 // A server secret must never be exposed to the browser via a NEXT_PUBLIC_ name.
-const FORBIDDEN_PUBLIC = /^NEXT_PUBLIC_.*(SERVICE_ROLE|SERVICE_KEY|SECRET|PRIVATE_KEY|OPENAI)/i;
+const FORBIDDEN_PUBLIC =
+  /^NEXT_PUBLIC_.*(SERVICE_ROLE|SERVICE_KEY|SECRET|PRIVATE_KEY|OPENAI|ZOHO)/i;
 for (const key of Object.keys(process.env)) {
   if (FORBIDDEN_PUBLIC.test(key)) {
     errors.push(`Server secret exposed to the browser via a NEXT_PUBLIC_ name: ${key}`);
@@ -66,6 +67,42 @@ if (/service_role/.test(Buffer.from(key.split(".")[1] ?? "", "base64").toString(
   errors.push(
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY appears to be a SERVICE-ROLE key — never expose it.",
   );
+}
+
+if (process.env.ZOHO_RECRUIT_ENABLED?.trim().toLowerCase() === "true") {
+  for (const required of [
+    "ZOHO_RECRUIT_CLIENT_ID",
+    "ZOHO_RECRUIT_CLIENT_SECRET",
+    "ZOHO_RECRUIT_TOKEN_ENCRYPTION_KEY",
+    "ZOHO_RECRUIT_REDIRECT_URI",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ]) {
+    if (!process.env[required]) errors.push(`Zoho Recruit is enabled but ${required} is missing.`);
+  }
+
+  const encryptionKey = process.env.ZOHO_RECRUIT_TOKEN_ENCRYPTION_KEY;
+  if (encryptionKey && Buffer.from(encryptionKey, "base64").length !== 32) {
+    errors.push("ZOHO_RECRUIT_TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes.");
+  }
+
+  const redirectUri = process.env.ZOHO_RECRUIT_REDIRECT_URI;
+  if (redirectUri) {
+    try {
+      const redirect = new URL(redirectUri);
+      if (
+        !["https:", "http:"].includes(redirect.protocol) ||
+        (redirect.protocol === "http:" &&
+          !["localhost", "127.0.0.1"].includes(redirect.hostname)) ||
+        redirect.pathname !== "/api/integrations/zoho-recruit/callback"
+      ) {
+        errors.push(
+          "ZOHO_RECRUIT_REDIRECT_URI must be HTTPS (except localhost) and use the Zoho callback path.",
+        );
+      }
+    } catch {
+      errors.push("ZOHO_RECRUIT_REDIRECT_URI is not a valid URL.");
+    }
+  }
 }
 
 for (const w of warnings) console.warn(`⚠ ${w}`);

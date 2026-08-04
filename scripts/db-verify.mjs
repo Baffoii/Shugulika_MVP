@@ -53,6 +53,30 @@ const REQUIRED = {
   employer_submissions: ["employer_org_id", "submitting_org_id", "status", "access_revoked_at"],
   invoices: ["owning_org_id", "status", "payment_status"],
   audit_logs: ["actor_id", "action", "entity_type"],
+  zoho_recruit_connections: [
+    "connection_key",
+    "status",
+    "encrypted_access_token",
+    "encrypted_refresh_token",
+    "granted_scopes",
+  ],
+  zoho_recruit_external_mappings: [
+    "connection_id",
+    "local_entity_type",
+    "local_entity_id",
+    "zoho_module",
+    "zoho_record_id",
+  ],
+  zoho_recruit_outbox: [
+    "connection_id",
+    "event_id",
+    "processing_purpose",
+    "consent_snapshot",
+    "status",
+  ],
+  zoho_recruit_inbox: ["connection_id", "dedupe_key", "signature_verified", "status"],
+  zoho_recruit_conflicts: ["connection_id", "field_name", "authoritative_system", "status"],
+  zoho_recruit_reconciliations: ["connection_id", "status", "records_checked", "differences_found"],
   recruiter_kpi_targets: [
     "recruiter_level",
     "organization_id",
@@ -112,6 +136,12 @@ for (const t of [
   "assessment_assignments",
   "recruiter_kpi_targets",
   "kpi_stage_age_thresholds",
+  "zoho_recruit_connections",
+  "zoho_recruit_external_mappings",
+  "zoho_recruit_outbox",
+  "zoho_recruit_inbox",
+  "zoho_recruit_conflicts",
+  "zoho_recruit_reconciliations",
 ]) {
   const row = rls.find((r) => r.relname === t);
   if (row && !row.relrowsecurity) errors.push(`RLS not enabled on public.${t}`);

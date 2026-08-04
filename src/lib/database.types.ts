@@ -815,6 +815,111 @@ export type IntegrationConnectionRow = {
 };
 export type FeatureFlagRow = { key: string; is_enabled: boolean; notes: string | null };
 
+// ---- Zoho Recruit offline-satellite integration ----------------------------
+export type ZohoRecruitConnectionStatus =
+  "disconnected" | "pending" | "connected" | "error" | "disabled";
+
+export type ZohoRecruitConnectionRow = {
+  id: string;
+  connection_key: string;
+  status: ZohoRecruitConnectionStatus;
+  zoho_org_id: string | null;
+  zoho_org_name: string | null;
+  zoho_org_country: string | null;
+  zoho_plan: string | null;
+  accounts_domain: string | null;
+  api_domain: string | null;
+  data_center_location: string | null;
+  encrypted_access_token: string | null;
+  encrypted_refresh_token: string | null;
+  access_token_expires_at: string | null;
+  granted_scopes: string[];
+  connected_by: string | null;
+  connected_at: string | null;
+  disconnected_at: string | null;
+  last_verified_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ZohoRecruitExternalMappingRow = {
+  id: string;
+  connection_id: string;
+  local_entity_type: string;
+  local_entity_id: string;
+  zoho_module: string;
+  zoho_record_id: string;
+  sync_direction: "outbound" | "inbound" | "bidirectional_summary";
+  last_local_fingerprint: string | null;
+  last_external_fingerprint: string | null;
+  last_synced_at: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ZohoRecruitOutboxRow = {
+  id: string;
+  connection_id: string;
+  event_id: string;
+  aggregate_type: string;
+  aggregate_id: string;
+  event_type: string;
+  processing_purpose: string;
+  payload_version: number;
+  payload: Json;
+  consent_snapshot: Json;
+  status: "queued" | "processing" | "retry" | "succeeded" | "dead_letter" | "cancelled";
+  attempt_count: number;
+  available_at: string;
+  processing_started_at: string | null;
+  processed_at: string | null;
+  last_error: string | null;
+  created_at: string;
+};
+
+export type ZohoRecruitInboxRow = {
+  id: string;
+  connection_id: string;
+  dedupe_key: string;
+  event_type: string | null;
+  payload: Json;
+  signature_verified: boolean;
+  status: "received" | "processing" | "succeeded" | "ignored" | "failed";
+  received_at: string;
+  processed_at: string | null;
+  last_error: string | null;
+};
+
+export type ZohoRecruitConflictRow = {
+  id: string;
+  connection_id: string;
+  mapping_id: string | null;
+  field_name: string;
+  authoritative_system: "shugulika" | "zoho_recruit";
+  local_value_hash: string | null;
+  external_value_hash: string | null;
+  status: "open" | "resolved_local" | "resolved_external" | "ignored";
+  resolution_note: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+};
+
+export type ZohoRecruitReconciliationRow = {
+  id: string;
+  connection_id: string;
+  status: "running" | "succeeded" | "failed" | "cancelled";
+  cursor_value: string | null;
+  records_checked: number;
+  differences_found: number;
+  summary: Json;
+  started_at: string;
+  completed_at: string | null;
+  last_error: string | null;
+};
+
 // ---- Asynchronous video interviews (migrations 0016–0019) -------------------
 export type InterviewAssignmentStatus =
   "draft" | "invited" | "in_progress" | "submitted" | "reviewed" | "expired" | "cancelled";
@@ -1109,6 +1214,12 @@ export type Database = {
       document_access_events: Tbl<DocumentAccessEventRow>;
       integration_connections: Tbl<IntegrationConnectionRow>;
       feature_flags: Tbl<FeatureFlagRow>;
+      zoho_recruit_connections: Tbl<ZohoRecruitConnectionRow>;
+      zoho_recruit_external_mappings: Tbl<ZohoRecruitExternalMappingRow>;
+      zoho_recruit_outbox: Tbl<ZohoRecruitOutboxRow>;
+      zoho_recruit_inbox: Tbl<ZohoRecruitInboxRow>;
+      zoho_recruit_conflicts: Tbl<ZohoRecruitConflictRow>;
+      zoho_recruit_reconciliations: Tbl<ZohoRecruitReconciliationRow>;
       interview_templates: Tbl<InterviewTemplateRow>;
       interview_template_questions: Tbl<InterviewTemplateQuestionRow>;
       interview_assignments: Tbl<InterviewAssignmentRow>;

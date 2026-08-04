@@ -5,6 +5,15 @@
 > **Date:** 2026-07-30  
 > **Scope:** Architecture and delivery plan only; no integration or schema changes are included.
 
+> **Implementation note (2026-07-30):** The first implementation is intentionally limited to
+> the disabled-by-default server OAuth connection, organization verification, encrypted credential
+> storage, and private mapping/outbox/inbox/conflict/reconciliation ledgers. It requests only
+> `ZohoRecruit.org.all`; it does not connect any existing candidate, job, application, document,
+> billing, or pipeline flow to Zoho. The three data-sync and production-data feature gates remain
+> off.
+>
+> Setup instructions: [`../integrations/zoho-recruit-setup.md`](../integrations/zoho-recruit-setup.md)
+
 ## 1. Decision
 
 Shugulika will keep the existing Supabase-backed platform as the authoritative source for:

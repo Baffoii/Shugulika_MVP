@@ -104,7 +104,7 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
     { href: "/hq/ai-usage", label: "AI credits", icon: Cpu },
     { href: "/hq/notifications", label: "Notifications", icon: Bell },
     { href: "/hq/audit-log", label: "Audit log", icon: ShieldCheck },
-    { href: "/hq/integrations", label: "Integrations", icon: Plug, placeholder: true },
+    { href: "/hq/integrations", label: "Integrations", icon: Plug },
     { href: "/hq/settings", label: "Settings", icon: Settings },
   ],
 };
