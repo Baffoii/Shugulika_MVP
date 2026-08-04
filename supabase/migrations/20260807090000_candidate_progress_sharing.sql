@@ -268,7 +268,9 @@ begin
        'assignment_id', new.id, 'status', new.status, 'due_at', new.due_at
      )),
      case when tg_op = 'INSERT' then new.assigned_at else now() end,
-     'assessment_assignment', new.id::text || ':' || new.status)
+     -- Include due_at so later deadline changes at the same status are not dropped.
+     'assessment_assignment',
+     new.id::text || ':' || new.status || ':' || coalesce(new.due_at::text, ''))
   on conflict do nothing;
   return new;
 end $$;
@@ -393,7 +395,9 @@ begin
      jsonb_strip_nulls(jsonb_build_object(
        'interview_id', new.id, 'status', new.status,
        'scheduled_at', new.scheduled_at, 'expires_at', new.expires_at
-     )), now(), 'interview', new.id::text || ':' || new.status)
+     )), now(), 'interview',
+     -- Include scheduled_at so later reschedules at the same status are not dropped.
+     new.id::text || ':' || new.status || ':' || coalesce(new.scheduled_at::text, ''))
   on conflict do nothing;
   return new;
 end $$;
@@ -417,7 +421,8 @@ begin
           else 'Video interview ' || replace(new.status, '_', ' ') end,
      jsonb_strip_nulls(jsonb_build_object(
        'interview_assignment_id', new.id, 'status', new.status, 'expires_at', new.expires_at
-     )), now(), 'interview_assignment', new.id::text || ':' || new.status)
+     )), now(), 'interview_assignment',
+     new.id::text || ':' || new.status || ':' || coalesce(new.expires_at::text, ''))
   on conflict do nothing;
   return new;
 end $$;
@@ -503,7 +508,7 @@ create or replace function public.candidate_share_cv(
   p_application_id uuid, p_document_id uuid
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare v_app public.applications%rowtype; v_recipient uuid;
-declare v_consent uuid; v_event uuid;
+declare v_consent uuid; v_event uuid; v_submission_id uuid; v_portal_path text;
 begin
   select * into v_app from public.applications
     where id = p_application_id and candidate_id = public.auth_candidate_id()
@@ -515,6 +520,28 @@ begin
     raise exception 'active CV not found';
   end if;
   select employer_org_id into v_recipient from public.job_orders where id = v_app.job_order_id;
+
+  -- Pin the selected CV onto the application and any live employer submission so
+  -- the employer portal actually opens the document the candidate consented to.
+  update public.applications
+    set cv_document_id = p_document_id, updated_at = now()
+    where id = v_app.id;
+  update public.employer_submissions
+    set cv_document_id = p_document_id
+    where application_id = v_app.id
+      and access_revoked_at is null;
+
+  select id into v_submission_id
+    from public.employer_submissions
+    where application_id = v_app.id
+      and access_revoked_at is null
+    order by created_at desc
+    limit 1;
+  v_portal_path := case
+    when v_submission_id is not null then '/employer/submissions/' || v_submission_id::text
+    else '/employer/submissions?application=' || v_app.id::text
+  end;
+
   insert into public.candidate_consents
     (candidate_id, purpose, covered_org_id, scope, method, note)
   values
@@ -528,14 +555,15 @@ begin
      channel, portal_path)
   values
     (v_app.candidate_id, v_app.id, v_recipient, p_document_id, v_consent,
-     'portal_link', '/employer/submissions?application=' || v_app.id::text)
+     'portal_link', v_portal_path)
   returning id into v_event;
   insert into public.candidate_visible_events
     (candidate_id, application_id, event_type, label, details, source_type, source_id)
   values
     (v_app.candidate_id, v_app.id, 'cv_shared', 'CV shared through the secure portal',
      jsonb_build_object('cv_share_event_id', v_event, 'recipient_org_id', v_recipient,
-                        'job_order_id', v_app.job_order_id, 'channel', 'portal_link'),
+                        'job_order_id', v_app.job_order_id, 'channel', 'portal_link',
+                        'document_id', p_document_id),
      'cv_share_event', v_event::text);
   return v_event;
 end $$;
