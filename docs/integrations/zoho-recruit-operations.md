@@ -36,6 +36,7 @@ no-ops (HTTP 200 skipped) when sync gates disallow work.
 | `POST` | `/api/integrations/zoho-recruit/workers/outbox` | Claim and process outbound events |
 | `POST` | `/api/integrations/zoho-recruit/workers/inbox` | Claim and process inbound webhook ledger rows |
 | `POST` | `/api/integrations/zoho-recruit/workers/reconcile` | Walk Zoho modules vs local mappings |
+| `POST` | `/api/integrations/zoho-recruit/workers/candidate-sync` | Page Zoho Candidates into local search cache |
 | `POST` | `/api/integrations/zoho-recruit/webhook` | Accept authenticated Zoho workflow webhooks |
 
 Reconcile dry-run query flags: `?dry_run=1` or `?dry_run=true`.
@@ -46,8 +47,32 @@ Suggested cadence (adjust after synthetic measurements):
 | --- | --- |
 | Outbox worker | every 1–5 minutes |
 | Inbox worker | every 1–5 minutes |
+| Candidate-sync worker | every 15–60 minutes (or on demand from HQ) |
 | Reconcile dry-run | daily (or on demand from HQ) |
 | Reconcile non-dry | only after gates + approvals allow |
+
+### Candidate-sync worker details
+
+| Item | Detail |
+| --- | --- |
+| Endpoint | `POST /api/integrations/zoho-recruit/workers/candidate-sync` |
+| Authentication | `Authorization: Bearer <ZOHO_RECRUIT_WORKER_SECRET\|CRON_SECRET>` (fail closed if neither set) |
+| Required gates | `zoho_recruit_enabled` + `zoho_recruit_data_sync_enabled`, plus sandbox or production-data gate; connection must not be paused |
+| Locking / idempotency | Advisory run lock via `zoho_recruit_candidate_sync_runs`; concurrent callers get `skipped` |
+| Retry / failure | Failed runs store `error_summary` (redacted); next cron/HQ Sync starts a new run; soft-inactivates candidates no longer seen or no longer eligible |
+| Eligibility | Fail-closed portal discovery consent (see setup §7); restriction/withdrawal/deletion override sync |
+| HQ visibility | `/hq/integrations` shows last success, failures, skipped counts, and stale cache signals from sync run rows |
+
+This repository has **no** `vercel.json` / GitHub Actions cron for Zoho workers. Deploy the
+candidate-sync route on your host’s scheduler (same pattern as outbox/inbox/reconcile), for
+example:
+
+```sh
+curl -X POST "$ORIGIN/api/integrations/zoho-recruit/workers/candidate-sync" \
+  -H "Authorization: Bearer $ZOHO_RECRUIT_WORKER_SECRET"
+```
+
+Keep production data gates false until legal/DPO and operational approvals exist.
 
 OAuth routes (HQ session, not worker secret):
 
