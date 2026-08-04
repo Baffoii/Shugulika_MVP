@@ -761,6 +761,11 @@ export type EmployerCvUnlockLedgerRow = {
   package_key: string | null;
   candidate_id: string | null;
   submission_id: string | null;
+  job_order_id: string | null;
+  subscription_id: string | null;
+  period_starts_on: string | null;
+  period_ends_on: string | null;
+  expired_at: string | null;
   actor_user_id: string | null;
   created_at: string;
 };
@@ -769,6 +774,7 @@ export type EmployerCvUnlockRow = {
   employer_org_id: string;
   candidate_id: string;
   submission_id: string | null;
+  job_order_id: string | null;
   ledger_entry_id: string | null;
   unlocked_at: string;
 };
@@ -1542,7 +1548,15 @@ export type Database = {
         Returns: Json;
       };
       spend_cv_unlock: {
-        Args: { p_candidate_id: string; p_submission_id?: string | null };
+        Args: {
+          p_candidate_id: string;
+          p_submission_id?: string | null;
+          p_job_order_id?: string | null;
+        };
+        Returns: Json;
+      };
+      expire_employer_entitlements: {
+        Args: Record<string, never>;
         Returns: Json;
       };
       expire_stale_employer_trials: {

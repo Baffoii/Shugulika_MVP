@@ -9,7 +9,7 @@ import type { Client } from "pg";
 
 const describeDb = hasDb ? describe : describe.skip;
 
-const GRANT_FN = "private.grant_cv_unlock_tokens(uuid,integer,text,text,uuid)";
+const GRANT_FN = "private.grant_cv_unlock_tokens(uuid,integer,text,text,uuid,uuid,date,date)";
 const ENSURE_FN = "private.ensure_cv_unlock_balance(uuid)";
 const AI_SCREENS_FN = "public.ai_cv_screens_used(uuid,timestamp with time zone)";
 const EXPIRE_FN = "public.expire_stale_employer_trials()";
@@ -69,9 +69,12 @@ describeDb("cv unlock grant helper privileges", () => {
   it("anon cannot mint CV credits via private.grant_cv_unlock_tokens", async () => {
     const before = await balanceOf(ids.employerA);
     await expect(
-      queryAs(client, null, `select private.grant_cv_unlock_tokens($1, 10, 'probe', null, null)`, [
-        ids.employerA,
-      ]),
+      queryAs(
+        client,
+        null,
+        `select private.grant_cv_unlock_tokens($1, 10, 'probe', null, null, null, null, null)`,
+        [ids.employerA],
+      ),
     ).rejects.toThrow(/permission denied/i);
     expect(await balanceOf(ids.employerA)).toBe(before);
   });
@@ -84,7 +87,7 @@ describeDb("cv unlock grant helper privileges", () => {
       commitAs(
         client,
         ids.employerUserA,
-        `select private.grant_cv_unlock_tokens($1, 10, 'self_mint', null, null)`,
+        `select private.grant_cv_unlock_tokens($1, 10, 'self_mint', null, null, null, null, null)`,
         [ids.employerA],
       ),
     ).rejects.toThrow(/permission denied/i);
@@ -93,7 +96,7 @@ describeDb("cv unlock grant helper privileges", () => {
       commitAs(
         client,
         ids.employerUserA,
-        `select private.grant_cv_unlock_tokens($1, 10, 'cross_org', null, null)`,
+        `select private.grant_cv_unlock_tokens($1, 10, 'cross_org', null, null, null, null, null)`,
         [ids.employerB],
       ),
     ).rejects.toThrow(/permission denied/i);

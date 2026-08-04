@@ -65,17 +65,27 @@ export async function purchaseEmployerAddonAction(addonKey: string): Promise<Pla
   return { ok: true, message: "Top-up applied." };
 }
 
-/** Spend one CV unlock to reveal a candidate (submission pack or Path A pool hit). */
+/**
+ * Spend one CV unlock to reveal a candidate (Path B submission or Path A pool).
+ * Unlock is org-scoped. Path A requires jobOrderId for authorization.
+ */
 export async function unlockEmployerCvAction(
   candidateId: string,
   submissionId?: string | null,
   jobOrderId?: string | null,
 ): Promise<PlanActionResult> {
   await requireApprovedEmployer();
+  if (!submissionId && !jobOrderId) {
+    return {
+      ok: false,
+      error: "Unlock requires a Path B submission or a Direct (Path A) job order.",
+    };
+  }
   const supabase = createClient();
   const { error } = await supabase.rpc("spend_cv_unlock", {
     p_candidate_id: candidateId,
     p_submission_id: submissionId ?? null,
+    p_job_order_id: jobOrderId ?? null,
   });
   if (error) return { ok: false, error: rpcErrorMessage(error) };
   if (submissionId) {
