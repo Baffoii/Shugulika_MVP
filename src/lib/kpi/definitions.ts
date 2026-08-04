@@ -1000,12 +1000,28 @@ export function computeResponseTime(
   };
 }
 
+/**
+ * Statuses that mean the employer already acted. Pre-2026-08-05 rows can be in
+ * one of these without a `responded_at` stamp — exclude them from awaiting /
+ * overdue rather than treating historic decisions as "still waiting".
+ */
+const EMPLOYER_DECIDED_STATUSES = new Set([
+  "shortlisted",
+  "interview_requested",
+  "offered",
+  "rejected",
+  "withdrawn",
+]);
+
 /** Employer submissions awaiting or completing an employer decision. */
 export function toEmployerResponseWindows(
   submissions: SubmissionSnapshot[],
 ): ResponseWindowSnapshot[] {
   return submissions
     .filter((s) => s.submittedAt != null || s.status !== "consent_pending")
+    .filter(
+      (s) => s.respondedAt != null || !EMPLOYER_DECIDED_STATUSES.has(s.status),
+    )
     .map((s) => ({
       id: s.id,
       applicationId: s.applicationId,

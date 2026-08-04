@@ -595,6 +595,31 @@ describe("employer response time", () => {
     expect(r.status).toBe("insufficient_data");
     expect(r.unavailableReason).toContain("submitted_at");
   });
+
+  it("excludes historic decided packs that lack responded_at from awaiting", () => {
+    const submissions: SubmissionSnapshot[] = [
+      {
+        ...base,
+        id: "s-old",
+        status: "shortlisted",
+        submittedAt: "2026-06-01T00:00:00.000Z",
+        respondedAt: null, // pre-stamp decision — must not look "still waiting"
+        responseDueAt: null,
+      },
+      {
+        ...base,
+        id: "s-open",
+        status: "submitted",
+        submittedAt: "2026-07-26T00:00:00.000Z",
+        respondedAt: null,
+        responseDueAt: "2026-08-01T00:00:00.000Z",
+      },
+    ];
+    const r = computeEmployerResponseTime(submissions, window, 120, "2026-07-27T12:00:00.000Z");
+    expect(r.awaiting.map((o) => o.id)).toEqual(["s-open"]);
+    expect(r.overdue).toEqual([]);
+    expect(r.medianHours).toBeNull();
+  });
 });
 
 describe("candidate response time", () => {
