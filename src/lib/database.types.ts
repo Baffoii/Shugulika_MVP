@@ -118,6 +118,8 @@ export type EmployerApplicationRow = {
   reapply_allowed: boolean | null;
   previous_application_id: string | null;
   resulting_org_id: string | null;
+  /** Soft plan interest captured during onboarding (optional). */
+  preferred_package_key: string | null;
   submitted_at: string | null;
   first_submitted_at: string | null;
   decided_at: string | null;
@@ -571,10 +573,102 @@ export type DiscoverableCandidateRow = {
   has_own_engagement: boolean;
 };
 
+/** Employer Path A pool hit — anonymized until unlocked. */
+export type EmployerPoolCandidateRow = {
+  candidate_id: string;
+  teaser_label: string;
+  headline: string | null;
+  country_code: string | null;
+  city: string | null;
+  skills: string[];
+  education_level: string | null;
+  experience_summary: string | null;
+  experience_years: number | null;
+  languages: string[];
+  availability: string | null;
+  desired_roles: string[];
+  approved_fields: string[];
+  open_to_work: boolean;
+  is_unlocked: boolean;
+  given_name: string | null;
+  family_name: string | null;
+  full_name: string | null;
+  primary_cv_document_id: string | null;
+};
+
+/** Employer Zoho-backed pool hit (experimental spike). */
+export type EmployerZohoPoolCandidateRow = {
+  candidate_id: string;
+  zoho_candidate_id: string;
+  teaser_label: string;
+  headline: string | null;
+  country_code: string | null;
+  city: string | null;
+  skills: string[];
+  education_level: string | null;
+  experience_summary: string | null;
+  experience_years: number | null;
+  languages: string[];
+  availability: string | null;
+  desired_roles: string[];
+  industry: string | null;
+  has_resume: boolean;
+  approved_fields: string[];
+  open_to_work: boolean;
+  is_unlocked: boolean;
+  given_name: string | null;
+  family_name: string | null;
+  full_name: string | null;
+  primary_cv_document_id: string | null;
+  total_count: number;
+};
+
+export type ZohoRecruitCandidateSearchRow = {
+  id: string;
+  zoho_candidate_id: string;
+  teaser_label: string;
+  full_name: string | null;
+  given_name: string | null;
+  family_name: string | null;
+  email: string | null;
+  phone: string | null;
+  job_title: string | null;
+  employer_or_industry: string | null;
+  industry: string | null;
+  skills: string[];
+  years_experience: number | null;
+  qualification: string | null;
+  city: string | null;
+  country: string | null;
+  country_code: string | null;
+  candidate_status: string | null;
+  availability: string | null;
+  has_resume: boolean;
+  zoho_attachment_id: string | null;
+  search_eligible: boolean;
+  consent_or_visibility: string | null;
+  zoho_created_at: string | null;
+  zoho_modified_at: string | null;
+  synced_at: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EmployerZohoCandidateUnlockRow = {
+  id: string;
+  employer_org_id: string;
+  zoho_candidate_id: string;
+  search_row_id: string | null;
+  job_order_id: string | null;
+  ledger_entry_id: string | null;
+  unlocked_at: string;
+};
+
 export type CandidateSearchAccessEventRow = {
   id: number;
   actor_id: string | null;
-  candidate_id: string;
+  candidate_id: string | null;
   org_context_id: string | null;
   access_kind: string;
   metadata: Json;
@@ -628,6 +722,8 @@ export type EmployerSubmissionRow = {
   is_masked: boolean;
   summary: string | null;
   disclosed_profile: Json;
+  /** Full identity pack; only surface after CV unlock. */
+  full_disclosed_profile: Json | null;
   disclosed_fields: string[];
   cv_document_id: string | null;
   submitted_at: string | null;
@@ -696,6 +792,8 @@ export type PackageRow = {
   name: string;
   tier: number;
   is_active: boolean;
+  description: string | null;
+  package_kind: "subscription" | "addon";
 };
 export type PackageEntitlementRow = {
   id: string;
@@ -710,10 +808,47 @@ export type EmployerSubscriptionRow = {
   package_id: string;
   status: string;
   is_trial: boolean;
+  trial_started_on: string | null;
   trial_ends_on: string | null;
+  auto_activate_intent: boolean;
   starts_on: string;
   expires_on: string | null;
   created_at: string;
+};
+export type EmployerCvUnlockBalanceRow = {
+  employer_org_id: string;
+  balance: number;
+  updated_at: string;
+};
+export type EmployerCvUnlockLedgerRow = {
+  id: string;
+  employer_org_id: string;
+  entry_type: "grant" | "spend" | "adjust" | "expire";
+  amount: number;
+  balance_after: number;
+  reason: string | null;
+  package_key: string | null;
+  candidate_id: string | null;
+  zoho_candidate_id: string | null;
+  submission_id: string | null;
+  job_order_id: string | null;
+  subscription_id: string | null;
+  period_starts_on: string | null;
+  period_ends_on: string | null;
+  expired_at: string | null;
+  /** Unspent tokens on a CV credit grant; null for non-token rows (e.g. job slots). */
+  remaining: number | null;
+  actor_user_id: string | null;
+  created_at: string;
+};
+export type EmployerCvUnlockRow = {
+  id: string;
+  employer_org_id: string;
+  candidate_id: string;
+  submission_id: string | null;
+  job_order_id: string | null;
+  ledger_entry_id: string | null;
+  unlocked_at: string;
 };
 export type InvoiceRow = {
   id: string;
@@ -839,6 +974,10 @@ export type ZohoRecruitConnectionRow = {
   disconnected_at: string | null;
   last_verified_at: string | null;
   last_error: string | null;
+  token_refresh_lock_until: string | null;
+  last_rate_limit: Json;
+  sync_paused_at: string | null;
+  sync_paused_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -876,6 +1015,10 @@ export type ZohoRecruitOutboxRow = {
   processing_started_at: string | null;
   processed_at: string | null;
   last_error: string | null;
+  claim_token: string | null;
+  claim_expires_at: string | null;
+  max_attempts: number;
+  superseded_by: string | null;
   created_at: string;
 };
 
@@ -885,11 +1028,75 @@ export type ZohoRecruitInboxRow = {
   dedupe_key: string;
   event_type: string | null;
   payload: Json;
+  payload_hash: string | null;
   signature_verified: boolean;
   status: "received" | "processing" | "succeeded" | "ignored" | "failed";
   received_at: string;
   processed_at: string | null;
   last_error: string | null;
+  claim_token: string | null;
+  claim_expires_at: string | null;
+};
+
+export type ZohoRecruitFieldMappingRow = {
+  id: string;
+  connection_id: string | null;
+  local_entity_type: string;
+  local_field: string;
+  zoho_module: string;
+  zoho_field_api_name: string;
+  sync_direction: "outbound" | "inbound" | "none";
+  authoritative_system: "shugulika" | "zoho_recruit";
+  purpose: string;
+  transformation_version: number;
+  enabled: boolean;
+  sensitivity: "public" | "internal" | "confidential" | "restricted";
+  retention_behavior: string;
+  deletion_behavior: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ZohoRecruitOfflineCaseRow = {
+  id: string;
+  connection_id: string;
+  local_entity_type: "candidate" | "job";
+  local_entity_id: string;
+  franchise_org_id: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  status: "draft" | "approved" | "restricted" | "withdrawn" | "closed";
+  is_synthetic: boolean;
+  processing_purpose: string;
+  restriction_reason: string | null;
+  legal_hold: boolean;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ZohoRecruitProductionApprovalRow = {
+  id: string;
+  connection_id: string;
+  requested_by: string | null;
+  approved_by: string | null;
+  dpo_name: string;
+  legal_reference: string;
+  approval_note: string;
+  evidence_uri: string | null;
+  status: "recorded" | "revoked";
+  recorded_at: string;
+  revoked_at: string | null;
+  metadata: Json;
+};
+
+export type ZohoRecruitSyncObservationRow = {
+  id: string;
+  connection_id: string;
+  observed_at: string;
+  kind: string;
+  metrics: Json;
 };
 
 export type ZohoRecruitConflictRow = {
@@ -1205,6 +1412,30 @@ export type Database = {
       packages: Tbl<PackageRow>;
       package_entitlements: Tbl<PackageEntitlementRow>;
       employer_subscriptions: Tbl<EmployerSubscriptionRow>;
+      employer_cv_unlock_balances: Tbl<EmployerCvUnlockBalanceRow>;
+      employer_cv_unlock_ledger: Tbl<EmployerCvUnlockLedgerRow>;
+      employer_cv_unlocks: Tbl<EmployerCvUnlockRow>;
+      employer_zoho_candidate_unlocks: Tbl<EmployerZohoCandidateUnlockRow>;
+      zoho_recruit_candidate_search: Tbl<ZohoRecruitCandidateSearchRow>;
+      zoho_recruit_candidate_sync_runs: Tbl<{
+        id: string;
+        connection_id: string | null;
+        status: string;
+        started_at: string;
+        finished_at: string | null;
+        pages_fetched: number;
+        candidates_seen: number;
+        candidates_upserted: number;
+        candidates_inactivated: number;
+        error_summary: string | null;
+        metadata: Json;
+      }>;
+      zoho_recruit_candidate_sync_lock: Tbl<{
+        lock_key: string;
+        run_id: string | null;
+        locked_at: string | null;
+        locked_by: string | null;
+      }>;
       invoices: Tbl<InvoiceRow>;
       invoice_items: Tbl<InvoiceItemRow>;
       payment_records: Tbl<PaymentRecordRow>;
@@ -1220,6 +1451,10 @@ export type Database = {
       zoho_recruit_inbox: Tbl<ZohoRecruitInboxRow>;
       zoho_recruit_conflicts: Tbl<ZohoRecruitConflictRow>;
       zoho_recruit_reconciliations: Tbl<ZohoRecruitReconciliationRow>;
+      zoho_recruit_field_mappings: Tbl<ZohoRecruitFieldMappingRow>;
+      zoho_recruit_offline_cases: Tbl<ZohoRecruitOfflineCaseRow>;
+      zoho_recruit_production_approvals: Tbl<ZohoRecruitProductionApprovalRow>;
+      zoho_recruit_sync_observations: Tbl<ZohoRecruitSyncObservationRow>;
       interview_templates: Tbl<InterviewTemplateRow>;
       interview_template_questions: Tbl<InterviewTemplateQuestionRow>;
       interview_assignments: Tbl<InterviewAssignmentRow>;
@@ -1402,6 +1637,56 @@ export type Database = {
         Args: { p_candidate: string };
         Returns: DiscoverableCandidateRow[];
       };
+      search_employer_talent_pool: {
+        Args: {
+          p_job_order_id: string;
+          p_q?: string | null;
+          p_skill?: string | null;
+          p_country?: string | null;
+          p_city?: string | null;
+          p_availability?: string | null;
+          p_experience_level?: string | null;
+          p_limit?: number | null;
+        };
+        Returns: EmployerPoolCandidateRow[];
+      };
+      open_employer_pool_candidate: {
+        Args: { p_candidate_id: string; p_job_order_id: string };
+        Returns: EmployerPoolCandidateRow[];
+      };
+      search_zoho_employer_talent_pool: {
+        Args: {
+          p_job_order_id: string;
+          p_q?: string | null;
+          p_skill?: string | null;
+          p_country?: string | null;
+          p_city?: string | null;
+          p_availability?: string | null;
+          p_experience_level?: string | null;
+          p_industry?: string | null;
+          p_qualification?: string | null;
+          p_role?: string | null;
+          p_limit?: number | null;
+          p_offset?: number | null;
+        };
+        Returns: EmployerZohoPoolCandidateRow[];
+      };
+      open_zoho_employer_pool_candidate: {
+        Args: { p_candidate_id: string; p_job_order_id: string };
+        Returns: EmployerZohoPoolCandidateRow[];
+      };
+      spend_zoho_cv_unlock: {
+        Args: { p_zoho_candidate_id: string; p_job_order_id?: string | null };
+        Returns: Json;
+      };
+      employer_org_for_caller: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
+      employer_owns_path_a_job: {
+        Args: { p_employer_org: string; p_job_order: string };
+        Returns: boolean;
+      };
       eligible_employer_franchises: {
         Args: { p_country: string; p_region?: string | null };
         Returns: EligibleFranchiseRow[];
@@ -1447,6 +1732,42 @@ export type Database = {
       start_revised_employer_application: {
         Args: { p_previous_id: string };
         Returns: string;
+      };
+      count_employer_active_job_slots: {
+        Args: { p_employer_org: string };
+        Returns: number;
+      };
+      employer_job_slot_limit: {
+        Args: { p_employer_org: string };
+        Returns: number;
+      };
+      employer_open_payments_allowed: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      activate_employer_package: {
+        Args: { p_package_key: string; p_as_trial?: boolean };
+        Returns: Json;
+      };
+      purchase_employer_addon: {
+        Args: { p_addon_key: string };
+        Returns: Json;
+      };
+      spend_cv_unlock: {
+        Args: {
+          p_candidate_id: string;
+          p_submission_id?: string | null;
+          p_job_order_id?: string | null;
+        };
+        Returns: Json;
+      };
+      expire_employer_entitlements: {
+        Args: Record<string, never>;
+        Returns: Json;
+      };
+      expire_stale_employer_trials: {
+        Args: Record<string, never>;
+        Returns: number;
       };
     };
     Enums: Record<string, never>;

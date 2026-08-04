@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useState, useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { submitJobOrderAction, type JobOrderActionResult } from "@/app/job-order-actions";
 import { Alert, Button, Card, CardBody, CardHeader, CardTitle } from "@/components/ui/primitives";
 import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/form";
@@ -19,7 +19,7 @@ function SubmitButton({ submitted }: { submitted: boolean }) {
 }
 
 function JobOrderSubmissionFormInner({ onSubmitAnother }: { onSubmitAnother: () => void }) {
-  const [state, action] = useFormState(submitJobOrderAction, initial);
+  const [state, action] = useActionState(submitJobOrderAction, initial);
   const [vacancies, setVacancies] = useState("1");
   const [assessmentMode, setAssessmentMode] = useState("shugulika");
   const [assessmentDialogOpen, setAssessmentDialogOpen] = useState(false);
@@ -130,15 +130,24 @@ function JobOrderSubmissionFormInner({ onSubmitAnother }: { onSubmitAnother: () 
               }}
             />
           </Field>
-          <Field label="Recruitment route" htmlFor="recruitment_path" required>
+          <Field
+            label="Recruitment route"
+            htmlFor="recruitment_path"
+            required
+            hint="Path A: you post the role and use Find candidates to browse anonymized teasers, then spend CV unlocks for name + watermarked CV. Path B: Shugulika runs the pipeline and sends packs to Candidate CVs."
+          >
             <Select
               id="recruitment_path"
               name="recruitment_path"
               defaultValue="B"
               disabled={submitted}
             >
-              <option value="B">Shugulika-managed</option>
-              <option value="A">Direct employer recruitment</option>
+              <option value="B">
+                Managed (Path B) — Shugulika recruiters source and submit candidate packs
+              </option>
+              <option value="A">
+                Direct (Path A) — search and unlock candidates from the Shugulika pool yourself
+              </option>
             </Select>
           </Field>
           <Field label="Application deadline" htmlFor="application_deadline">

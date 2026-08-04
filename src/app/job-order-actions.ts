@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { memberOrgIds, requirePortal, requireSession } from "@/lib/auth";
+import { assertCanPostJob } from "@/lib/employer-entitlements";
 import { jobOrderSchema } from "@/lib/validation";
 import type { OrganizationRow } from "@/lib/database.types";
 
@@ -107,6 +108,11 @@ export async function submitJobOrderAction(
   );
   if (!employerMembership?.organization_id) {
     return { ok: false, error: "Your account is not linked to an employer organization." };
+  }
+
+  const jobGate = await assertCanPostJob(employerMembership.organization_id);
+  if (!jobGate.allowed) {
+    return { ok: false, error: jobGate.error ?? "You cannot post a job right now." };
   }
 
   const parsed = jobOrderSchema.safeParse({

@@ -28,6 +28,7 @@ d("Zoho Recruit server-only satellite foundation", () => {
       { key: "zoho_recruit_data_sync_enabled", is_enabled: false },
       { key: "zoho_recruit_enabled", is_enabled: false },
       { key: "zoho_recruit_production_data_enabled", is_enabled: false },
+      { key: "zoho_recruit_sandbox_sync_enabled", is_enabled: false },
     ]);
   });
 
@@ -39,6 +40,10 @@ d("Zoho Recruit server-only satellite foundation", () => {
       "zoho_recruit_inbox",
       "zoho_recruit_conflicts",
       "zoho_recruit_reconciliations",
+      "zoho_recruit_field_mappings",
+      "zoho_recruit_offline_cases",
+      "zoho_recruit_production_approvals",
+      "zoho_recruit_sync_observations",
     ]) {
       await expect(queryAs(client, ids.hqAdmin, `select * from public.${table}`)).rejects.toThrow(
         /permission denied/,

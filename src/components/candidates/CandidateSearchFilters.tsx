@@ -10,13 +10,24 @@ import { AVAILABILITY_PRESETS, COUNTRIES, EXPERIENCE_LEVELS } from "@/lib/consta
 /** Talent-pool filter bar — pushes filters into the URL query string. */
 export function CandidateSearchFilters({
   basePath = "/recruiter/candidates",
+  preserveParams = [],
+  keywordPlaceholder = "Name, role, skill…",
+  showExtendedFilters = false,
 }: {
   basePath?: string;
+  /** Query keys to keep when clearing (e.g. employer job scope). */
+  preserveParams?: string[];
+  keywordPlaceholder?: string;
+  /** Industry / qualification / role filters (employer Zoho search). */
+  showExtendedFilters?: boolean;
 }) {
   const router = useRouter();
   const params = useSearchParams();
   const [q, setQ] = useState(params.get("q") ?? "");
   const [skill, setSkill] = useState(params.get("skill") ?? "");
+  const [industry, setIndustry] = useState(params.get("industry") ?? "");
+  const [qualification, setQualification] = useState(params.get("qualification") ?? "");
+  const [role, setRole] = useState(params.get("role") ?? "");
 
   function update(next: Record<string, string>) {
     const sp = new URLSearchParams(params.toString());
@@ -24,14 +35,35 @@ export function CandidateSearchFilters({
       if (v) sp.set(k, v);
       else sp.delete(k);
     }
+    // Reset paging when filters change.
+    if (!("page" in next)) sp.delete("page");
     router.push(`${basePath}?${sp.toString()}`);
+  }
+
+  function clearFilters() {
+    setQ("");
+    setSkill("");
+    setIndustry("");
+    setQualification("");
+    setRole("");
+    const sp = new URLSearchParams();
+    for (const key of preserveParams) {
+      const v = params.get(key);
+      if (v) sp.set(key, v);
+    }
+    const qs = sp.toString();
+    router.push(qs ? `${basePath}?${qs}` : basePath);
   }
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        update({ q, skill });
+        update({
+          q,
+          skill,
+          ...(showExtendedFilters ? { industry, qualification, role } : {}),
+        });
       }}
       className="card flex flex-col gap-3 p-4"
       role="search"
@@ -50,7 +82,7 @@ export function CandidateSearchFilters({
               id="cand-q"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Name, role, skill…"
+              placeholder={keywordPlaceholder}
               className="pl-9"
             />
           </div>
@@ -68,6 +100,46 @@ export function CandidateSearchFilters({
           />
         </div>
       </div>
+      {showExtendedFilters ? (
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div>
+            <label htmlFor="cand-role" className="label-base">
+              Role / title
+            </label>
+            <Input
+              id="cand-role"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              placeholder="e.g. IT Support"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label htmlFor="cand-industry" className="label-base">
+              Industry
+            </label>
+            <Input
+              id="cand-industry"
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+              placeholder="e.g. Technology"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <label htmlFor="cand-qual" className="label-base">
+              Qualification
+            </label>
+            <Input
+              id="cand-qual"
+              value={qualification}
+              onChange={(e) => setQualification(e.target.value)}
+              placeholder="e.g. Bachelor"
+              className="mt-1"
+            />
+          </div>
+        </div>
+      ) : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
           <label htmlFor="cand-country" className="label-base">
@@ -138,15 +210,7 @@ export function CandidateSearchFilters({
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="submit">Search</Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setQ("");
-            setSkill("");
-            router.push(basePath);
-          }}
-        >
+        <Button type="button" variant="outline" onClick={clearFilters}>
           Clear
         </Button>
       </div>

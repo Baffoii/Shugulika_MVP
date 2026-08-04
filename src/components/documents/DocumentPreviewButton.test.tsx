@@ -4,7 +4,7 @@ import { DocumentPreviewButton } from "@/components/documents/DocumentPreviewBut
 import { DocumentExportButton } from "@/components/documents/DocumentExportButton";
 
 describe("DocumentPreviewButton", () => {
-  it("renders a preview action without a download label", () => {
+  it("renders a preview action without a download label by default", () => {
     render(
       <DocumentPreviewButton
         source="candidate_document"
@@ -14,6 +14,19 @@ describe("DocumentPreviewButton", () => {
     );
     expect(screen.getByRole("button", { name: /Preview CV/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /download/i })).not.toBeInTheDocument();
+  });
+
+  it("renders a download action when allowDownload is set", () => {
+    render(
+      <DocumentPreviewButton
+        source="candidate_document"
+        id="00000000-0000-0000-0000-000000000001"
+        label="Preview CV"
+        allowDownload
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Preview CV/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Download watermarked CV/i })).toBeInTheDocument();
   });
 });
 

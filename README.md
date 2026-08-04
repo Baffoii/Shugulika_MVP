@@ -246,24 +246,32 @@ Legacy stage keys remain in the database for history only; they are not offered 
 
 Every demo employer that paid Shugulika for headhunting has a real `employer_user` login. Jobs stay
 linked via `job_orders.employer_org_id`. Seeded **Candidate CV packs** are the end of the pipeline
-(what the employer sees after Client Submission).
+(what the employer sees after Client Submission). Package tiers are seeded in
+`20260730150000_demo_employer_package_tiers.sql` (after the CV-unlock packages migration) so each
+company already has a plan, job slots, and a CV unlock balance.
 
 Shared password for all rows below: **`12345678`** → `/employer/dashboard`.
 
-| Company                     | Email                         | Contact        | Seeded CVs |
-|-----------------------------|-------------------------------|----------------|------------|
-| Bahari Financial Group      | `employer@shugulika.test`     | Amina Juma     | 2          |
-| Serengeti Logistics         | `serengeti@shugulika.test`    | Joseph Mkapa   | 2          |
-| Kilimanjaro Tech Labs       | `kilimanjaro@shugulika.test`  | Grace Kimaro   | 1          |
-| Uhuru Health Clinic         | `uhuru@shugulika.test`        | Halima Said    | 1          |
-| Zanzibar Coastal Resorts    | `zanzibar@shugulika.test`     | Omar Hassan    | 1          |
-| Tembo Manufacturing Ltd     | `tembo@shugulika.test`        | Peter Mwanga   | 1          |
+| Company                     | Email                         | Contact        | Plan        | Job slots used | CV unlocks | Seeded CVs |
+|-----------------------------|-------------------------------|----------------|-------------|----------------|------------|------------|
+| Uhuru Health Clinic         | `uhuru@shugulika.test`        | Halima Said    | Free trial  | 2 / 2          | 0          | 1          |
+| Kilimanjaro Tech Labs       | `kilimanjaro@shugulika.test`  | Grace Kimaro   | Starter     | 2 / 2          | 0          | 3 (all locked) |
+| Serengeti Logistics         | `serengeti@shugulika.test`    | Joseph Mkapa   | Starter     | 2 / 2          | 0          | 2          |
+| Zanzibar Coastal Resorts    | `zanzibar@shugulika.test`     | Omar Hassan    | Growth      | 2 / 5          | 0          | 1          |
+| Tembo Manufacturing Ltd     | `tembo@shugulika.test`        | Peter Mwanga   | Growth      | 2 / 5          | 0          | 1          |
+| Bahari Financial Group      | `employer@shugulika.test`     | Amina Juma     | Scale       | 3 / 12         | 0          | 2          |
 
 How to try it:
 
-1. Sign in as `employer@shugulika.test` (or any row above).
-2. Open **Your roles** for that company’s jobs, and **Candidate CVs** for masked packs.
-3. From the recruiter portal, move a live application to **Client Submission** — a new pack appears
+1. Sign in as `uhuru@shugulika.test` (free trial, slots full) or `employer@shugulika.test` (Scale, room for more jobs).
+2. To test **full job slots + zero CV unlocks** (buy top-ups / blocked posting):
+   - Email: `kilimanjaro@shugulika.test`
+   - Password: `12345678`
+   - **Billing** shows 0 CV unlocks and 2/2 job slots; **Candidate CVs** teasers need a top-up to unlock;
+     **Your roles** blocks posting another job until a slot frees or you buy `+1 job slot`.
+3. Open **Billing** for plan / unlock balance. CV unlock wallets start at **0** for every demo
+   employer (new feature) — buy `+5` / `+15` unlock packs to open packs.
+4. From the recruiter portal, move a live application to **Client Submission** — a new pack appears
    automatically for that employer.
 
 Employers only see their own org. They can shortlist / request interview / reject with reason.
