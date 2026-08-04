@@ -23,7 +23,7 @@ import { metricsFromPayload } from "./target-versions";
 
 export type Jsonish = Record<string, unknown>;
 
-export interface RecruiterKpiTargetVersionRow {
+export type RecruiterKpiTargetVersionRow = {
   id: string;
   target_id: string | null;
   organization_id: string | null;
@@ -33,16 +33,16 @@ export interface RecruiterKpiTargetVersionRow {
   superseded_at: string | null;
   changed_by: string | null;
   created_at: string;
-}
+};
 
-export interface KpiResponseSlaRow {
+export type KpiResponseSlaRow = {
   id: string;
   scope_key: "employer_submission" | "candidate_interview" | "candidate_consent";
   organization_id: string | null;
   max_hours: number;
-}
+};
 
-export interface KpiInterviewScheduleEventRow {
+export type KpiInterviewScheduleEventRow = {
   id: number;
   interview_id: string;
   application_id: string | null;
@@ -52,29 +52,40 @@ export interface KpiInterviewScheduleEventRow {
   new_scheduled_at: string | null;
   actor_id: string | null;
   created_at: string;
-}
+};
 
 /** employer_submissions columns added by 20260805091000. */
-export interface SubmissionResponseColumns {
+export type SubmissionResponseColumns = {
   id: string;
+  application_id: string | null;
   response_due_at: string | null;
   responded_at: string | null;
-}
+};
 
 /** interviews columns added by 20260805091000. */
-export interface InterviewResponseColumns {
+export type InterviewResponseColumns = {
   id: string;
+  application_id: string | null;
   created_at: string;
   candidate_response_due_at: string | null;
   candidate_responded_at: string | null;
-}
+};
 
 /** applications columns added by 20260805091000. */
-export interface ApplicationConsentColumns {
+export type ApplicationConsentColumns = {
   id: string;
   consent_requested_at: string | null;
   consent_responded_at: string | null;
-}
+};
+
+/** Row shape of `public.kpi_candidate_update_status` (no message content). */
+export type CandidateUpdateStatusRow = {
+  application_id: string;
+  notification_id: string;
+  category: string;
+  created_at: string;
+  read_at: string | null;
+};
 
 /**
  * Minimal Supabase `Database` fragment covering only the new tables, so the
@@ -93,7 +104,12 @@ export type KpiExtensionDatabase = {
       applications: Tbl<ApplicationConsentColumns>;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      kpi_candidate_update_status: {
+        Args: { p_application_ids: string[] };
+        Returns: CandidateUpdateStatusRow[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
@@ -131,21 +147,22 @@ export function toConsentSnapshot(row: ApplicationConsentColumns): ConsentRespon
   };
 }
 
-export function toStaffNotification(row: {
-  id: string;
-  user_id: string;
-  category: string;
-  subject_type: string | null;
-  subject_id: string | null;
-  created_at: string;
-  read_at: string | null;
-}): StaffNotificationSnapshot {
+export function toStaffNotification(row: CandidateUpdateStatusRow): StaffNotificationSnapshot {
   return {
-    id: row.id,
-    userId: row.user_id,
-    applicationId: row.subject_type === "application" ? row.subject_id : null,
+    id: row.notification_id,
+    applicationId: row.application_id,
     category: row.category,
     createdAt: row.created_at,
     readAt: row.read_at,
   };
+}
+
+/** application_id → most recent candidate-facing update we sent. */
+export function lastCandidateUpdateByApp(rows: CandidateUpdateStatusRow[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    const prev = map.get(r.application_id);
+    if (!prev || r.created_at > prev) map.set(r.application_id, r.created_at);
+  }
+  return map;
 }

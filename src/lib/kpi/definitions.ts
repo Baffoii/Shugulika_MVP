@@ -1199,8 +1199,8 @@ export function computeInterviewRescheduleCounts(
 
 export interface StaffNotificationSnapshot {
   id: string;
-  /** Recipient (candidate user). */
-  userId: string;
+  /** Recipient, when the read path exposes it. Omitted by the minimal-disclosure RPC. */
+  userId?: string | null;
   applicationId: string | null;
   category: string;
   createdAt: string;
