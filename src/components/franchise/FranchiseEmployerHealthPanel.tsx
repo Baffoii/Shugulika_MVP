@@ -13,11 +13,7 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 import type { EmployerHealthSummary } from "@/lib/data/franchise-ops";
 
-export function FranchiseEmployerHealthPanel({
-  summary,
-}: {
-  summary: EmployerHealthSummary;
-}) {
+export function FranchiseEmployerHealthPanel({ summary }: { summary: EmployerHealthSummary }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

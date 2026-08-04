@@ -17,10 +17,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { getStaffMetrics, getJobOrders, getOrganizations } from "@/lib/data/staff";
 import { formatDate } from "@/lib/format";
 import { FranchisePeriodBar } from "@/components/franchise/FranchisePeriodBar";
-import {
-  parseFranchisePeriodGrain,
-  parseFranchiseSort,
-} from "@/lib/franchise/period";
+import { parseFranchisePeriodGrain, parseFranchiseSort } from "@/lib/franchise/period";
 import { listEmployerApplicationsForReview } from "@/lib/data/employer-applications";
 
 export const metadata: Metadata = { title: "Franchise dashboard" };

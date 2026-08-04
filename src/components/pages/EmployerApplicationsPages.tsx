@@ -509,9 +509,7 @@ export async function EmployerApplicationReviewPage({
           {canAssignOwner ? (
             <FranchiseOwnerAssignPanel
               applicationId={app.id}
-              currentOwnerId={
-                (app as { owner_user_id?: string | null }).owner_user_id ?? null
-              }
+              currentOwnerId={(app as { owner_user_id?: string | null }).owner_user_id ?? null}
               owners={assignableOwners}
             />
           ) : null}

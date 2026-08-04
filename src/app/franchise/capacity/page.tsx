@@ -5,10 +5,7 @@ import { PageHeader, Skeleton, Alert } from "@/components/ui/primitives";
 import { FranchisePeriodBar } from "@/components/franchise/FranchisePeriodBar";
 import { FranchiseCapacityMatrix } from "@/components/franchise/FranchiseCapacityMatrix";
 import { getFranchiseCapacityMatrix } from "@/lib/data/franchise-ops";
-import {
-  franchiseGrainToKpiPeriod,
-  parseFranchisePeriodGrain,
-} from "@/lib/franchise/period";
+import { franchiseGrainToKpiPeriod, parseFranchisePeriodGrain } from "@/lib/franchise/period";
 
 export const metadata: Metadata = { title: "Capacity" };
 

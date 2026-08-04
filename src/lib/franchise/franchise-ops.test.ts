@@ -99,10 +99,7 @@ describe("franchise period helpers", () => {
   });
 
   it("sorts alphabetically", () => {
-    const rows = sortByName(
-      [{ name: "Zulu Co" }, { name: "Alpha Ltd" }],
-      "alpha_asc",
-    );
+    const rows = sortByName([{ name: "Zulu Co" }, { name: "Alpha Ltd" }], "alpha_asc");
     expect(rows.map((r) => r.name)).toEqual(["Alpha Ltd", "Zulu Co"]);
   });
 });
@@ -142,9 +139,9 @@ describe("franchise isolation contracts", () => {
         expect(f.startsWith("20260806")).toBe(true);
       }
     }
-    expect(
-      readdirSync(mig).some((f) => f.startsWith("20260806") && f.includes("franchise")),
-    ).toBe(true);
+    expect(readdirSync(mig).some((f) => f.startsWith("20260806") && f.includes("franchise"))).toBe(
+      true,
+    );
     expect(readdirSync(mig).some((f) => f.startsWith("20260805") && f.includes("franchise"))).toBe(
       false,
     );

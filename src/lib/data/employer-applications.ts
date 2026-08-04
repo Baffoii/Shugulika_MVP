@@ -231,9 +231,7 @@ async function enrichApplications(
       assigned_org_name: row.assigned_org_id
         ? (orgById.get(row.assigned_org_id) ?? "Assigned office")
         : "Shugulika HQ",
-      owner_name: ops.owner_user_id
-        ? (profileById.get(ops.owner_user_id)?.full_name ?? "—")
-        : null,
+      owner_name: ops.owner_user_id ? (profileById.get(ops.owner_user_id)?.full_name ?? "—") : null,
       age_hours: applicationAgeHours(row.submitted_at),
       sla_overdue: isSlaOverdue(ops.sla_due_at, row.status),
     };

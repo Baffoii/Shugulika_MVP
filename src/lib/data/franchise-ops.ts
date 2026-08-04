@@ -1,10 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { EmployerApplicationRow, OrganizationRow, ProfileRow } from "@/lib/database.types";
 import type { EmployerApplicationOpsFields } from "@/lib/franchise/types";
-import {
-  applicationAgeHours,
-  isSlaOverdue,
-} from "@/lib/franchise/employer-app-ops";
+import { applicationAgeHours, isSlaOverdue } from "@/lib/franchise/employer-app-ops";
 import type { FranchiseSortMode } from "@/lib/franchise/types";
 import type { DateWindow } from "@/lib/kpi/definitions";
 import { FRANCHISE_FINANCE_ATTRIBUTION_FLAG } from "@/lib/franchise/types";
@@ -52,10 +49,7 @@ export async function listFranchiseEmployerApplications(
     .order("submitted_at", { ascending: false, nullsFirst: false });
 
   if (filters.status) {
-    query = query.eq(
-      "status",
-      filters.status as NonNullable<EmployerApplicationRow["status"]>,
-    );
+    query = query.eq("status", filters.status as NonNullable<EmployerApplicationRow["status"]>);
   }
   if (filters.country) query = query.eq("country_code", filters.country);
   const opsQuery = query as unknown as {
@@ -128,9 +122,7 @@ async function enrichFranchiseApplications(
       ...rows.map((r) => asOps(r).owner_user_id).filter((v): v is string => !!v),
     ]),
   ];
-  const orgIds = [
-    ...new Set(rows.map((r) => r.assigned_org_id).filter((v): v is string => !!v)),
-  ];
+  const orgIds = [...new Set(rows.map((r) => r.assigned_org_id).filter((v): v is string => !!v))];
   const [{ data: profiles }, { data: orgs }] = await Promise.all([
     supabase.from("profiles").select("id,full_name,email").in("id", userIds),
     orgIds.length
@@ -138,9 +130,10 @@ async function enrichFranchiseApplications(
       : Promise.resolve({ data: [] as Pick<OrganizationRow, "id" | "name">[] }),
   ]);
   const profileById = new Map(
-    ((profiles as Pick<ProfileRow, "id" | "full_name" | "email">[] | null) ?? []).map(
-      (p) => [p.id, p],
-    ),
+    ((profiles as Pick<ProfileRow, "id" | "full_name" | "email">[] | null) ?? []).map((p) => [
+      p.id,
+      p,
+    ]),
   );
   const orgById = new Map(
     ((orgs as Pick<OrganizationRow, "id" | "name">[] | null) ?? []).map((o) => [o.id, o.name]),
@@ -156,9 +149,7 @@ async function enrichFranchiseApplications(
       assigned_org_name: row.assigned_org_id
         ? (orgById.get(row.assigned_org_id) ?? "Assigned office")
         : "Shugulika HQ",
-      owner_name: ops.owner_user_id
-        ? (profileById.get(ops.owner_user_id)?.full_name ?? "—")
-        : null,
+      owner_name: ops.owner_user_id ? (profileById.get(ops.owner_user_id)?.full_name ?? "—") : null,
       age_hours: applicationAgeHours(row.submitted_at),
       sla_overdue: isSlaOverdue(ops.sla_due_at, row.status),
     };
@@ -175,7 +166,9 @@ export async function listFranchiseAssignableOwners(
     .eq("organization_id", franchiseOrgId)
     .eq("status", "active")
     .in("role", ["franchise_admin", "operations", "recruiter", "accounts"]);
-  const userIds = [...new Set(((mems as { user_id: string }[] | null) ?? []).map((m) => m.user_id))];
+  const userIds = [
+    ...new Set(((mems as { user_id: string }[] | null) ?? []).map((m) => m.user_id)),
+  ];
   if (userIds.length === 0) return [];
   const { data: profiles } = await supabase
     .from("profiles")
@@ -220,41 +213,46 @@ export async function getFranchiseEmployerHealth(
   sort: FranchiseSortMode = "alpha_asc",
 ): Promise<EmployerHealthSummary> {
   const supabase = createClient();
-  const [{ data: employers }, { data: jobs }, { data: apps }, { data: placements }, { data: eapps }] =
-    await Promise.all([
-      supabase
-        .from("organizations")
-        .select("id,name,verification_status,updated_at")
-        .eq("org_type", "employer")
-        .order("name"),
-      supabase.from("job_orders").select("id,employer_org_id,status,updated_at"),
-      supabase
-        .from("applications")
-        .select("id,job_order_id,current_stage,withdrawn_at,updated_at"),
-      supabase.from("placements").select("id,employer_org_id,created_at,status"),
-      supabase
-        .from("employer_applications")
-        .select("id,status,sla_due_at")
-        .in("status", ["submitted", "under_review"]),
-    ]);
+  const [
+    { data: employers },
+    { data: jobs },
+    { data: apps },
+    { data: placements },
+    { data: eapps },
+  ] = await Promise.all([
+    supabase
+      .from("organizations")
+      .select("id,name,verification_status,updated_at")
+      .eq("org_type", "employer")
+      .order("name"),
+    supabase.from("job_orders").select("id,employer_org_id,status,updated_at"),
+    supabase.from("applications").select("id,job_order_id,current_stage,withdrawn_at,updated_at"),
+    supabase.from("placements").select("id,employer_org_id,created_at,status"),
+    supabase
+      .from("employer_applications")
+      .select("id,status,sla_due_at")
+      .in("status", ["submitted", "under_review"]),
+  ]);
 
   const employerRows =
-    (employers as Pick<OrganizationRow, "id" | "name" | "verification_status" | "updated_at">[] | null) ??
-    [];
+    (employers as
+      Pick<OrganizationRow, "id" | "name" | "verification_status" | "updated_at">[] | null) ?? [];
   const jobRows =
-    (jobs as { id: string; employer_org_id: string; status: string; updated_at: string }[] | null) ??
-    [];
+    (jobs as
+      { id: string; employer_org_id: string; status: string; updated_at: string }[] | null) ?? [];
   const appRows =
-    (apps as {
-      id: string;
-      job_order_id: string;
-      current_stage: string;
-      withdrawn_at: string | null;
-      updated_at: string;
-    }[] | null) ?? [];
+    (apps as
+      | {
+          id: string;
+          job_order_id: string;
+          current_stage: string;
+          withdrawn_at: string | null;
+          updated_at: string;
+        }[]
+      | null) ?? [];
   const placementRows =
-    (placements as { id: string; employer_org_id: string; created_at: string; status: string }[] | null) ??
-    [];
+    (placements as
+      { id: string; employer_org_id: string; created_at: string; status: string }[] | null) ?? [];
   const eappRows =
     (eapps as { id: string; status: string; sla_due_at: string | null }[] | null) ?? [];
 
@@ -269,10 +267,7 @@ export async function getFranchiseEmployerHealth(
     const stalledVacancies = empJobs.filter((j) => stalledJobStatuses.has(j.status)).length;
     const empJobIds = new Set(empJobs.map((j) => j.id));
     const activeApplications = appRows.filter(
-      (a) =>
-        empJobIds.has(a.job_order_id) &&
-        !a.withdrawn_at &&
-        !terminalApp.has(a.current_stage),
+      (a) => empJobIds.has(a.job_order_id) && !a.withdrawn_at && !terminalApp.has(a.current_stage),
     ).length;
     const empPlacements = placementRows.filter(
       (p) => p.employer_org_id === emp.id && p.status !== "failed",
@@ -395,18 +390,24 @@ export async function getFranchiseCapacityMatrix(
   if (recruiterIds.length > 0) {
     const { data: apps } = await supabase
       .from("applications")
-      .select("id,assigned_recruiter_id,current_stage,withdrawn_at,job_order_id,created_at,owning_org_id")
+      .select(
+        "id,assigned_recruiter_id,current_stage,withdrawn_at,job_order_id,created_at,owning_org_id",
+      )
       .in("assigned_recruiter_id", recruiterIds);
     const { computeActiveWorkload } = await import("@/lib/kpi/definitions");
-    const snaps = ((apps as {
-      id: string;
-      assigned_recruiter_id: string | null;
-      current_stage: string;
-      withdrawn_at: string | null;
-      job_order_id: string;
-      created_at: string;
-      owning_org_id: string | null;
-    }[] | null) ?? []).map((a) => ({
+    const snaps = (
+      (apps as
+        | {
+            id: string;
+            assigned_recruiter_id: string | null;
+            current_stage: string;
+            withdrawn_at: string | null;
+            job_order_id: string;
+            created_at: string;
+            owning_org_id: string | null;
+          }[]
+        | null) ?? []
+    ).map((a) => ({
       id: a.id,
       assignedRecruiterId: a.assigned_recruiter_id,
       currentStage: a.current_stage,

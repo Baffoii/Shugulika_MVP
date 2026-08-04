@@ -4,12 +4,7 @@
  */
 
 export type EmployerAppNextAction =
-  | "open_review"
-  | "decide"
-  | "await_employer"
-  | "await_hq"
-  | "close_out"
-  | "none";
+  "open_review" | "decide" | "await_employer" | "await_hq" | "close_out" | "none";
 
 /** Additive ops fields not yet in generated database.types.ts */
 export type EmployerApplicationOpsFields = {
@@ -19,15 +14,7 @@ export type EmployerApplicationOpsFields = {
 };
 
 export type FranchisePeriodGrain =
-  | "day"
-  | "week"
-  | "month"
-  | "year"
-  | "7d"
-  | "30d"
-  | "90d"
-  | "ytd"
-  | "custom";
+  "day" | "week" | "month" | "year" | "7d" | "30d" | "90d" | "ytd" | "custom";
 
 export type FranchiseSortMode = "alpha_asc" | "alpha_desc" | "newest" | "oldest" | "sla_first";
 
@@ -61,5 +48,4 @@ export const FRANCHISE_TARGET_MAX_KEYS = [
 ] as const;
 
 export type FranchiseTargetMetricKey =
-  | (typeof FRANCHISE_TARGET_MIN_KEYS)[number]
-  | (typeof FRANCHISE_TARGET_MAX_KEYS)[number];
+  (typeof FRANCHISE_TARGET_MIN_KEYS)[number] | (typeof FRANCHISE_TARGET_MAX_KEYS)[number];

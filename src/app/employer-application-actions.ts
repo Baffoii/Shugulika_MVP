@@ -180,12 +180,14 @@ export async function reassignEmployerApplicationOwnerAction(
   }
   const supabase = createClient();
   // RPC not yet in generated Database types (frozen); call via untyped client.
-  const { error } = await (supabase as unknown as {
-    rpc: (
-      fn: string,
-      args: Record<string, unknown>,
-    ) => Promise<{ error: { message: string } | null }>;
-  }).rpc("reassign_employer_application_owner", {
+  const { error } = await (
+    supabase as unknown as {
+      rpc: (
+        fn: string,
+        args: Record<string, unknown>,
+      ) => Promise<{ error: { message: string } | null }>;
+    }
+  ).rpc("reassign_employer_application_owner", {
     p_application_id: applicationId,
     p_owner_user_id: ownerUserId,
   });

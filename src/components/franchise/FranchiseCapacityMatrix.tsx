@@ -10,11 +10,7 @@ import {
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
 import type { FranchiseCapacityMatrix } from "@/lib/data/franchise-ops";
 
-export function FranchiseCapacityMatrix({
-  matrix,
-}: {
-  matrix: FranchiseCapacityMatrix;
-}) {
+export function FranchiseCapacityMatrix({ matrix }: { matrix: FranchiseCapacityMatrix }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-3">
@@ -54,7 +50,9 @@ export function FranchiseCapacityMatrix({
                 <TR key={r.recruiterId}>
                   <TD>
                     <p className="font-medium text-ink">{r.name}</p>
-                    <p className="text-xs text-ink-subtle capitalize">{r.level.replace(/_/g, " ")}</p>
+                    <p className="text-xs text-ink-subtle capitalize">
+                      {r.level.replace(/_/g, " ")}
+                    </p>
                   </TD>
                   <TD className="tabular-nums">{r.activeWorkload}</TD>
                   <TD className="tabular-nums">{r.maxActiveWorkload}</TD>

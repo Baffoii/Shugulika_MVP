@@ -81,7 +81,13 @@ export function parseFranchiseSort(
   raw: string | string[] | undefined,
 ): import("@/lib/franchise/types").FranchiseSortMode {
   const v = Array.isArray(raw) ? raw[0] : raw;
-  if (v === "alpha_asc" || v === "alpha_desc" || v === "newest" || v === "oldest" || v === "sla_first") {
+  if (
+    v === "alpha_asc" ||
+    v === "alpha_desc" ||
+    v === "newest" ||
+    v === "oldest" ||
+    v === "sla_first"
+  ) {
     return v;
   }
   return "sla_first";

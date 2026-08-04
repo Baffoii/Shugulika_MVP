@@ -2,10 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePortal, franchiseOrgId } from "@/lib/auth";
-import {
-  getFranchiseKpiDashboard,
-  listKpiTargets,
-} from "@/lib/data/recruiter-kpis";
+import { getFranchiseKpiDashboard, listKpiTargets } from "@/lib/data/recruiter-kpis";
 import { createClient } from "@/lib/supabase/server";
 import {
   PageHeader,
