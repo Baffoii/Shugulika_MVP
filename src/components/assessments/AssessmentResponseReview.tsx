@@ -495,7 +495,12 @@ export function AssessmentResponseReview({
                           {ai.authenticity.evidence.length > 0 ? (
                             <div className="mt-3 space-y-2">
                               <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
-                                Proof
+                                Signals for human review
+                              </p>
+                              <p className="text-xs text-ink-muted">
+                                AI output is advisory only. It is not proof of cheating or
+                                misconduct. A person must review the underlying response and
+                                context. It must never trigger automatic rejection by itself.
                               </p>
                               {ai.authenticity.evidence.map((item, evidenceIndex) => (
                                 <div
