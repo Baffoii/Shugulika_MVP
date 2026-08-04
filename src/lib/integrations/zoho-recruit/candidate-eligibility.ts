@@ -10,18 +10,17 @@ import "server-only";
  * Shugulika candidates after import/dedupe — not a Zoho search cache.
  */
 
-
 import type { CandidateFieldMapping } from "@/lib/integrations/zoho-recruit/candidate-field-map";
 import { readMappedValue } from "@/lib/integrations/zoho-recruit/candidate-field-map";
 
 /**
- * Single place for Zoho → employer-search eligibility.
+ * Single place for Zoho → canonical-import eligibility.
  *
- * Fail-closed: a candidate may enter the employer-search cache only when there
+ * Fail-closed: a Zoho record may be staged for Shugulika import only when there
  * is affirmative, mapped evidence of portal discovery permission. Missing,
  * blank, unrecognized, withdrawn, private, restricted, or negative consent
  * makes the candidate ineligible. Ordinary Candidate_Status is never treated
- * as consent.
+ * as consent. Employer search uses canonical Shugulika candidates after import.
  */
 
 /** Status substrings that clearly mark a record ineligible when Candidate_Status is present. */
