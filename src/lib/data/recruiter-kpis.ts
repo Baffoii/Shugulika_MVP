@@ -84,7 +84,7 @@ import {
   type AttentionKind,
   type AttentionQueue,
 } from "@/lib/kpi/attention";
-import { buildDrilldowns, restrictDrilldowns, type DrilldownKey } from "@/lib/kpi/drilldowns";
+import { buildDrilldowns, restrictDrilldowns } from "@/lib/kpi/drilldowns";
 import {
   constrainFiltersToOptions,
   grainToWindow,
@@ -119,12 +119,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type { KpiPeriod, KpiStatus, MetricResult, TargetSource };
 export type { KpiFilterState, GrainWindow } from "@/lib/kpi/filters";
-export type {
-  AttentionItem,
-  AttentionKind,
-  AttentionQueue,
-  NextAction,
-} from "@/lib/kpi/attention";
+export type { AttentionItem, AttentionKind, AttentionQueue, NextAction } from "@/lib/kpi/attention";
 export type { DrilldownKey } from "@/lib/kpi/drilldowns";
 export type { ResolvedTargets } from "@/lib/kpi/target-versions";
 
@@ -973,8 +968,10 @@ export async function getRecruiterKPIs(
 
   const nowIso = new Date().toISOString();
   // Grade against the target in force at the period end, so recomputing a
-  // closed period stays stable after the target changes.
-  const resolveAt = window.until <= nowIso ? window.until : nowIso;
+  // closed period stays stable after the target changes. `until` is exclusive,
+  // so a closed period resolves at its last instant, not at `until` itself.
+  const resolveAt =
+    window.until <= nowIso ? new Date(new Date(window.until).getTime() - 1).toISOString() : nowIso;
 
   const [resolvedTargets, thresholds, ctx] = await Promise.all([
     getKPITargetsAt(recruiterLevel, orgId, resolveAt),
@@ -1894,10 +1891,7 @@ async function loadAttentionExtras(
       .from("applications")
       .select("id,consent_requested_at,consent_responded_at")
       .in("id", appIds),
-    ext
-      .from("kpi_interview_schedule_events")
-      .select("*")
-      .in("application_id", appIds),
+    ext.from("kpi_interview_schedule_events").select("*").in("application_id", appIds),
     ext.from("kpi_response_sla").select("*"),
     ext.rpc("kpi_candidate_update_status", { p_application_ids: appIds }),
   ]);
@@ -1907,8 +1901,7 @@ async function loadAttentionExtras(
   }
 
   for (const a of (assignments as
-    | { job_order_id: string; recruiter_user_id: string; role: string }[]
-    | null) ?? []) {
+    { job_order_id: string; recruiter_user_id: string; role: string }[] | null) ?? []) {
     const current = extras.jobOwnerByJobOrder.get(a.job_order_id);
     if (!current || a.role === "owner") {
       extras.jobOwnerByJobOrder.set(a.job_order_id, a.recruiter_user_id);
@@ -1926,7 +1919,9 @@ async function loadAttentionExtras(
     toScheduleChange,
   );
 
-  const slaRows = (sla as { scope_key: string; organization_id: string | null; max_hours: number }[] | null) ?? [];
+  const slaRows =
+    (sla as { scope_key: string; organization_id: string | null; max_hours: number }[] | null) ??
+    [];
   const slaFor = (scope: string, fallback: number) => {
     const org = slaRows.find((r) => r.scope_key === scope && r.organization_id === orgId);
     const global = slaRows.find((r) => r.scope_key === scope && r.organization_id == null);
@@ -2034,11 +2029,7 @@ function buildProgress(kpis: RecruiterKPIs, queue: AttentionQueue): TargetProgre
       achieved: queue.countsByKind.stalled_in_stage,
       target: t.maxStalledApplicationCount,
       direction: "max_allowed",
-      status: compareMaxCount(
-        queue.countsByKind.stalled_in_stage,
-        t.maxStalledApplicationCount,
-        1,
-      ),
+      status: compareMaxCount(queue.countsByKind.stalled_in_stage, t.maxStalledApplicationCount, 1),
       unit: "applications",
     }),
   ];

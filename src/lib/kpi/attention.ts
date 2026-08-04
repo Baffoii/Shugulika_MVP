@@ -432,10 +432,7 @@ export function scopedApplicationIds(
 }
 
 /** Open, non-terminal applications assigned to the recruiter (denominator helper). */
-export function openAssignedAppIds(
-  apps: ApplicationSnapshot[],
-  recruiterId: string,
-): string[] {
+export function openAssignedAppIds(apps: ApplicationSnapshot[], recruiterId: string): string[] {
   return apps
     .filter(
       (a) =>

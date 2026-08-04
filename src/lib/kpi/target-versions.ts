@@ -49,10 +49,7 @@ export interface TargetVersionRecord {
  * can tell "my target changed mid-period" from "this is today's target".
  */
 export type TargetResolutionBasis =
-  | "version_at_period_end"
-  | "earliest_version"
-  | "current_row"
-  | "platform_defaults";
+  "version_at_period_end" | "earliest_version" | "current_row" | "platform_defaults";
 
 export interface ResolvedTargets {
   metrics: KpiTargetMetrics;
@@ -88,10 +85,7 @@ function num(value: number | null | undefined, fallback: number): number {
  * Map a stored snapshot payload onto the metric shape, filling any key the
  * snapshot predates from `fallback` (never from "now"'s live row).
  */
-export function metricsFromPayload(
-  payload: unknown,
-  fallback: KpiTargetMetrics,
-): KpiTargetMetrics {
+export function metricsFromPayload(payload: unknown, fallback: KpiTargetMetrics): KpiTargetMetrics {
   const p = (payload ?? {}) as TargetMetricsPayload;
   return {
     maxTimeToFirstReviewHours: num(
@@ -230,10 +224,10 @@ export function describeTargetVersion(resolved: ResolvedTargets): string {
 }
 
 /** Progress of a countable target within the period (0–100, null when no target). */
-export function targetProgress(input: {
-  achieved: number;
-  target: number;
-}): { pct: number | null; remaining: number } {
+export function targetProgress(input: { achieved: number; target: number }): {
+  pct: number | null;
+  remaining: number;
+} {
   if (!Number.isFinite(input.target) || input.target <= 0) {
     return { pct: null, remaining: 0 };
   }

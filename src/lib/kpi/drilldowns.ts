@@ -191,7 +191,9 @@ export function buildDrilldowns(input: DrilldownInput): Record<DrilldownKey, str
   const validPlacements = input.placements.filter(
     (p) => VALID_PLACEMENT_STATUSES.has(p.status) && inWindow(p.createdAt, window),
   );
-  const placedFromCs = reachedCs.filter((id) => validPlacements.some((p) => p.applicationId === id));
+  const placedFromCs = reachedCs.filter((id) =>
+    validPlacements.some((p) => p.applicationId === id),
+  );
 
   const withdrawals = apps
     .filter((a) => a.assignedRecruiterId === recruiterId)

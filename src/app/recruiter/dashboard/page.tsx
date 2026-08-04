@@ -10,12 +10,25 @@ import {
 } from "@/components/ui/primitives";
 import { StageBadge } from "@/components/StatusBadge";
 import { getRecruiterMetrics, getPipeline } from "@/lib/data/recruiter";
+import { getMyRecruiterMeta, getRecruiterAttentionStrip } from "@/lib/data/recruiter-kpis";
+import { requirePortal } from "@/lib/auth";
+import { AttentionStrip } from "../kpis/components/AttentionStrip";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Recruiter dashboard" };
 
 export default async function RecruiterDashboard() {
-  const [metrics, pipeline] = await Promise.all([getRecruiterMetrics(), getPipeline()]);
+  const ctx = await requirePortal("recruiter");
+  const [metrics, pipeline, meta] = await Promise.all([
+    getRecruiterMetrics(),
+    getPipeline(),
+    getMyRecruiterMeta(ctx.userId),
+  ]);
+  const attention = await getRecruiterAttentionStrip({
+    recruiterId: ctx.userId,
+    recruiterLevel: meta.level,
+    organizationId: meta.organizationId,
+  });
   const needsAction = pipeline
     .filter((a) => ["cv_review", "test_review", "interview_review"].includes(a.current_stage))
     .slice(0, 8);
@@ -26,6 +39,14 @@ export default async function RecruiterDashboard() {
         title="My work"
         description="Your recruitment activity across assigned jobs. Metrics reflect only the records you're authorized to see."
       />
+
+      <div className="mb-6">
+        <AttentionStrip
+          countsByKind={attention.countsByKind}
+          overdueCountsByKind={attention.overdueCountsByKind}
+          totalOverdue={attention.totalOverdue}
+        />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active jobs" value={metrics.activeJobs} tone="brand" />

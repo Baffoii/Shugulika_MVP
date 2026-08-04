@@ -14,11 +14,7 @@ import type {
   InterviewScheduleChange,
   StaffNotificationSnapshot,
 } from "./definitions";
-import type {
-  KpiTargetMetrics,
-  RecruiterLevelKey,
-  TargetVersionRecord,
-} from "./target-versions";
+import type { KpiTargetMetrics, RecruiterLevelKey, TargetVersionRecord } from "./target-versions";
 import { metricsFromPayload } from "./target-versions";
 
 export type Jsonish = Record<string, unknown>;

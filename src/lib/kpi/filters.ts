@@ -189,10 +189,7 @@ function startOfUtcWeek(d: Date): Date {
  * Resolve a grain to a concrete UTC window. Windows are half-open
  * `[since, until)`, matching `inWindow` in definitions.ts.
  */
-export function grainToWindow(
-  filters: KpiFilterState,
-  now: Date = new Date(),
-): GrainWindow {
+export function grainToWindow(filters: KpiFilterState, now: Date = new Date()): GrainWindow {
   const nowIso = iso(now);
 
   if (filters.grain === "custom" && filters.from && filters.to) {
@@ -260,12 +257,17 @@ export function grainToWindow(
 }
 
 /**
- * The instant a period's targets should be resolved at: the period end for a
- * closed period, "now" for a period still running.
+ * The instant a period's targets should be resolved at.
+ *
+ * For a closed period this is the LAST instant inside it, not `until`. `until`
+ * is exclusive, so resolving at it would pick up a target that took effect the
+ * moment the period ended — exactly the drift versioning exists to prevent.
+ * For a period still running, "now".
  */
 export function targetResolutionInstant(window: GrainWindow, now: Date = new Date()): string {
   const nowIso = iso(now);
-  return window.until <= nowIso ? window.until : nowIso;
+  if (window.until > nowIso) return nowIso;
+  return iso(new Date(new Date(window.until).getTime() - 1));
 }
 
 /** Rebuild a query string from filters, dropping empty values. */
