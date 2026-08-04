@@ -147,6 +147,12 @@ describe("in-memory outbox", () => {
 
   it("reclaims expired leases and dead-letters permanent errors", () => {
     const repo = new InMemoryOutboxRepository();
+    // The lease clock below is fixed, so the envelope must be pinned to the same
+    // timeline. `createPendingEnvelope` defaults `availableAt` to the real wall
+    // clock, and `claimNext` only claims rows where `availableAt <= now` — left
+    // to default, this row stops being claimable once real time passes the fixed
+    // `now`, which is a time bomb rather than a test.
+    const CLAIM_AT = new Date("2026-08-04T10:00:00.000Z");
     const row = repo.upsert(
       createPendingEnvelope({
         providerFamily: "whatsapp",
@@ -158,12 +164,13 @@ describe("in-memory outbox", () => {
         payload: {},
         idempotencyKey: "idem-2",
         correlationId: "c2",
+        availableAt: "2026-08-04T09:59:00.000Z",
       }),
     );
     const claimed = repo.claimNext({
       workerId: "w1",
       leaseMs: 1,
-      now: new Date("2026-08-04T10:00:00.000Z"),
+      now: CLAIM_AT,
     });
     expect(claimed?.id).toBe(row.id);
 
