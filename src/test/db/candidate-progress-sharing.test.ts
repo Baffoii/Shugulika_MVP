@@ -190,9 +190,7 @@ d("candidate progress, result sharing, and CV consent security", () => {
       document_id: documentId,
       channel: "portal_link",
     });
-    expect(String(own.rows[0]?.portal_path)).toBe(
-      `/employer/submissions/${ids.submissionC1}`,
-    );
+    expect(String(own.rows[0]?.portal_path)).toBe(`/employer/submissions/${ids.submissionC1}`);
     expect(
       (
         await queryAs(
