@@ -62,7 +62,9 @@ create or replace function storage.foldername(name text) returns text[] language
 
 const RESET = `drop schema if exists public cascade; create schema public;
 grant usage on schema public to anon, authenticated, service_role;
-grant all on schema public to service_role;`;
+grant all on schema public to service_role;
+-- Private SECURITY DEFINER helpers must not leak across harness resets.
+drop schema if exists private cascade;`;
 
 export interface SeedIds {
   hq: string;
