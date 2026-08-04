@@ -130,6 +130,23 @@ describeDb("cv unlock grant helper privileges", () => {
   });
 
   it("authorized purchase_employer_addon still grants CV unlock top-ups", async () => {
+    // Paid add-ons require the payments sandbox DB flag (blocker #3).
+    await client.query(
+      `update public.feature_flags set is_enabled = false
+       where key = 'employer_payments_sandbox_enabled'`,
+    );
+    await expect(
+      commitAs(
+        client,
+        ids.employerUserA,
+        `select public.purchase_employer_addon('cv_unlocks_5') as result`,
+      ),
+    ).rejects.toThrow(/Payments are not enabled/i);
+
+    await client.query(
+      `update public.feature_flags set is_enabled = true
+       where key = 'employer_payments_sandbox_enabled'`,
+    );
     const before = await balanceOf(ids.employerA);
     const purchased = await commitAs(
       client,
@@ -143,6 +160,11 @@ describeDb("cv unlock grant helper privileges", () => {
     expect(result.addon_key).toBe("cv_unlocks_5");
     expect(result.cv_unlock_balance).toBe(before + 5);
     expect(await balanceOf(ids.employerA)).toBe(before + 5);
+
+    await client.query(
+      `update public.feature_flags set is_enabled = false
+       where key = 'employer_payments_sandbox_enabled'`,
+    );
   });
 
   it("ai_cv_screens_used denies anon and cross-tenant metering", async () => {
