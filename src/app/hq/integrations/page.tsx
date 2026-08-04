@@ -215,8 +215,8 @@ export default async function HqIntegrationsPage({
                   Zoho API Console
                 </a>
                 , select the <strong className="text-ink">Server-based</strong> client whose Client
-                ID is in your env, and set <strong className="text-ink">Authorized Redirect URI</strong>{" "}
-                to exactly:
+                ID is in your env, and set{" "}
+                <strong className="text-ink">Authorized Redirect URI</strong> to exactly:
                 <code className="mt-2 block break-all rounded bg-white px-2 py-1 text-xs text-ink">
                   {setup.redirectUri}
                 </code>

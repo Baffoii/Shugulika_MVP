@@ -110,16 +110,16 @@ describe("Zoho Recruit OAuth foundation", () => {
   });
 
   it("maps OAuth zohoapis domains onto Recruit API hosts", () => {
-    expect(
-      resolveZohoRecruitApiDomain({ apiDomain: "https://www.zohoapis.com" }),
-    ).toBe("https://recruit.zoho.com");
+    expect(resolveZohoRecruitApiDomain({ apiDomain: "https://www.zohoapis.com" })).toBe(
+      "https://recruit.zoho.com",
+    );
     expect(resolveZohoRecruitApiDomain({ apiDomain: "https://www.zohoapis.eu" })).toBe(
       "https://recruit.zoho.eu",
     );
     expect(resolveZohoRecruitApiDomain({ location: "in" })).toBe("https://recruit.zoho.in");
-    expect(
-      resolveZohoRecruitApiDomain({ accountsDomain: "https://accounts.zohocloud.ca" }),
-    ).toBe("https://recruit.zohocloud.ca");
+    expect(resolveZohoRecruitApiDomain({ accountsDomain: "https://accounts.zohocloud.ca" })).toBe(
+      "https://recruit.zohocloud.ca",
+    );
   });
 
   it("builds a server authorization request with state and org-only scope", () => {

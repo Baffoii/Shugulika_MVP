@@ -160,7 +160,9 @@ export function resolveZohoRecruitApiDomain(input: {
   }
 
   if (input.accountsDomain) {
-    const accountsHost = new URL(normalizeZohoAccountsDomain(input.accountsDomain)).hostname.toLowerCase();
+    const accountsHost = new URL(
+      normalizeZohoAccountsDomain(input.accountsDomain),
+    ).hostname.toLowerCase();
     const suffix = accountsHost.replace(/^accounts\./, "");
     if (suffix === "zohocloud.ca") return "https://recruit.zohocloud.ca";
     if (suffix.startsWith("zoho.")) return `https://recruit.${suffix}`;
