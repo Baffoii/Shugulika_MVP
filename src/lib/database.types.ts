@@ -836,6 +836,8 @@ export type EmployerCvUnlockLedgerRow = {
   period_starts_on: string | null;
   period_ends_on: string | null;
   expired_at: string | null;
+  /** Unspent tokens on a CV credit grant; null for non-token rows (e.g. job slots). */
+  remaining: number | null;
   actor_user_id: string | null;
   created_at: string;
 };
@@ -1738,6 +1740,10 @@ export type Database = {
       employer_job_slot_limit: {
         Args: { p_employer_org: string };
         Returns: number;
+      };
+      employer_open_payments_allowed: {
+        Args: Record<string, never>;
+        Returns: boolean;
       };
       activate_employer_package: {
         Args: { p_package_key: string; p_as_trial?: boolean };

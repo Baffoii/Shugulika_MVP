@@ -73,7 +73,8 @@ describeDb("employer entitlements + CV unlocks", () => {
       [cand2Profile],
     );
 
-    // Free trial for employer A and B (payments remain open; no sandbox gate in this suite).
+    // Free trial for employer A and B (trial does not require payments sandbox).
+    await setPaymentsSandbox(false);
     await commitAs(
       client,
       ids.employerUserA,
@@ -89,6 +90,13 @@ describeDb("employer entitlements + CV unlocks", () => {
   afterAll(async () => {
     await client?.end();
   });
+
+  async function setPaymentsSandbox(enabled: boolean) {
+    await client.query(
+      `update public.feature_flags set is_enabled = $1 where key = 'employer_payments_sandbox_enabled'`,
+      [enabled],
+    );
+  }
 
   it("period-aware private grant exists; expire_employer_entitlements is service_role only", async () => {
     const sig = await client.query(
@@ -106,6 +114,51 @@ describeDb("employer entitlements + CV unlocks", () => {
     expect(row.anon_expire).toBe(false);
     expect(row.auth_expire).toBe(false);
     expect(row.service_expire).toBe(true);
+  });
+
+  it("production mode cannot grant a paid plan or add-on for free", async () => {
+    await setPaymentsSandbox(false);
+    await expect(
+      commitAs(
+        client,
+        ids.employerUserA,
+        `select public.activate_employer_package('starter', false) as result`,
+      ),
+    ).rejects.toThrow(/Payments are not enabled/i);
+    await expect(
+      commitAs(
+        client,
+        ids.employerUserA,
+        `select public.purchase_employer_addon('cv_unlocks_5') as result`,
+      ),
+    ).rejects.toThrow(/Payments are not enabled/i);
+  });
+
+  it("sandbox mode allows paid plan activation and add-on purchase", async () => {
+    await setPaymentsSandbox(true);
+    const allowed = await client.query(`select public.employer_open_payments_allowed() as ok`);
+    expect(allowed.rows[0]?.ok).toBe(true);
+
+    const topup = await commitAs(
+      client,
+      ids.employerUserA,
+      `select public.purchase_employer_addon('cv_unlocks_5') as result`,
+    );
+    expect((topup.rows[0]?.result as { addon_key?: string }).addon_key).toBe("cv_unlocks_5");
+
+    // Upgrade A trial → starter under sandbox (leave B on trial for later expiry tests).
+    await client.query(
+      `update public.employer_subscriptions set status = 'cancelled'
+       where employer_org_id = $1 and status in ('trial','active')`,
+      [ids.employerA],
+    );
+    const activated = await commitAs(
+      client,
+      ids.employerUserA,
+      `select public.activate_employer_package('starter', false) as result`,
+    );
+    expect((activated.rows[0]?.result as { package_key?: string }).package_key).toBe("starter");
+    await setPaymentsSandbox(false);
   });
 
   it("rejects unlock without Path A job or Path B submission", async () => {
@@ -157,12 +210,13 @@ describeDb("employer entitlements + CV unlocks", () => {
   });
 
   it("Path A unlock requires active Direct job + searchable consent", async () => {
-    // Top up wallet for Path A spend attempts (payments remain open in this suite).
+    await setPaymentsSandbox(true);
     await commitAs(
       client,
       ids.employerUserA,
       `select public.purchase_employer_addon('cv_unlocks_5') as result`,
     );
+    await setPaymentsSandbox(false);
 
     await expect(
       commitAs(client, ids.employerUserA, `select public.spend_cv_unlock($1, null, $2) as result`, [
@@ -275,6 +329,7 @@ describeDb("employer entitlements + CV unlocks", () => {
 
   it("job-slot add-ons only count during the active period and expire audibly", async () => {
     // Fresh paid plan for employer A via upgrade path — cancel current trial first.
+    await setPaymentsSandbox(true);
     await client.query(
       `update public.employer_subscriptions set status = 'expired'
        where employer_org_id = $1 and status in ('trial','active')`,
@@ -299,6 +354,7 @@ describeDb("employer entitlements + CV unlocks", () => {
       ids.employerUserA,
       `select public.purchase_employer_addon('job_slot_1') as result`,
     );
+    await setPaymentsSandbox(false);
     const mid = await commitAs(
       client,
       ids.employerUserA,
@@ -345,7 +401,82 @@ describeDb("employer entitlements + CV unlocks", () => {
     expect(audit.rows[0]?.n).toBeGreaterThanOrEqual(1);
   });
 
+  it("CV unlock credits expire at period end and burn wallet remaining", async () => {
+    await setPaymentsSandbox(true);
+    await client.query(
+      `update public.employer_subscriptions set status = 'expired'
+       where employer_org_id = $1 and status in ('trial','active')`,
+      [ids.employerA],
+    );
+    await commitAs(
+      client,
+      ids.employerUserA,
+      `select public.activate_employer_package('starter', false) as result`,
+    );
+    await setPaymentsSandbox(false);
+
+    const before = await client.query(
+      `select balance from public.employer_cv_unlock_balances where employer_org_id = $1`,
+      [ids.employerA],
+    );
+    const balanceBefore = before.rows[0]?.balance as number;
+    expect(balanceBefore).toBeGreaterThan(0);
+
+    await client.query(
+      `update public.employer_cv_unlock_ledger
+         set period_ends_on = current_date - 1
+       where employer_org_id = $1
+         and entry_type = 'grant'
+         and package_key is distinct from 'job_slot_1'
+         and expired_at is null
+         and coalesce(remaining, 0) > 0`,
+      [ids.employerA],
+    );
+
+    const expired = await client.query(`select public.expire_employer_entitlements() as result`);
+    const result = expired.rows[0]?.result as {
+      cv_credit_grants_expired?: number;
+      cv_tokens_burned?: number;
+    };
+    expect(result.cv_credit_grants_expired).toBeGreaterThanOrEqual(1);
+    expect(result.cv_tokens_burned).toBeGreaterThanOrEqual(1);
+
+    const after = await client.query(
+      `select balance from public.employer_cv_unlock_balances where employer_org_id = $1`,
+      [ids.employerA],
+    );
+    expect(after.rows[0]?.balance).toBe(0);
+
+    const audit = await client.query(
+      `select count(*)::int as n from public.employer_cv_unlock_ledger
+       where employer_org_id = $1 and entry_type = 'expire' and reason = 'cv_unlock_period_ended'`,
+      [ids.employerA],
+    );
+    expect(audit.rows[0]?.n).toBeGreaterThanOrEqual(1);
+
+    // Idempotent second expire does not burn again.
+    const second = await client.query(`select public.expire_employer_entitlements() as result`);
+    expect((second.rows[0]?.result as { cv_tokens_burned?: number }).cv_tokens_burned ?? 0).toBe(0);
+  });
+
   it("concurrent spends cannot drive balance below zero", async () => {
+    // One live grant with remaining=1 so FIFO consume and wallet stay aligned.
+    await client.query(
+      `update public.employer_cv_unlock_ledger
+         set remaining = 0
+       where employer_org_id = $1
+         and entry_type = 'grant'
+         and package_key is distinct from 'job_slot_1'
+         and expired_at is null`,
+      [ids.employerA],
+    );
+    await client.query(
+      `insert into public.employer_cv_unlock_ledger
+         (employer_org_id, entry_type, amount, balance_after, reason, package_key,
+          period_starts_on, period_ends_on, remaining)
+       values ($1, 'grant', 1, 1, 'test_grant', 'starter', current_date, current_date + 30, 1)`,
+      [ids.employerA],
+    );
     await client.query(
       `update public.employer_cv_unlock_balances set balance = 1 where employer_org_id = $1`,
       [ids.employerA],
@@ -422,12 +553,14 @@ describeDb("employer entitlements + CV unlocks", () => {
       `update public.employer_subscriptions set status = 'expired' where employer_org_id = $1`,
       [ids.employerB],
     );
-    // Trial already used — activate a paid plan (payments remain open in this suite).
+    // Trial already used — activate a paid plan under payments sandbox.
+    await setPaymentsSandbox(true);
     await commitAs(
       client,
       ids.employerUserB,
       `select public.activate_employer_package('starter', false) as result`,
     );
+    await setPaymentsSandbox(false);
 
     const pathAJobB = "c1000000-0000-4000-8000-0000000000b1";
     await client.query(

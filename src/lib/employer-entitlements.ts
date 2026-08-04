@@ -1,6 +1,15 @@
 /**
- * Employer package entitlements + manhwa-style CV unlock tokens.
- * Payments are open in this MVP (activate/top-up grants immediately).
+ * Employer package entitlements + CV unlock tokens.
+ *
+ * Commercial rules (approved 2026-08-04 — Sabiha/finance):
+ * - CV unlocks are org-scoped: unique (employer_org_id, candidate_id). Once
+ *   unlocked, the candidate stays unlocked for that employer org across jobs.
+ * - Path A job_order_id authorizes spend/preview; it is not the unlock key.
+ * - CV unlock credits expire per subscription month (period-lapsed grant
+ *   remaining is burned by expire_employer_entitlements).
+ * - Job-slot add-ons apply only during the associated plan period.
+ * - Paid plan/add-on activation is sandbox-only until real payment verification
+ *   exists. Free trial remains available. Production must keep sandbox disabled.
  */
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -15,6 +24,76 @@ export type SubscriptionPackageKey = (typeof SUBSCRIPTION_PACKAGE_KEYS)[number];
 
 export const ADDON_PACKAGE_KEYS = ["cv_unlocks_5", "cv_unlocks_15", "job_slot_1"] as const;
 export type AddonPackageKey = (typeof ADDON_PACKAGE_KEYS)[number];
+
+export const EMPLOYER_PAYMENTS_SANDBOX_FLAG = "employer_payments_sandbox_enabled" as const;
+
+/**
+ * Env-only sandbox switch. Prefer getEmployerPaymentsCapability() for UI/actions;
+ * open payments require non-production AND this env AND the DB flag.
+ */
+export function isEmployerPaymentsSandbox(): boolean {
+  return process.env.EMPLOYER_PAYMENTS_SANDBOX === "true";
+}
+
+/** Non-production when VERCEL_ENV is set and not production; else NODE_ENV !== production. */
+export function isNonProductionDeployment(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.VERCEL_ENV !== undefined && env.VERCEL_ENV !== "") {
+    return env.VERCEL_ENV !== "production";
+  }
+  return env.NODE_ENV !== "production";
+}
+
+export type EmployerPaymentsCapability = {
+  openPaymentsAllowed: boolean;
+  isNonProduction: boolean;
+  envSandboxEnabled: boolean;
+  dbSandboxEnabled: boolean;
+  blockedReasons: string[];
+};
+
+/**
+ * Pure assembler — never enables open payments unless all three inputs are true.
+ * Production deployments always yield openPaymentsAllowed=false.
+ */
+export function buildEmployerPaymentsCapability(input: {
+  isNonProduction: boolean;
+  envSandboxEnabled: boolean;
+  dbSandboxEnabled: boolean;
+}): EmployerPaymentsCapability {
+  const { isNonProduction, envSandboxEnabled, dbSandboxEnabled } = input;
+  const blockedReasons: string[] = [];
+  if (!isNonProduction) blockedReasons.push("deployment is production");
+  if (!envSandboxEnabled) blockedReasons.push("EMPLOYER_PAYMENTS_SANDBOX is not true");
+  if (!dbSandboxEnabled) {
+    blockedReasons.push(`${EMPLOYER_PAYMENTS_SANDBOX_FLAG} is off`);
+  }
+  const openPaymentsAllowed = isNonProduction && envSandboxEnabled && dbSandboxEnabled;
+  return {
+    openPaymentsAllowed,
+    isNonProduction,
+    envSandboxEnabled,
+    dbSandboxEnabled,
+    blockedReasons: openPaymentsAllowed ? [] : blockedReasons,
+  };
+}
+
+/**
+ * Server-computed sandbox capability. Single source of truth for plan/billing UI
+ * and soft-gates in plan-actions. SQL still enforces the DB flag on RPCs.
+ */
+export async function getEmployerPaymentsCapability(): Promise<EmployerPaymentsCapability> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("feature_flags")
+    .select("is_enabled")
+    .eq("key", EMPLOYER_PAYMENTS_SANDBOX_FLAG)
+    .maybeSingle();
+  return buildEmployerPaymentsCapability({
+    isNonProduction: isNonProductionDeployment(),
+    envSandboxEnabled: isEmployerPaymentsSandbox(),
+    dbSandboxEnabled: Boolean((data as { is_enabled?: boolean } | null)?.is_enabled),
+  });
+}
 
 /** Ladder rank for upgrade filtering (trial is lowest). */
 export function subscriptionPackageRank(key: string | null | undefined): number {

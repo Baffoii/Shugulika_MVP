@@ -11,7 +11,11 @@ import {
   StatCard,
 } from "@/components/ui/primitives";
 import { requireApprovedEmployer } from "@/lib/auth";
-import { getEmployerPlanSnapshot, listActivePackages } from "@/lib/employer-entitlements";
+import {
+  getEmployerPaymentsCapability,
+  getEmployerPlanSnapshot,
+  listActivePackages,
+} from "@/lib/employer-entitlements";
 import { formatDate } from "@/lib/format";
 import { AddonShop } from "./AddonShop";
 
@@ -19,16 +23,18 @@ export const metadata: Metadata = { title: "Billing" };
 
 export default async function EmployerBillingPage() {
   const { employerOrg } = await requireApprovedEmployer();
-  const [plan, addons] = await Promise.all([
+  const [plan, addons, payments] = await Promise.all([
     getEmployerPlanSnapshot(employerOrg.id),
     listActivePackages("addon"),
+    getEmployerPaymentsCapability(),
   ]);
+  const paymentsSandbox = payments.openPaymentsAllowed;
 
   return (
     <div>
       <PageHeader
         title="Billing & unlocks"
-        description="Your plan, job slots, and CV unlock balance. Payments are open in this MVP — top-ups apply immediately."
+        description="Your plan, job slots, and CV unlock balance. Free trial is available; real paid activation is not connected yet."
         actions={
           plan.isActive ? (
             <Link
@@ -53,9 +59,10 @@ export default async function EmployerBillingPage() {
           <Alert tone="warn">
             You do not have an active plan.{" "}
             <Link href="/employer/plan" className="font-medium underline">
-              Start a free trial or choose a package
+              Start a free trial
             </Link>{" "}
-            to post jobs and unlock CVs.
+            to post jobs and unlock CVs. Paid plans require a future payment workflow
+            {paymentsSandbox ? " (sandbox demo activation is currently enabled)." : "."}
           </Alert>
         </div>
       ) : null}
@@ -99,8 +106,18 @@ export default async function EmployerBillingPage() {
               <p className="text-ink-muted">No package selected yet.</p>
             )}
             <Alert tone="info">
-              Live card payments (Zoho Books) are not connected yet. Plan activation and top-ups
-              grant access without charging.
+              <span className="block space-y-1">
+                <span className="block">
+                  Free trial: 14 days. Paid plans: 30-day periods. Unused CV unlock credits expire
+                  at the end of the current plan period. Job-slot add-ons apply only during the
+                  current period. Unlocked candidates stay unlocked for your company.
+                </span>
+                <span className="block">
+                  {paymentsSandbox
+                    ? "Sandbox/demo open payments are enabled — paid activation grants access without charging. This is not production billing."
+                    : "Real paid activation and add-on purchases are not enabled yet. Use the free trial, or ask an admin to enable payments sandbox mode for non-production demos only."}
+                </span>
+              </span>
             </Alert>
           </CardBody>
         </Card>
@@ -110,12 +127,19 @@ export default async function EmployerBillingPage() {
             <CardTitle>Buy more unlocks</CardTitle>
           </CardHeader>
           <CardBody>
-            {plan.isActive ? (
-              <AddonShop addons={addons} />
-            ) : (
+            {!plan.isActive ? (
               <p className="text-sm text-ink-muted">
-                Activate a plan first, then you can top up CV unlocks and job slots.
+                Activate a free trial first. Add-on top-ups are available only when payments sandbox
+                (or real billing) is enabled.
               </p>
+            ) : paymentsSandbox ? (
+              <AddonShop addons={addons} sandbox />
+            ) : (
+              <Alert tone="warn">
+                Add-on purchases are unavailable until a real payment workflow ships. Sandbox demo
+                top-ups require a non-production deployment,{" "}
+                <code>EMPLOYER_PAYMENTS_SANDBOX=true</code>, and the matching database feature flag.
+              </Alert>
             )}
           </CardBody>
         </Card>

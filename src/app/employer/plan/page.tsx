@@ -13,6 +13,7 @@ import { requireApprovedEmployer } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
   filterPackagesForPlanPicker,
+  getEmployerPaymentsCapability,
   getEmployerPlanSnapshot,
   listActivePackages,
 } from "@/lib/employer-entitlements";
@@ -23,9 +24,10 @@ export const metadata: Metadata = { title: "Choose a plan" };
 export default async function EmployerPlanPage() {
   const { ctx, employerOrg } = await requireApprovedEmployer();
   const supabase = createClient();
-  const [plan, packages, { data: appData }] = await Promise.all([
+  const [plan, packages, payments, { data: appData }] = await Promise.all([
     getEmployerPlanSnapshot(employerOrg.id),
     listActivePackages("subscription"),
+    getEmployerPaymentsCapability(),
     supabase
       .from("employer_applications")
       .select("preferred_package_key")
@@ -41,6 +43,7 @@ export default async function EmployerPlanPage() {
   const currentKey = plan.isActive ? (plan.package?.key ?? null) : null;
   const visiblePackages = filterPackagesForPlanPicker(packages, currentKey);
   const mode = currentKey ? "upgrade" : "choose";
+  const openPaymentsAllowed = payments.openPaymentsAllowed;
 
   return (
     <div>
@@ -48,18 +51,21 @@ export default async function EmployerPlanPage() {
         title={mode === "upgrade" ? "Upgrade your hiring plan" : "Choose your hiring plan"}
         description={
           mode === "upgrade"
-            ? "Move to the next tier or higher. Lower plans and free trial are hidden while you have an active subscription."
-            : "Start a free trial or pick a package. CV unlocks work like chapter coins — browse masked teasers free, spend an unlock to open a full candidate pack."
+            ? "Move to the next tier or higher when paid activation is available. Lower plans and free trial are hidden while you have an active subscription."
+            : "Start a free trial. Paid packages activate only when sandbox demo payments are enabled, or after real billing ships."
         }
       />
       <div className="mb-4 space-y-3">
         <Alert tone="info">
-          Payments are not charged in this MVP — selecting a plan or trial unlocks access
-          immediately. Card billing via Zoho Books will plug in later.
+          Free trial (14 days) needs no payment. Real paid activation is not implemented yet
+          {openPaymentsAllowed
+            ? " — sandbox/demo open payments are enabled on this non-production environment."
+            : ". Sandbox/demo open payments must be explicitly enabled (non-production, env, and database flag)."}
         </Alert>
         {plan.isExpiredTrial ? (
           <Alert tone="warn">
-            Your free trial has ended. Choose a paid package to keep posting jobs and unlocking CVs.
+            Your free trial has ended. A paid package will be required once real billing ships
+            {openPaymentsAllowed ? ", or via payments sandbox for demos only." : "."}
           </Alert>
         ) : null}
         {mode === "upgrade" && plan.package ? (
@@ -80,12 +86,13 @@ export default async function EmployerPlanPage() {
             <p>
               Every package can grant <strong className="text-ink">CV unlocks</strong>. You can
               browse masked candidate teasers for free. Spending one unlock reveals that
-              person&apos;s full pack inside Shugulika. Re-opening an unlocked candidate is free.
-              Buy more unlocks anytime from Billing.
+              person&apos;s pack inside Shugulika. Unlocks are per company (not per job) —
+              re-opening an unlocked candidate does not spend another credit. Unused credits expire
+              at the end of the current plan period; spending requires an active plan.
             </p>
             <p>
               Job postings use separate <strong className="text-ink">active job slots</strong> —
-              they are capacity limits, not spendable coins.
+              plan slots and job-slot add-ons apply only during the current plan period.
             </p>
           </CardBody>
         </Card>
@@ -96,6 +103,7 @@ export default async function EmployerPlanPage() {
         preferredKey={preferredKey}
         currentPackageKey={currentKey}
         mode={mode}
+        openPaymentsAllowed={openPaymentsAllowed}
       />
 
       <p className="mt-6 text-sm text-ink-subtle">
