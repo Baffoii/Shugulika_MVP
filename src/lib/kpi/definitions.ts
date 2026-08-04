@@ -1019,9 +1019,19 @@ export function toEmployerResponseWindows(
 ): ResponseWindowSnapshot[] {
   return submissions
     .filter((s) => s.submittedAt != null || s.status !== "consent_pending")
-    .filter(
-      (s) => s.respondedAt != null || !EMPLOYER_DECIDED_STATUSES.has(s.status),
-    )
+    .filter((s) => {
+      // Historic decided packs often have submitted_at but no responded_at stamp.
+      // Drop those so they never look "still waiting". Keep rows with null
+      // submitted_at so computeResponseTime can still report unsupported.
+      if (
+        s.respondedAt == null &&
+        s.submittedAt != null &&
+        EMPLOYER_DECIDED_STATUSES.has(s.status)
+      ) {
+        return false;
+      }
+      return true;
+    })
     .map((s) => ({
       id: s.id,
       applicationId: s.applicationId,
