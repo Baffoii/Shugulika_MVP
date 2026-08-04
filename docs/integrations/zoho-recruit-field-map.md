@@ -55,6 +55,26 @@ runtime path ignores them.
 Anything not enabled in `zoho_recruit_field_mappings` does not sync, including resumes, media,
 assessments, interviews, billing, and portal pipeline state.
 
+## Employer search cache — discovery consent fields
+
+The inbound candidate-search worker (`candidate-sync`) uses runtime field discovery
+(`candidate-field-map.ts`) and **fail-closed** eligibility
+(`candidate-eligibility.ts`). Candidates without affirmative portal-discovery
+evidence are skipped / inactivated and never enter employer Find Candidates.
+
+Required for production discovery (not seeded as outbound field-map rows; configure
+in the Zoho org only after legal/DPO approval):
+
+| Internal key | Preferred Zoho API names | Affirmative examples |
+| --- | --- | --- |
+| `portalEligible` | `Portal_Eligible`, `Portal_Eligible__s` | true / eligible / granted |
+| `consentStatus` | `Consent_Status`, `Consent_Status__s` | Granted / opt-in |
+| `profileVisibility` | `Profile_Visibility`, `Profile_Visibility__s` | Public / searchable |
+
+Missing mappings, blank values, withdrawn consent, private/restricted visibility,
+converted records, and disallowed statuses all make a candidate ineligible.
+See `docs/integrations/zoho-recruit-setup.md` §7.
+
 ## Enabling a mapping
 
 1. Prefer a **sandbox Zoho org** (separate Client ID / connection) for experiments.

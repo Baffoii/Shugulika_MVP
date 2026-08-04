@@ -54,10 +54,14 @@ Apply in order:
 1. Keep DB sync gates **false**.
 2. Set `ZOHO_RECRUIT_ENABLED=true` and restart.
 3. HQ admin → `/hq/integrations` → **Connect Zoho Recruit**.
-4. Approve scopes (org + settings + candidates/jobopening read/create/update).
+4. Approve scopes (`ZohoRecruit.org.all`, `ZohoRecruit.settings.ALL`, `ZohoRecruit.modules.ALL`).
+   Prefer these group scopes — per-module scope names are inconsistently accepted by Zoho Accounts.
 5. If scopes are missing later: Disconnect → Connect again (does not log out Zoho users).
 
-OAuth alone does **not** export candidates or jobs.
+OAuth alone does **not** export or import candidates. For employer Find candidates sync, also enable
+DB gates `zoho_recruit_enabled`, `zoho_recruit_data_sync_enabled`, and either
+`zoho_recruit_production_data_enabled` or `zoho_recruit_sandbox_sync_enabled`, then run
+**Sync candidates from Zoho** on this page.
 
 ## 5. How identity works (no Zoho UI fields)
 
@@ -74,7 +78,33 @@ OAuth alone does **not** export candidates or jobs.
 - `zoho_recruit_sandbox_sync_enabled` — synthetic/sandbox cases only
 - `zoho_recruit_production_data_enabled` — requires real DPO/legal evidence; leave off
 
-## 7. Disconnect
+## 7. Employer Find Candidates — portal discovery fields (production)
+
+Inbound candidate-search sync is **fail-closed** on discovery consent. A Zoho
+candidate enters `zoho_recruit_candidate_search` only when affirmative, mapped
+evidence of portal discovery permission exists.
+
+Preferred production custom fields (create only after DPO/legal approval; keep
+sandbox experiments on a separate Zoho org):
+
+| Purpose | Preferred API name | Accepted affirmative values | Negative / fail-closed |
+| --- | --- | --- | --- |
+| Portal discovery (preferred) | `Portal_Eligible` | `true`, `yes`, `1`, `eligible`, `allowed`, `opt-in`, `granted`, `public` | missing, blank, `false`, `no`, `ineligible`, unrecognized |
+| Consent status | `Consent_Status` | `granted`, `given`, `approved`, `opt-in`, `yes`, `true`, `1`, `consented` | missing, `withdrawn`, `revoked`, `denied`, unrecognized |
+| Profile visibility | `Profile_Visibility` | `public`, `visible`, `open`, `discoverable`, `searchable` | missing, `private`, `hidden`, `internal`, `restricted` |
+
+Rules:
+
+- At least one of these fields must be **mapped** from Zoho metadata, and every
+  mapped field must evaluate affirmatively.
+- Prefer `Portal_Eligible` when available.
+- Do **not** treat ordinary `Candidate_Status` as consent.
+- Converted, rejected, blacklisted, unavailable, and do-not-contact statuses
+  remain ineligible when those fields are mapped.
+- Restrictive signals always win over affirmative ones.
+- Production sync gates remain **disabled by default**.
+
+## 8. Disconnect
 
 **Disconnect and revoke** on `/hq/integrations` clears Shugulika’s tokens only. Zoho Recruit users
 stay signed in.
