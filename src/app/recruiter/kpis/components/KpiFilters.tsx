@@ -2,29 +2,39 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
-import type { AssignedRole, KpiCompany, KpiPeriod } from "@/lib/data/recruiter-kpis";
+import type {
+  AssignedRole,
+  KpiCompany,
+  KpiJobOption,
+  KpiStageOption,
+} from "@/lib/data/recruiter-kpis";
+import {
+  KPI_GRAINS,
+  KPI_GRAIN_LABELS,
+  type KpiFilterState,
+  type KpiGrain,
+} from "@/lib/kpi/filters";
 
-const PERIODS: { value: KpiPeriod; label: string }[] = [
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "90d", label: "Last 90 days" },
-  { value: "ytd", label: "Year to date" },
-];
-
+/**
+ * Recruiter KPI filters: date grain, assigned role, employer, job, and stage.
+ *
+ * There is deliberately no recruiter/owner picker and no nationality filter.
+ * Scope comes from the session on the server; the options offered here are
+ * already restricted to the recruiter's own work, and the loader re-checks
+ * every submitted value against that list.
+ */
 export function KpiFilters({
-  range,
-  roleId,
+  filters,
   roles,
-  companyId,
   companies,
-  showCustom = true,
+  jobs,
+  stages,
 }: {
-  range: KpiPeriod;
-  roleId?: string;
+  filters: KpiFilterState;
   roles: AssignedRole[];
-  companyId?: string;
   companies: KpiCompany[];
-  showCustom?: boolean;
+  jobs: KpiJobOption[];
+  stages: KpiStageOption[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -37,61 +47,87 @@ export function KpiFilters({
         if (!v) next.delete(k);
         else next.set(k, v);
       }
+      // Legacy param from the pre-grain dashboard; `grain` supersedes it.
+      next.delete("range");
       router.push(`${pathname}?${next.toString()}`);
     },
     [pathname, router, searchParams],
   );
 
   const activeRoles = roles.filter((r) => r.status === "active");
+  const visibleJobs = filters.employerOrgId
+    ? jobs.filter((j) => j.employerOrgId === filters.employerOrgId)
+    : jobs;
+
+  const selectClass = "rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink";
 
   return (
     <div className="flex flex-wrap items-end gap-3">
       <label className="flex flex-col gap-1 text-xs text-ink-muted">
         Period
         <select
-          className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
-          value={range}
-          onChange={(e) => update({ range: e.target.value })}
+          className={selectClass}
+          value={filters.grain}
+          onChange={(e) => update({ grain: e.target.value as KpiGrain })}
         >
-          {PERIODS.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
+          {KPI_GRAINS.map((g) => (
+            <option key={g} value={g}>
+              {KPI_GRAIN_LABELS[g]}
             </option>
           ))}
-          {showCustom ? <option value="custom">Custom</option> : null}
         </select>
       </label>
-      {range === "custom" ? (
+
+      {filters.grain === "custom" ? (
         <>
           <label className="flex flex-col gap-1 text-xs text-ink-muted">
             From
             <input
               type="date"
-              className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
-              defaultValue={searchParams.get("from") ?? ""}
-              onChange={(e) => update({ from: e.target.value || undefined, range: "custom" })}
+              className={selectClass}
+              defaultValue={filters.from ?? ""}
+              onChange={(e) => update({ from: e.target.value || undefined, grain: "custom" })}
             />
           </label>
           <label className="flex flex-col gap-1 text-xs text-ink-muted">
             To
             <input
               type="date"
-              className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
-              defaultValue={searchParams.get("to") ?? ""}
-              onChange={(e) => update({ to: e.target.value || undefined, range: "custom" })}
+              className={selectClass}
+              defaultValue={filters.to ?? ""}
+              onChange={(e) => update({ to: e.target.value || undefined, grain: "custom" })}
             />
           </label>
         </>
       ) : null}
+
+      {activeRoles.length > 0 ? (
+        <label className="flex flex-col gap-1 text-xs text-ink-muted">
+          Assigned role
+          <select
+            className={selectClass}
+            value={filters.roleId ?? ""}
+            onChange={(e) => update({ role: e.target.value || undefined })}
+          >
+            <option value="">All my roles</option>
+            {activeRoles.map((r) => (
+              <option key={r.roleId} value={r.roleId}>
+                {r.roleName}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
       {companies.length > 0 ? (
         <label className="flex flex-col gap-1 text-xs text-ink-muted">
-          Company
+          Employer
           <select
-            className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
-            value={companyId ?? ""}
-            onChange={(e) => update({ company: e.target.value || undefined })}
+            className={selectClass}
+            value={filters.employerOrgId ?? ""}
+            onChange={(e) => update({ employer: e.target.value || undefined, job: undefined })}
           >
-            <option value="">All companies</option>
+            <option value="">All employers</option>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} ({c.applicationCount})
@@ -100,18 +136,37 @@ export function KpiFilters({
           </select>
         </label>
       ) : null}
-      {activeRoles.length > 0 ? (
+
+      {visibleJobs.length > 0 ? (
         <label className="flex flex-col gap-1 text-xs text-ink-muted">
-          Role
+          Job
           <select
-            className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink"
-            value={roleId ?? ""}
-            onChange={(e) => update({ role: e.target.value || undefined })}
+            className={selectClass}
+            value={filters.jobOrderId ?? ""}
+            onChange={(e) => update({ job: e.target.value || undefined })}
           >
-            <option value="">All roles</option>
-            {activeRoles.map((r) => (
-              <option key={r.roleId} value={r.roleId}>
-                {r.roleName}
+            <option value="">All jobs</option>
+            {visibleJobs.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.title} ({j.applicationCount})
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
+      {stages.length > 0 ? (
+        <label className="flex flex-col gap-1 text-xs text-ink-muted">
+          Stage
+          <select
+            className={selectClass}
+            value={filters.stage ?? ""}
+            onChange={(e) => update({ stage: e.target.value || undefined })}
+          >
+            <option value="">All stages</option>
+            {stages.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.key.replace(/_/g, " ")} ({s.count})
               </option>
             ))}
           </select>

@@ -71,6 +71,10 @@ export interface SubmissionSnapshot {
   submittedAt: string | null;
   updatedAt: string;
   submittingOrgId: string;
+  /** Stamped by trigger on transition into `submitted`; null on pre-2026-08-05 rows. */
+  responseDueAt?: string | null;
+  /** First employer decision; null while still awaiting, and on pre-2026-08-05 rows. */
+  respondedAt?: string | null;
 }
 
 export interface OfferSnapshot {
@@ -99,6 +103,33 @@ export interface InterviewSnapshot {
   applicationId: string;
   status: string;
   scheduledAt: string | null;
+  createdAt?: string | null;
+  /** Stamped by trigger when the invitation goes out; null on pre-2026-08-05 rows. */
+  candidateResponseDueAt?: string | null;
+  /** Stamped when the candidate first replies; null while awaiting. */
+  candidateRespondedAt?: string | null;
+}
+
+/** Consent request/response pair on an application (candidate-awaiting-response path). */
+export interface ConsentResponseSnapshot {
+  applicationId: string;
+  requestedAt: string | null;
+  respondedAt: string | null;
+}
+
+/** Normalized "we asked, are they back yet?" pair — the input to both response-time metrics. */
+export interface ResponseWindowSnapshot {
+  /** Source row id (submission / interview / application). */
+  id: string;
+  applicationId: string | null;
+  /** When the clock started. Null means the moment was never recorded. */
+  requestedAt: string | null;
+  /** When the counterparty replied. Null means still waiting. */
+  respondedAt: string | null;
+  /** Deadline, when one was stamped. */
+  dueAt: string | null;
+  /** Which path produced this window — used for drill-down labels. */
+  channel: string;
 }
 
 export interface JobPublishSnapshot {
@@ -352,32 +383,52 @@ export function computeActiveWorkload(
   return { total: appIds.length, byStage, appIds };
 }
 
+/**
+ * Assigned, still-open applications this recruiter has never meaningfully
+ * reviewed. Returned as IDs (not just a count) so the KPI card can drill down
+ * to the exact applications behind the number.
+ */
+export function awaitingFirstReviewAppIds(
+  apps: ApplicationSnapshot[],
+  history: StageHistoryEvent[],
+  recruiterId: string,
+): string[] {
+  const first = firstReviewByApp(history, recruiterId);
+  const ids: string[] = [];
+  for (const a of apps) {
+    if (a.assignedRecruiterId !== recruiterId) continue;
+    if (first.has(a.id)) continue;
+    if (a.withdrawnAt) continue;
+    if (TERMINAL_STAGES.has(a.currentStage)) continue;
+    ids.push(a.id);
+  }
+  return ids;
+}
+
 export function computeTimeToFirstReview(
   apps: ApplicationSnapshot[],
   history: StageHistoryEvent[],
   window: DateWindow,
   recruiterId: string,
   targetHours: number,
-): MetricResult & { awaitingFirstReview: number; hours: number[] } {
+): MetricResult & {
+  awaitingFirstReview: number;
+  awaitingAppIds: string[];
+  reviewedAppIds: string[];
+  hours: number[];
+} {
   const first = firstReviewByApp(history, recruiterId);
   const hours: number[] = [];
-  let awaiting = 0;
+  const reviewedAppIds: string[] = [];
   for (const a of apps) {
     if (a.assignedRecruiterId !== recruiterId && !first.has(a.id)) continue;
     const ev = first.get(a.id);
-    if (!ev) {
-      if (
-        a.assignedRecruiterId === recruiterId &&
-        !a.withdrawnAt &&
-        !TERMINAL_STAGES.has(a.currentStage)
-      ) {
-        awaiting += 1;
-      }
-      continue;
-    }
+    if (!ev) continue;
     if (!inWindow(ev.createdAt, window)) continue;
     hours.push(hoursBetween(a.createdAt, ev.createdAt));
+    reviewedAppIds.push(a.id);
   }
+  const awaitingAppIds = awaitingFirstReviewAppIds(apps, history, recruiterId);
   const med = median(hours);
   const value = med == null ? null : round1(med);
   return {
@@ -387,7 +438,9 @@ export function computeTimeToFirstReview(
       hours.length,
       compareLowerIsBetter(value, targetHours, hours.length),
     ),
-    awaitingFirstReview: awaiting,
+    awaitingFirstReview: awaitingAppIds.length,
+    awaitingAppIds,
+    reviewedAppIds,
     hours,
   };
 }
@@ -430,32 +483,68 @@ export function computeTimeInStage(
   return { byStage, dwellHours };
 }
 
-export function computeStalledByStage(
+export interface StalledApplication {
+  applicationId: string;
+  stage: string;
+  enteredStageAt: string;
+  /** Threshold that was breached, in hours. */
+  thresholdHours: number;
+  /** When the app became stalled — the SLA due date for this item. */
+  dueAt: string;
+  hoursInStage: number;
+}
+
+/**
+ * Applications sitting in their current stage longer than the configured
+ * threshold. Returns the rows (not just counts) so the stalled KPI can drill
+ * down to exact application IDs.
+ */
+export function computeStalledApplications(
   apps: ApplicationSnapshot[],
   history: StageHistoryEvent[],
   thresholds: Record<string, number>,
   nowIso: string,
   recruiterId?: string,
-): { total: number; byStage: Record<string, number> } {
+): StalledApplication[] {
   const firstInCurrent = new Map<string, string>();
   const sorted = dedupeStageHistory(history).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   for (const e of sorted) {
     firstInCurrent.set(e.applicationId, e.createdAt);
   }
-  const byStage: Record<string, number> = {};
-  let total = 0;
+  const out: StalledApplication[] = [];
   for (const a of apps) {
     if (recruiterId && a.assignedRecruiterId !== recruiterId) continue;
     if (a.withdrawnAt || TERMINAL_STAGES.has(a.currentStage)) continue;
     const maxH = thresholds[a.currentStage];
     if (maxH == null) continue;
     const entered = firstInCurrent.get(a.id) ?? a.createdAt;
-    if (hoursBetween(entered, nowIso) > maxH) {
-      byStage[a.currentStage] = (byStage[a.currentStage] ?? 0) + 1;
-      total += 1;
-    }
+    const hoursInStage = hoursBetween(entered, nowIso);
+    if (hoursInStage <= maxH) continue;
+    out.push({
+      applicationId: a.id,
+      stage: a.currentStage,
+      enteredStageAt: entered,
+      thresholdHours: maxH,
+      dueAt: new Date(new Date(entered).getTime() + maxH * 3_600_000).toISOString(),
+      hoursInStage: round1(hoursInStage),
+    });
   }
-  return { total, byStage };
+  return out;
+}
+
+export function computeStalledByStage(
+  apps: ApplicationSnapshot[],
+  history: StageHistoryEvent[],
+  thresholds: Record<string, number>,
+  nowIso: string,
+  recruiterId?: string,
+): { total: number; byStage: Record<string, number>; appIds: string[] } {
+  const stalled = computeStalledApplications(apps, history, thresholds, nowIso, recruiterId);
+  const byStage: Record<string, number> = {};
+  for (const s of stalled) {
+    byStage[s.stage] = (byStage[s.stage] ?? 0) + 1;
+  }
+  return { total: stalled.length, byStage, appIds: stalled.map((s) => s.applicationId) };
 }
 
 export function computeTimeToClientSubmission(
@@ -829,6 +918,423 @@ export function computeSlaQueue(input: {
       reason: "No employer feedback deadline field is stored yet.",
     },
   };
+}
+
+// ---- Response times ---------------------------------------------------------
+// Two separate clocks that are routinely conflated: how long the EMPLOYER takes
+// to decide on a submitted pack, and how long the CANDIDATE takes to answer a
+// request we sent them. Both need a recorded "we asked at" moment — the
+// 20260805091000 migration stamps those going forward. Rows created before it
+// have no request timestamp and are excluded rather than guessed.
+
+export interface ResponseTimeResult extends MetricResult {
+  /** Median hours to respond (mirrors `value`). */
+  medianHours: number | null;
+  /** Still waiting, deadline known and passed. */
+  overdue: ResponseWindowSnapshot[];
+  /** Still waiting, not yet due (or no deadline recorded). */
+  awaiting: ResponseWindowSnapshot[];
+  /** Source rows that responded inside the period — the drill-down set. */
+  respondedIds: string[];
+  hours: number[];
+}
+
+function unsupportedResponseTime(reason: string): ResponseTimeResult {
+  return {
+    ...metric(null, 0, 0, "insufficient_data", reason),
+    medianHours: null,
+    overdue: [],
+    awaiting: [],
+    respondedIds: [],
+    hours: [],
+  };
+}
+
+/**
+ * Shared response-time math. Denominator = requests that were answered inside
+ * the window. Requests with no recorded `requestedAt` are structurally
+ * unmeasurable and never counted as fast or slow.
+ */
+export function computeResponseTime(
+  windows: ResponseWindowSnapshot[],
+  window: DateWindow,
+  targetHours: number,
+  nowIso: string,
+  unsupportedReason: string,
+): ResponseTimeResult {
+  const measurable = windows.filter((w) => w.requestedAt != null);
+  if (windows.length > 0 && measurable.length === 0) {
+    return unsupportedResponseTime(unsupportedReason);
+  }
+
+  const hours: number[] = [];
+  const respondedIds: string[] = [];
+  const overdue: ResponseWindowSnapshot[] = [];
+  const awaiting: ResponseWindowSnapshot[] = [];
+
+  for (const w of measurable) {
+    if (w.respondedAt) {
+      if (!inWindow(w.respondedAt, window)) continue;
+      hours.push(hoursBetween(w.requestedAt as string, w.respondedAt));
+      respondedIds.push(w.id);
+      continue;
+    }
+    if (w.dueAt && w.dueAt < nowIso) overdue.push(w);
+    else awaiting.push(w);
+  }
+
+  const med = median(hours);
+  const value = med == null ? null : round1(med);
+  return {
+    ...metric(
+      value,
+      hours.length,
+      hours.length,
+      compareLowerIsBetter(value, targetHours, hours.length),
+    ),
+    medianHours: value,
+    overdue,
+    awaiting,
+    respondedIds,
+    hours,
+  };
+}
+
+/**
+ * Statuses that mean the employer already acted. Pre-2026-08-05 rows can be in
+ * one of these without a `responded_at` stamp — exclude them from awaiting /
+ * overdue rather than treating historic decisions as "still waiting".
+ */
+const EMPLOYER_DECIDED_STATUSES = new Set([
+  "shortlisted",
+  "interview_requested",
+  "offered",
+  "rejected",
+  "withdrawn",
+]);
+
+/** Employer submissions awaiting or completing an employer decision. */
+export function toEmployerResponseWindows(
+  submissions: SubmissionSnapshot[],
+): ResponseWindowSnapshot[] {
+  return submissions
+    .filter((s) => s.submittedAt != null || s.status !== "consent_pending")
+    .filter((s) => {
+      // Historic decided packs often have submitted_at but no responded_at stamp.
+      // Drop those so they never look "still waiting". Keep rows with null
+      // submitted_at so computeResponseTime can still report unsupported.
+      if (
+        s.respondedAt == null &&
+        s.submittedAt != null &&
+        EMPLOYER_DECIDED_STATUSES.has(s.status)
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .map((s) => ({
+      id: s.id,
+      applicationId: s.applicationId,
+      requestedAt: s.submittedAt ?? null,
+      respondedAt: s.respondedAt ?? null,
+      dueAt: s.responseDueAt ?? null,
+      channel: "employer_submission",
+    }));
+}
+
+/**
+ * Median hours from client submission to the employer's first decision.
+ * Unsupported (never 0) when no submission carries a `submitted_at`.
+ */
+export function computeEmployerResponseTime(
+  submissions: SubmissionSnapshot[],
+  window: DateWindow,
+  targetHours: number,
+  nowIso: string,
+): ResponseTimeResult {
+  return computeResponseTime(
+    toEmployerResponseWindows(submissions),
+    window,
+    targetHours,
+    nowIso,
+    "Employer response time needs employer_submissions.submitted_at plus responded_at (stamped from 2026-08-05). Older packs are excluded rather than estimated.",
+  );
+}
+
+/** Interview invitations + consent requests we are waiting on the candidate for. */
+export function toCandidateResponseWindows(
+  interviews: InterviewSnapshot[],
+  consents: ConsentResponseSnapshot[],
+): ResponseWindowSnapshot[] {
+  const fromInterviews = interviews.map((i) => ({
+    id: `interview:${i.id}`,
+    applicationId: i.applicationId,
+    requestedAt: i.candidateResponseDueAt ? (i.createdAt ?? null) : null,
+    respondedAt: i.candidateRespondedAt ?? null,
+    dueAt: i.candidateResponseDueAt ?? null,
+    channel: "interview_invitation",
+  }));
+  const fromConsents = consents.map((c) => ({
+    id: `consent:${c.applicationId}`,
+    applicationId: c.applicationId,
+    requestedAt: c.requestedAt,
+    respondedAt: c.respondedAt,
+    dueAt: null,
+    channel: "consent_request",
+  }));
+  return [...fromInterviews, ...fromConsents];
+}
+
+/**
+ * Median hours from "we asked the candidate" to their first reply, across the
+ * interview-invitation and consent paths. Distinct from employer response time:
+ * a slow candidate and a slow employer are different problems with different
+ * next actions.
+ */
+export function computeCandidateResponseTime(
+  interviews: InterviewSnapshot[],
+  consents: ConsentResponseSnapshot[],
+  window: DateWindow,
+  targetHours: number,
+  nowIso: string,
+): ResponseTimeResult {
+  return computeResponseTime(
+    toCandidateResponseWindows(interviews, consents),
+    window,
+    targetHours,
+    nowIso,
+    "Candidate response time needs a recorded request moment (interviews.candidate_response_due_at or applications.consent_requested_at, stamped from 2026-08-05). Older rows are excluded rather than estimated.",
+  );
+}
+
+// ---- CX guardrails ----------------------------------------------------------
+
+export interface WithdrawalReasonBreakdown {
+  total: number;
+  byReason: Record<string, number>;
+  /** Withdrawals with no reason recorded anywhere. */
+  unspecified: number;
+  appIds: string[];
+  /** False while no surface captures a withdrawal reason — keeps the zeros honest. */
+  reasonCaptureSupported: boolean;
+  note?: string;
+}
+
+/**
+ * Withdrawals grouped by the reason on the `withdrawn` stage event. The
+ * candidate withdraw flow does not yet ask for a reason, so most rows land in
+ * `unspecified`; that is reported explicitly instead of implying "no reason
+ * given" means "no reason existed".
+ */
+export function computeWithdrawalReasonBreakdown(
+  apps: ApplicationSnapshot[],
+  history: StageHistoryEvent[],
+  window: DateWindow,
+  recruiterId?: string,
+): WithdrawalReasonBreakdown {
+  const scoped = apps.filter((a) => !recruiterId || a.assignedRecruiterId === recruiterId);
+  const withdrawn = scoped.filter((a) => a.withdrawnAt && inWindow(a.withdrawnAt, window));
+  const withdrawnIds = new Set(withdrawn.map((a) => a.id));
+
+  const reasonByApp = new Map<string, string>();
+  for (const e of history) {
+    if (e.toStage !== "withdrawn") continue;
+    if (!withdrawnIds.has(e.applicationId)) continue;
+    const reason = (e.reason ?? "").trim();
+    if (reason) reasonByApp.set(e.applicationId, reason);
+  }
+
+  const byReason: Record<string, number> = {};
+  let unspecified = 0;
+  for (const a of withdrawn) {
+    const reason = reasonByApp.get(a.id);
+    if (!reason) {
+      unspecified += 1;
+      continue;
+    }
+    byReason[reason] = (byReason[reason] ?? 0) + 1;
+  }
+
+  const reasonCaptureSupported = reasonByApp.size > 0;
+  return {
+    total: withdrawn.length,
+    byReason,
+    unspecified,
+    appIds: withdrawn.map((a) => a.id),
+    reasonCaptureSupported,
+    note: reasonCaptureSupported
+      ? undefined
+      : "No withdrawal reason is captured on the candidate withdraw flow yet — all withdrawals show as unspecified.",
+  };
+}
+
+export interface InterviewScheduleChange {
+  applicationId: string | null;
+  changeKind: "scheduled" | "rescheduled" | "cancelled";
+  createdAt: string;
+}
+
+export interface RescheduleCounts {
+  rescheduled: number;
+  cancelled: number;
+  scheduled: number;
+  /** Applications with more than one reschedule in the period — the churn signal. */
+  repeatOffenderAppIds: string[];
+  appIds: string[];
+  /** Log only exists from the 20260805091000 migration onward. */
+  historyStartsAt: string | null;
+}
+
+/** Interview schedule churn from the durable schedule-change log. */
+export function computeInterviewRescheduleCounts(
+  changes: InterviewScheduleChange[],
+  window: DateWindow,
+): RescheduleCounts {
+  const inPeriod = changes.filter((c) => inWindow(c.createdAt, window));
+  const perApp = new Map<string, number>();
+  const appIds = new Set<string>();
+  let rescheduled = 0;
+  let cancelled = 0;
+  let scheduled = 0;
+
+  for (const c of inPeriod) {
+    if (c.changeKind === "rescheduled") rescheduled += 1;
+    else if (c.changeKind === "cancelled") cancelled += 1;
+    else scheduled += 1;
+    if (!c.applicationId) continue;
+    appIds.add(c.applicationId);
+    if (c.changeKind === "rescheduled") {
+      perApp.set(c.applicationId, (perApp.get(c.applicationId) ?? 0) + 1);
+    }
+  }
+
+  const historyStartsAt =
+    changes.length === 0
+      ? null
+      : [...changes].sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0]!.createdAt;
+
+  return {
+    rescheduled,
+    cancelled,
+    scheduled,
+    repeatOffenderAppIds: [...perApp.entries()].filter(([, n]) => n > 1).map(([id]) => id),
+    appIds: [...appIds],
+    historyStartsAt,
+  };
+}
+
+export interface StaffNotificationSnapshot {
+  id: string;
+  /** Recipient, when the read path exposes it. Omitted by the minimal-disclosure RPC. */
+  userId?: string | null;
+  applicationId: string | null;
+  category: string;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export interface UnansweredNotifications {
+  total: number;
+  /** Unread past the grace window — the ones actually worth chasing. */
+  overdue: number;
+  appIds: string[];
+  notificationIds: string[];
+}
+
+/**
+ * Staff→candidate notifications the candidate has not opened. Advisory only:
+ * an unread notification is a nudge to follow up, never a candidate-quality
+ * signal.
+ */
+export function computeUnansweredStaffNotifications(
+  notifications: StaffNotificationSnapshot[],
+  window: DateWindow,
+  nowIso: string,
+  graceHours = 48,
+): UnansweredNotifications {
+  const unread = notifications.filter((n) => n.readAt == null && inWindow(n.createdAt, window));
+  const overdue = unread.filter((n) => hoursBetween(n.createdAt, nowIso) > graceHours);
+  return {
+    total: unread.length,
+    overdue: overdue.length,
+    appIds: [...new Set(overdue.map((n) => n.applicationId).filter(Boolean) as string[])],
+    notificationIds: overdue.map((n) => n.id),
+  };
+}
+
+export interface OverdueCandidateUpdate {
+  applicationId: string;
+  stage: string;
+  lastUpdateAt: string | null;
+  hoursSinceUpdate: number | null;
+  dueAt: string;
+}
+
+/**
+ * Active applications where the candidate has heard nothing since their last
+ * stage change for longer than `maxSilenceHours`. Falls back to the stage-change
+ * time when no notification was ever sent.
+ */
+export function computeOverdueCandidateUpdates(
+  apps: ApplicationSnapshot[],
+  history: StageHistoryEvent[],
+  lastCandidateUpdateByApp: Map<string, string>,
+  nowIso: string,
+  maxSilenceHours: number,
+  recruiterId?: string,
+): OverdueCandidateUpdate[] {
+  const lastStageChange = new Map<string, string>();
+  for (const e of dedupeStageHistory(history).sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt),
+  )) {
+    lastStageChange.set(e.applicationId, e.createdAt);
+  }
+
+  const out: OverdueCandidateUpdate[] = [];
+  for (const a of apps) {
+    if (recruiterId && a.assignedRecruiterId !== recruiterId) continue;
+    if (a.withdrawnAt || TERMINAL_STAGES.has(a.currentStage)) continue;
+    const anchor = lastCandidateUpdateByApp.get(a.id) ?? lastStageChange.get(a.id) ?? a.createdAt;
+    const silent = hoursBetween(anchor, nowIso);
+    if (silent <= maxSilenceHours) continue;
+    out.push({
+      applicationId: a.id,
+      stage: a.currentStage,
+      lastUpdateAt: lastCandidateUpdateByApp.get(a.id) ?? null,
+      hoursSinceUpdate: round1(silent),
+      dueAt: new Date(new Date(anchor).getTime() + maxSilenceHours * 3_600_000).toISOString(),
+    });
+  }
+  return out;
+}
+
+/**
+ * Active applications still in `cv_review` with no screening note. Mirrors the
+ * `private.pipeline_has_screening_notes` DB gate — these cannot be advanced
+ * until a note exists, so they are silent blockers.
+ */
+export function computeMissingScreeningNotes(
+  apps: ApplicationSnapshot[],
+  appIdsWithNotes: Set<string>,
+  recruiterId?: string,
+): string[] {
+  return apps
+    .filter((a) => {
+      if (recruiterId && a.assignedRecruiterId !== recruiterId) return false;
+      if (a.withdrawnAt || TERMINAL_STAGES.has(a.currentStage)) return false;
+      if (a.currentStage !== "cv_review") return false;
+      return !appIdsWithNotes.has(a.id);
+    })
+    .map((a) => a.id);
+}
+
+/** Submissions sitting with the employer, i.e. waiting on an employer decision. */
+export const EMPLOYER_AWAITING_STATUSES = new Set(["submitted", "viewed"]);
+
+export function computeEmployerApprovalsAwaiting(
+  submissions: SubmissionSnapshot[],
+): SubmissionSnapshot[] {
+  return submissions.filter((s) => EMPLOYER_AWAITING_STATUSES.has(s.status));
 }
 
 export function formatDurationHours(hours: number | null): string {

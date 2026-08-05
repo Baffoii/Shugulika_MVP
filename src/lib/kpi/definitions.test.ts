@@ -18,6 +18,20 @@ import {
   computeRejectionBreakdown,
   compareHigherIsBetter,
   compareLowerIsBetter,
+  awaitingFirstReviewAppIds,
+  computeStalledApplications,
+  computeStalledByStage,
+  computeEmployerResponseTime,
+  computeCandidateResponseTime,
+  computeWithdrawalReasonBreakdown,
+  computeInterviewRescheduleCounts,
+  computeUnansweredStaffNotifications,
+  computeOverdueCandidateUpdates,
+  computeMissingScreeningNotes,
+  type ConsentResponseSnapshot,
+  type InterviewScheduleChange,
+  type InterviewSnapshot,
+  type StaffNotificationSnapshot,
   type StageHistoryEvent,
   type ApplicationSnapshot,
   type AssessmentSnapshot,
@@ -467,5 +481,307 @@ describe("multiple applications per job", () => {
     const m = computePlacementRate(history, placements, window, 70, "rec-1");
     expect(m.denominator).toBe(2);
     expect(m.numerator).toBe(1);
+  });
+});
+
+// ---- Workstream A: attention queue + response time + CX guardrail metrics ----
+
+describe("awaiting first review + stalled drill-downs", () => {
+  it("returns the exact application ids behind each count", () => {
+    const history = [
+      hist({ applicationId: "a1", toStage: "testing", createdAt: "2026-07-10T00:00:00.000Z" }),
+    ];
+    const apps = [
+      app({ id: "a1" }),
+      app({ id: "a2" }), // assigned, never reviewed
+      app({ id: "a3", withdrawnAt: "2026-07-05T00:00:00.000Z" }),
+      app({ id: "a4", currentStage: "hired" }),
+      app({ id: "a5", assignedRecruiterId: "rec-2" }), // someone else's
+    ];
+
+    expect(awaitingFirstReviewAppIds(apps, history, "rec-1")).toEqual(["a2"]);
+
+    const ttfr = computeTimeToFirstReview(apps, history, window, "rec-1", 48);
+    expect(ttfr.awaitingAppIds).toEqual(["a2"]);
+    expect(ttfr.reviewedAppIds).toEqual(["a1"]);
+    expect(ttfr.awaitingFirstReview).toBe(1);
+  });
+
+  it("computeStalledApplications exposes ids, thresholds, and a due date", () => {
+    const now = "2026-07-27T12:00:00.000Z";
+    const apps = [
+      app({ id: "s1", currentStage: "cv_review" }),
+      app({ id: "s2", currentStage: "cv_review" }),
+    ];
+    const history = [
+      // s1 entered cv_review 100h ago (threshold 72h) → stalled
+      hist({
+        applicationId: "s1",
+        toStage: "cv_review",
+        fromStage: null,
+        createdAt: "2026-07-23T08:00:00.000Z",
+      }),
+      // s2 entered 2h ago → fine
+      hist({
+        applicationId: "s2",
+        toStage: "cv_review",
+        fromStage: null,
+        createdAt: "2026-07-27T10:00:00.000Z",
+      }),
+    ];
+
+    const stalled = computeStalledApplications(apps, history, { cv_review: 72 }, now, "rec-1");
+    expect(stalled.map((s) => s.applicationId)).toEqual(["s1"]);
+    expect(stalled[0]!.thresholdHours).toBe(72);
+    expect(stalled[0]!.dueAt).toBe("2026-07-26T08:00:00.000Z");
+
+    const byStage = computeStalledByStage(apps, history, { cv_review: 72 }, now, "rec-1");
+    expect(byStage.total).toBe(1);
+    expect(byStage.appIds).toEqual(["s1"]);
+    // The count and the drill-down can never disagree.
+    expect(byStage.total).toBe(byStage.appIds.length);
+  });
+});
+
+describe("employer response time", () => {
+  const base = {
+    applicationId: "a1",
+    updatedAt: "2026-07-12T00:00:00.000Z",
+    submittingOrgId: "org-1",
+  };
+
+  it("measures submitted_at → responded_at and reports overdue separately", () => {
+    const submissions: SubmissionSnapshot[] = [
+      {
+        ...base,
+        id: "s1",
+        status: "shortlisted",
+        submittedAt: "2026-07-10T00:00:00.000Z",
+        respondedAt: "2026-07-12T00:00:00.000Z", // 48h
+        responseDueAt: "2026-07-15T00:00:00.000Z",
+      },
+      {
+        ...base,
+        id: "s2",
+        status: "submitted",
+        submittedAt: "2026-07-01T00:00:00.000Z",
+        respondedAt: null,
+        responseDueAt: "2026-07-06T00:00:00.000Z", // past now → overdue
+      },
+      {
+        ...base,
+        id: "s3",
+        status: "submitted",
+        submittedAt: "2026-07-26T00:00:00.000Z",
+        respondedAt: null,
+        responseDueAt: "2026-08-01T00:00:00.000Z", // not yet due
+      },
+    ];
+
+    const r = computeEmployerResponseTime(submissions, window, 120, "2026-07-27T12:00:00.000Z");
+    expect(r.medianHours).toBe(48);
+    expect(r.sampleSize).toBe(1);
+    expect(r.overdue.map((o) => o.id)).toEqual(["s2"]);
+    expect(r.awaiting.map((o) => o.id)).toEqual(["s3"]);
+    expect(r.status).toBe("on_target");
+  });
+
+  it("is unsupported (never 0) when no submission records submitted_at", () => {
+    const submissions: SubmissionSnapshot[] = [
+      { ...base, id: "s1", status: "shortlisted", submittedAt: null, respondedAt: null },
+    ];
+    const r = computeEmployerResponseTime(submissions, window, 120, "2026-07-27T12:00:00.000Z");
+    expect(r.value).toBeNull();
+    expect(r.status).toBe("insufficient_data");
+    expect(r.unavailableReason).toContain("submitted_at");
+  });
+
+  it("excludes historic decided packs that lack responded_at from awaiting", () => {
+    const submissions: SubmissionSnapshot[] = [
+      {
+        ...base,
+        id: "s-old",
+        status: "shortlisted",
+        submittedAt: "2026-06-01T00:00:00.000Z",
+        respondedAt: null, // pre-stamp decision — must not look "still waiting"
+        responseDueAt: null,
+      },
+      {
+        ...base,
+        id: "s-open",
+        status: "submitted",
+        submittedAt: "2026-07-26T00:00:00.000Z",
+        respondedAt: null,
+        responseDueAt: "2026-08-01T00:00:00.000Z",
+      },
+    ];
+    const r = computeEmployerResponseTime(submissions, window, 120, "2026-07-27T12:00:00.000Z");
+    expect(r.awaiting.map((o) => o.id)).toEqual(["s-open"]);
+    expect(r.overdue).toEqual([]);
+    expect(r.medianHours).toBeNull();
+  });
+});
+
+describe("candidate response time", () => {
+  it("covers the interview-invitation and consent paths, and stays separate from employer time", () => {
+    const interviews: InterviewSnapshot[] = [
+      {
+        id: "i1",
+        applicationId: "a1",
+        status: "confirmed",
+        scheduledAt: null,
+        createdAt: "2026-07-10T00:00:00.000Z",
+        candidateResponseDueAt: "2026-07-13T00:00:00.000Z",
+        candidateRespondedAt: "2026-07-10T12:00:00.000Z", // 12h
+      },
+      {
+        id: "i2",
+        applicationId: "a2",
+        status: "requested",
+        scheduledAt: null,
+        createdAt: "2026-07-01T00:00:00.000Z",
+        candidateResponseDueAt: "2026-07-04T00:00:00.000Z", // overdue
+        candidateRespondedAt: null,
+      },
+    ];
+    const consents: ConsentResponseSnapshot[] = [
+      {
+        applicationId: "a3",
+        requestedAt: "2026-07-10T00:00:00.000Z",
+        respondedAt: "2026-07-11T00:00:00.000Z", // 24h
+      },
+      // Pre-migration row: no request moment recorded → excluded, not guessed.
+      { applicationId: "a4", requestedAt: null, respondedAt: "2026-07-11T00:00:00.000Z" },
+    ];
+
+    const r = computeCandidateResponseTime(
+      interviews,
+      consents,
+      window,
+      72,
+      "2026-07-27T12:00:00.000Z",
+    );
+    expect(r.hours.sort((a, b) => a - b)).toEqual([12, 24]);
+    expect(r.medianHours).toBe(18);
+    expect(r.sampleSize).toBe(2);
+    expect(r.overdue.map((o) => o.id)).toEqual(["interview:i2"]);
+    expect(r.respondedIds).not.toContain("consent:a4");
+  });
+
+  it("is unsupported when no request moment was ever recorded", () => {
+    const interviews: InterviewSnapshot[] = [
+      { id: "i1", applicationId: "a1", status: "requested", scheduledAt: null },
+    ];
+    const r = computeCandidateResponseTime(interviews, [], window, 72, "2026-07-27T12:00:00.000Z");
+    expect(r.value).toBeNull();
+    expect(r.unavailableReason).toContain("candidate_response_due_at");
+  });
+});
+
+describe("CX guardrails", () => {
+  it("breaks withdrawals down by reason and flags that capture is unsupported", () => {
+    const apps = [
+      app({ id: "w1", withdrawnAt: "2026-07-10T00:00:00.000Z" }),
+      app({ id: "w2", withdrawnAt: "2026-07-11T00:00:00.000Z" }),
+      app({ id: "w3", withdrawnAt: "2026-01-01T00:00:00.000Z" }), // outside window
+      app({ id: "w4", withdrawnAt: "2026-07-11T00:00:00.000Z", assignedRecruiterId: "rec-2" }),
+    ];
+    const noReasons = computeWithdrawalReasonBreakdown(apps, [], window, "rec-1");
+    expect(noReasons.total).toBe(2);
+    expect(noReasons.unspecified).toBe(2);
+    expect(noReasons.appIds).toEqual(["w1", "w2"]);
+    expect(noReasons.reasonCaptureSupported).toBe(false);
+    expect(noReasons.note).toContain("No withdrawal reason");
+
+    const withReason = computeWithdrawalReasonBreakdown(
+      apps,
+      [
+        hist({
+          applicationId: "w1",
+          toStage: "withdrawn",
+          createdAt: "2026-07-10T00:00:00.000Z",
+          reason: "Took another offer",
+        }),
+      ],
+      window,
+      "rec-1",
+    );
+    expect(withReason.byReason).toEqual({ "Took another offer": 1 });
+    expect(withReason.unspecified).toBe(1);
+    expect(withReason.reasonCaptureSupported).toBe(true);
+  });
+
+  it("counts interview reschedules and repeat offenders", () => {
+    const changes: InterviewScheduleChange[] = [
+      { applicationId: "a1", changeKind: "scheduled", createdAt: "2026-07-05T00:00:00.000Z" },
+      { applicationId: "a1", changeKind: "rescheduled", createdAt: "2026-07-06T00:00:00.000Z" },
+      { applicationId: "a1", changeKind: "rescheduled", createdAt: "2026-07-07T00:00:00.000Z" },
+      { applicationId: "a2", changeKind: "rescheduled", createdAt: "2026-07-08T00:00:00.000Z" },
+      { applicationId: "a3", changeKind: "cancelled", createdAt: "2026-07-09T00:00:00.000Z" },
+      { applicationId: "a9", changeKind: "rescheduled", createdAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    const r = computeInterviewRescheduleCounts(changes, window);
+    expect(r.rescheduled).toBe(3);
+    expect(r.cancelled).toBe(1);
+    expect(r.scheduled).toBe(1);
+    expect(r.repeatOffenderAppIds).toEqual(["a1"]);
+    expect(r.appIds).not.toContain("a9");
+    expect(r.historyStartsAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("counts only unread notifications past the grace window", () => {
+    const now = "2026-07-27T12:00:00.000Z";
+    const notifications: StaffNotificationSnapshot[] = [
+      {
+        id: "n1",
+        applicationId: "a1",
+        category: "stage",
+        createdAt: "2026-07-20T00:00:00.000Z",
+        readAt: null,
+      },
+      {
+        id: "n2",
+        applicationId: "a2",
+        category: "stage",
+        createdAt: "2026-07-27T06:00:00.000Z",
+        readAt: null,
+      },
+      {
+        id: "n3",
+        applicationId: "a3",
+        category: "stage",
+        createdAt: "2026-07-10T00:00:00.000Z",
+        readAt: "2026-07-10T01:00:00.000Z",
+      },
+    ];
+    const r = computeUnansweredStaffNotifications(notifications, window, now, 48);
+    expect(r.total).toBe(2);
+    expect(r.overdue).toBe(1);
+    expect(r.appIds).toEqual(["a1"]);
+  });
+
+  it("flags candidate silence beyond the threshold and prefers the last update over the stage change", () => {
+    const now = "2026-07-27T12:00:00.000Z";
+    const apps = [app({ id: "a1" }), app({ id: "a2" }), app({ id: "a3", currentStage: "hired" })];
+    const history = [
+      hist({ applicationId: "a1", toStage: "testing", createdAt: "2026-07-01T00:00:00.000Z" }),
+      hist({ applicationId: "a2", toStage: "testing", createdAt: "2026-07-01T00:00:00.000Z" }),
+    ];
+    const lastUpdate = new Map([["a2", "2026-07-26T00:00:00.000Z"]]);
+
+    const overdue = computeOverdueCandidateUpdates(apps, history, lastUpdate, now, 168, "rec-1");
+    expect(overdue.map((o) => o.applicationId)).toEqual(["a1"]);
+    expect(overdue[0]!.lastUpdateAt).toBeNull();
+  });
+
+  it("finds cv_review applications blocked by the screening-notes gate", () => {
+    const apps = [
+      app({ id: "a1", currentStage: "cv_review" }),
+      app({ id: "a2", currentStage: "cv_review" }),
+      app({ id: "a3", currentStage: "testing" }),
+      app({ id: "a4", currentStage: "cv_review", assignedRecruiterId: "rec-2" }),
+      app({ id: "a5", currentStage: "cv_review", withdrawnAt: "2026-07-01T00:00:00.000Z" }),
+    ];
+    expect(computeMissingScreeningNotes(apps, new Set(["a2"]), "rec-1")).toEqual(["a1"]);
   });
 });

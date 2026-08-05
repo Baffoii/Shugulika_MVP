@@ -32,6 +32,7 @@ export function KPICard({
   hint,
   sampleLabel,
   definition,
+  children,
 }: {
   label: string;
   value: string | number;
@@ -41,6 +42,8 @@ export function KPICard({
   hint?: string;
   sampleLabel?: string;
   definition?: string;
+  /** Drill-down affordance rendered at the foot of the card. */
+  children?: React.ReactNode;
 }) {
   const tone = statusTone[status];
 
@@ -75,6 +78,7 @@ export function KPICard({
           {definition}
         </p>
       ) : null}
+      {children}
     </Card>
   );
 }

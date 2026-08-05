@@ -2,44 +2,31 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { requirePortal } from "@/lib/auth";
 import {
-  getRecruiterKPIs,
-  getRecruiterAssignedRoles,
-  getRecruiterCompanies,
   getMyRecruiterMeta,
+  getRecruiterAttentionDashboard,
   getTimeToFillTrend,
   getAppsReviewedTrend,
-  type KpiPeriod,
   type KpiScope,
 } from "@/lib/data/recruiter-kpis";
+import { parseKpiFilters } from "@/lib/kpi/filters";
 import { RECRUITER_LEVEL_LABELS } from "@/lib/rbac";
-import { Alert, PageHeader, Skeleton } from "@/components/ui/primitives";
+import { Alert, PageHeader, Skeleton, Card } from "@/components/ui/primitives";
 import { KPICard, metricDisplay, sampleLine } from "./components/KPICard";
 import { TimeToFillChart } from "./components/TimeToFillChart";
 import { AppsReviewedChart } from "./components/AppsReviewedChart";
 import { RoleAssignmentTable } from "./components/RoleAssignmentTable";
 import { KpiFilters } from "./components/KpiFilters";
-import { SlaQueuePanel } from "./components/SlaQueuePanel";
 import { WorkloadByStage } from "./components/WorkloadByStage";
 import { RejectionBreakdown } from "./components/RejectionBreakdown";
 import { StageFunnel } from "./components/StageFunnel";
-import { Card } from "@/components/ui/primitives";
+import { AttentionStrip } from "./components/AttentionStrip";
+import { AttentionQueuePanel } from "./components/AttentionQueuePanel";
+import { TargetProgressPanel } from "./components/TargetProgressPanel";
+import { CxGuardrailsPanel } from "./components/CxGuardrailsPanel";
+import { Drilldown } from "./components/Drilldown";
+import { DRILLDOWN_LABELS } from "@/lib/kpi/drilldowns";
 
 export const metadata: Metadata = { title: "My KPIs" };
-
-function parsePeriod(raw: string | string[] | undefined): KpiPeriod {
-  const v = Array.isArray(raw) ? raw[0] : raw;
-  if (v === "week" || v === "7d") return "7d";
-  if (v === "quarter" || v === "90d") return "90d";
-  if (v === "ytd") return "ytd";
-  if (v === "custom") return "custom";
-  if (v === "month" || v === "30d") return "30d";
-  return "30d";
-}
-
-function paramOne(raw: string | string[] | undefined): string | undefined {
-  const v = Array.isArray(raw) ? raw[0] : raw;
-  return v || undefined;
-}
 
 export default async function RecruiterKpisPage({
   searchParams,
@@ -50,85 +37,83 @@ export default async function RecruiterKpisPage({
 }) {
   const ctx = await requirePortal("recruiter");
   const params = await Promise.resolve(searchParams);
-  const range = parsePeriod(params.range);
-  const roleId = paramOne(params.role);
-  const companyId = paramOne(params.company);
-  const from = paramOne(params.from);
-  const to = paramOne(params.to);
-
-  const scope: KpiScope = {
-    jobRoleId: roleId,
-    employerOrgId: companyId,
-  };
-
-  const customWindow =
-    range === "custom" && from && to
-      ? {
-          since: new Date(`${from}T00:00:00.000Z`).toISOString(),
-          until: new Date(`${to}T23:59:59.999Z`).toISOString(),
-        }
-      : undefined;
+  // Filters come from the URL; ownership and organization come from the
+  // session. A hand-edited query string can narrow this view, never widen it.
+  const requested = parseKpiFilters(params);
 
   const meta = await getMyRecruiterMeta(ctx.userId);
-  const [roles, companies] = await Promise.all([
-    getRecruiterAssignedRoles(ctx.userId),
-    getRecruiterCompanies(ctx.userId),
-  ]);
+  const dash = await getRecruiterAttentionDashboard({
+    recruiterId: ctx.userId,
+    filters: requested,
+    recruiterLevel: meta.level,
+    organizationId: meta.organizationId,
+  });
 
-  const selectedCompany = companies.find((c) => c.id === companyId);
-
-  const [kpis, ttfTrend, appsTrend] = await Promise.all([
-    getRecruiterKPIs(
-      ctx.userId,
-      range,
-      scope,
-      meta.level,
-      meta.organizationId ?? undefined,
-      customWindow,
-    ),
+  const { filters, kpis, queue, options, drilldowns } = dash;
+  const t = kpis.targets;
+  const scope: KpiScope = {
+    jobRoleId: filters.roleId,
+    employerOrgId: filters.employerOrgId,
+  };
+  const [ttfTrend, appsTrend] = await Promise.all([
     getTimeToFillTrend(ctx.userId, scope),
     getAppsReviewedTrend(ctx.userId, scope),
   ]);
 
-  const t = kpis.targets;
+  const selectedEmployer = options.employers.find((c) => c.id === filters.employerOrgId);
   const scopeBits = [
     meta.name,
     RECRUITER_LEVEL_LABELS[meta.level],
-    selectedCompany?.name,
+    selectedEmployer?.name,
     meta.regionCode,
   ].filter(Boolean);
+
+  const dd = (key: keyof typeof DRILLDOWN_LABELS) => (
+    <Drilldown label={DRILLDOWN_LABELS[key]} applicationIds={drilldowns[key] ?? []} />
+  );
 
   return (
     <div>
       <PageHeader
         title="My KPIs"
-        description={`${scopeBits.join(" · ")} · targets from ${t.source}${
-          selectedCompany ? " — company-scoped" : ""
-        }`}
+        description={`${scopeBits.join(" · ")} · ${dash.window.label} · targets from ${t.source}`}
       />
 
       <Suspense fallback={<Skeleton className="mb-6 h-10 w-full max-w-xl" />}>
         <div className="mb-6">
           <KpiFilters
-            range={range}
-            roleId={roleId}
-            roles={roles}
-            companyId={companyId}
-            companies={companies}
+            filters={filters}
+            roles={options.roles}
+            companies={options.employers}
+            jobs={options.jobs}
+            stages={options.stages}
           />
         </div>
       </Suspense>
 
-      {!companyId && companies.length > 1 ? (
-        <div className="mb-4">
-          <Alert tone="info" title="Tip: filter by company">
-            Different employers can have very different volumes. Pick a company to avoid mixing
-            pipelines.
-          </Alert>
-        </div>
-      ) : null}
+      {/* Attention first: what needs doing today, before any trend chart. */}
+      <div className="mb-6">
+        <AttentionStrip
+          countsByKind={queue.countsByKind}
+          overdueCountsByKind={queue.overdueCountsByKind}
+          totalOverdue={queue.totalOverdue}
+        />
+      </div>
 
-      {roles.length === 0 ? (
+      <div className="mb-6 grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <AttentionQueuePanel queue={queue} viewerId={ctx.userId} selectedKind={filters.kind} />
+        </div>
+        <TargetProgressPanel
+          rows={dash.progress}
+          targetVersion={dash.targetVersion}
+          targetVersionLabel={dash.targetVersionLabel}
+          periodElapsedPct={dash.periodElapsedPct}
+          periodLabel={dash.window.label}
+        />
+      </div>
+
+      {options.roles.length === 0 ? (
         <div className="mb-4">
           <Alert tone="warn" title="No sourcing roles assigned">
             KPIs still use applications assigned to you. Ask your franchise admin to assign job
@@ -148,14 +133,18 @@ export default async function RecruiterKpisPage({
               : "Not enough data"
           }
           definition="Distinct applications with a meaningful review action by you in the period (advance, reject, assessment/interview review)."
-        />
+        >
+          {dd("applications_reviewed")}
+        </KPICard>
         <KPICard
           label="Active workload"
           value={metricDisplay(kpis.activeWorkload.total)}
           targetLabel={`≤ ${t.maxActiveWorkload}`}
           status={kpis.activeWorkload.status}
           definition="Assigned applications that are not terminal, withdrawn, or on a closed/cancelled job."
-        />
+        >
+          {dd("active_workload")}
+        </KPICard>
         <KPICard
           label="Time to first review"
           value={kpis.timeToFirstReview.display}
@@ -167,7 +156,10 @@ export default async function RecruiterKpisPage({
               : `Awaiting first review: ${kpis.timeToFirstReview.awaitingFirstReview}`
           }
           definition="Median hours from application created_at to your first meaningful review. Excludes never-reviewed apps from the median."
-        />
+        >
+          {dd("time_to_first_review")}
+          {dd("awaiting_first_review")}
+        </KPICard>
         <KPICard
           label="Time to client submission"
           value={kpis.timeToClientSubmission.display}
@@ -179,7 +171,9 @@ export default async function RecruiterKpisPage({
             "reached CS",
           )}
           definition="Median days from application created_at to first client_submission stage entry (actor-attributed)."
-        />
+        >
+          {dd("time_to_client_submission")}
+        </KPICard>
         <KPICard
           label="Time to fill"
           value={kpis.timeToFill.display}
@@ -191,7 +185,9 @@ export default async function RecruiterKpisPage({
           }
           hint="jobs.published_at → placements.created_at"
           definition="Median days from job published_at to placement created_at. Unfilled jobs are excluded."
-        />
+        >
+          {dd("time_to_fill")}
+        </KPICard>
         <KPICard
           label="CV review conversion"
           value={metricDisplay(kpis.cvReviewConversion.value, { pct: true })}
@@ -201,7 +197,10 @@ export default async function RecruiterKpisPage({
             kpis.cvReviewConversion.denominator,
           )}
           definition="% of applications with a completed CV review that later reached testing or beyond."
-        />
+        >
+          {dd("cv_review_conversion")}
+          {dd("cv_review_conversion_advanced")}
+        </KPICard>
         <KPICard
           label="Testing pass rate"
           value={metricDisplay(kpis.testingPassRate.value, { pct: true })}
@@ -211,8 +210,11 @@ export default async function RecruiterKpisPage({
             kpis.testingPassRate.denominator,
             "graded",
           )}
-          definition="Graded assessments meeting pass_threshold. Excludes human-review-pending results."
-        />
+          definition="Graded assessments meeting pass_threshold. Excludes human-review-pending results. Advisory only — never an automatic reject."
+        >
+          {dd("testing_pass_rate")}
+          {dd("testing_pass_rate_passed")}
+        </KPICard>
         <KPICard
           label="Interview conversion"
           value={metricDisplay(kpis.interviewConversion.value, { pct: true })}
@@ -223,7 +225,10 @@ export default async function RecruiterKpisPage({
             kpis.interviewConversion.denominator,
           )}
           definition="% with completed interview review that later reached client submission, offer, or hired."
-        />
+        >
+          {dd("interview_conversion")}
+          {dd("interview_conversion_converted")}
+        </KPICard>
         <KPICard
           label="Client submission acceptance"
           value={metricDisplay(kpis.clientSubmissionAcceptance.value, { pct: true })}
@@ -235,7 +240,10 @@ export default async function RecruiterKpisPage({
             "decided",
           )}
           definition="Accepted = shortlisted, interview_requested, or offered."
-        />
+        >
+          {dd("client_submission_acceptance")}
+          {dd("client_submission_acceptance_accepted")}
+        </KPICard>
         <KPICard
           label="Offer → hire"
           value={metricDisplay(kpis.offerToHire.value, { pct: true })}
@@ -246,7 +254,9 @@ export default async function RecruiterKpisPage({
             sampleLine(kpis.offerToHire.numerator, kpis.offerToHire.denominator, "finalized offers")
           }
           definition="Accepted offers with a valid placement ÷ finalized offers. Never inferred from Hired stage alone."
-        />
+        >
+          {dd("offer_to_hire")}
+        </KPICard>
         <KPICard
           label="Placement rate"
           value={metricDisplay(kpis.placementRate.value, { pct: true })}
@@ -258,7 +268,10 @@ export default async function RecruiterKpisPage({
             "reached CS",
           )}
           definition="% of applications that reached client submission and later have a valid placement."
-        />
+        >
+          {dd("placement_rate")}
+          {dd("placement_rate_placed")}
+        </KPICard>
         <KPICard
           label="Withdrawal rate"
           value={metricDisplay(kpis.withdrawalRate.value, { pct: true })}
@@ -269,12 +282,17 @@ export default async function RecruiterKpisPage({
             "withdrawn / assigned",
           )}
           definition="Candidate withdrawals on your assigned applications in the period."
-        />
+        >
+          {dd("withdrawals")}
+        </KPICard>
       </div>
 
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
-        <StageFunnel funnel={kpis.funnel} />
-        <WorkloadByStage byStage={kpis.activeWorkload.byStage} />
+        <CxGuardrailsPanel cx={dash.cx} responseTimes={dash.responseTimes} />
+        <div className="space-y-4">
+          <StageFunnel funnel={kpis.funnel} />
+          <WorkloadByStage byStage={kpis.activeWorkload.byStage} />
+        </div>
       </div>
 
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
@@ -298,27 +316,23 @@ export default async function RecruiterKpisPage({
             </ul>
           )}
           <p className="mt-3 text-xs text-ink-subtle">
-            Stalled vs threshold:{" "}
-            {Object.entries(
-              Object.fromEntries(Object.entries(kpis.sla).filter(([k]) => k === "stalledInStage")),
-            ).length >= 0
-              ? kpis.sla.stalledInStage
-              : 0}{" "}
-            applications (target max {t.maxStalledApplicationCount}).
+            Stalled vs threshold: {queue.countsByKind.stalled_in_stage} applications (target max{" "}
+            {t.maxStalledApplicationCount}).
           </p>
+          <Drilldown
+            label="Applications stalled past their stage threshold"
+            applicationIds={drilldowns.stalled_in_stage ?? []}
+          />
         </Card>
         <RejectionBreakdown rejections={kpis.rejections} />
       </div>
 
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
-        <SlaQueuePanel sla={kpis.sla} />
-        <div className="space-y-4">
-          <TimeToFillChart data={ttfTrend} />
-          <AppsReviewedChart data={appsTrend} />
-        </div>
+        <TimeToFillChart data={ttfTrend} />
+        <AppsReviewedChart data={appsTrend} />
       </div>
 
-      <RoleAssignmentTable roles={roles} />
+      <RoleAssignmentTable roles={options.roles} />
     </div>
   );
 }

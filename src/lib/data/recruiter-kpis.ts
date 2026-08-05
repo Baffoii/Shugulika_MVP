@@ -61,9 +61,76 @@ import {
   firstReviewByApp,
   hoursBetween,
   median,
+  computeEmployerResponseTime,
+  computeCandidateResponseTime,
+  computeWithdrawalReasonBreakdown,
+  computeInterviewRescheduleCounts,
+  computeUnansweredStaffNotifications,
+  computeOverdueCandidateUpdates,
+  type ConsentResponseSnapshot,
+  type InterviewScheduleChange,
+  type OverdueCandidateUpdate,
+  type RescheduleCounts,
+  type ResponseTimeResult,
+  type StaffNotificationSnapshot,
+  type UnansweredNotifications,
+  type WithdrawalReasonBreakdown,
 } from "@/lib/kpi/definitions";
+import {
+  buildAttentionQueue,
+  restrictToScope,
+  scopedApplicationIds,
+  ATTENTION_KINDS,
+  type AttentionKind,
+  type AttentionQueue,
+} from "@/lib/kpi/attention";
+import { buildDrilldowns, restrictDrilldowns } from "@/lib/kpi/drilldowns";
+import {
+  constrainFiltersToOptions,
+  grainToWindow,
+  targetResolutionInstant,
+  type GrainWindow,
+  type KpiFilterState,
+} from "@/lib/kpi/filters";
+import {
+  describeTargetVersion,
+  periodElapsedPct,
+  resolveTargetsAt,
+  targetProgress,
+  type KpiTargetMetrics,
+  type ResolvedTargets,
+  type TargetVersionRecord,
+} from "@/lib/kpi/target-versions";
+import {
+  lastCandidateUpdateByApp,
+  toConsentSnapshot,
+  toScheduleChange,
+  toStaffNotification,
+  toTargetVersion,
+  type ApplicationConsentColumns,
+  type CandidateUpdateStatusRow,
+  type InterviewResponseColumns,
+  type KpiExtensionDatabase,
+  type KpiInterviewScheduleEventRow,
+  type RecruiterKpiTargetVersionRow,
+  type SubmissionResponseColumns,
+} from "@/lib/kpi/db-extensions";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type { KpiPeriod, KpiStatus, MetricResult, TargetSource };
+export type { KpiFilterState, GrainWindow } from "@/lib/kpi/filters";
+export type { AttentionItem, AttentionKind, AttentionQueue, NextAction } from "@/lib/kpi/attention";
+export type { DrilldownKey } from "@/lib/kpi/drilldowns";
+export type { ResolvedTargets } from "@/lib/kpi/target-versions";
+
+/**
+ * Typed handle for the tables/columns added by the 20260805* migrations.
+ * `database.types.ts` is generated and out of scope for this workstream, so the
+ * schema fragment lives in `@/lib/kpi/db-extensions` instead.
+ */
+function extClient(): SupabaseClient<KpiExtensionDatabase> {
+  return createClient() as unknown as SupabaseClient<KpiExtensionDatabase>;
+}
 /** @deprecated Use KpiPeriod — kept for existing filter components during migration. */
 export type KpiDateRange = "week" | "month" | "quarter" | KpiPeriod;
 
@@ -80,20 +147,12 @@ export interface KpiCompany {
   applicationCount: number;
 }
 
-export interface KpiTargets {
-  maxTimeToFirstReviewHours: number;
-  maxTimeToClientSubmissionDays: number;
-  timeToFillDays: number;
-  placementRatePct: number;
-  interviewConversionPct: number;
-  clientSubmissionAcceptancePct: number;
-  offerToHireRatioPct: number;
-  maxActiveWorkload: number;
-  maxStalledApplicationCount: number;
-  /** Legacy display field — apps reviewed is informational, not a hard target in MVP cards. */
-  appsReviewedPerWeek: number;
-  source: TargetSource;
-}
+/**
+ * Effective targets for a period. The metric shape lives in
+ * `@/lib/kpi/target-versions` so the versioned resolver and the loaders agree on
+ * one definition.
+ */
+export type KpiTargets = KpiTargetMetrics & { source: TargetSource };
 
 export interface AssignedRole {
   roleId: string;
@@ -133,7 +192,12 @@ export interface RecruiterKPIs {
     byStage: Record<string, number>;
     status: KpiStatus;
   };
-  timeToFirstReview: MetricResult & { awaitingFirstReview: number; display: string };
+  timeToFirstReview: MetricResult & {
+    awaitingFirstReview: number;
+    awaitingAppIds: string[];
+    reviewedAppIds: string[];
+    display: string;
+  };
   timeInStage: Record<string, MetricResult>;
   timeToClientSubmission: MetricResult & { display: string };
   timeToFill: MetricResult & { display: string };
@@ -150,6 +214,11 @@ export interface RecruiterKPIs {
   targets: KpiTargets;
   period: KpiPeriod;
   window: DateWindow;
+  /** Version of `recruiter_kpi_targets` these numbers were graded against. */
+  targetVersionId: string | null;
+  targetSource: TargetSource;
+  /** Full provenance of the target used — see `describeTargetVersion`. */
+  targetVersion: ResolvedTargets;
 }
 
 export interface RecruiterComparisonRow {
@@ -302,7 +371,7 @@ function rowToTargets(r: RecruiterKpiTargetRow, source: TargetSource): KpiTarget
   };
 }
 
-const PLATFORM_DEFAULTS: Record<RecruiterLevel, Omit<KpiTargets, "source">> = {
+const PLATFORM_DEFAULTS: Record<RecruiterLevel, KpiTargetMetrics> = {
   junior: {
     maxTimeToFirstReviewHours: 72,
     maxTimeToClientSubmissionDays: 21,
@@ -384,6 +453,82 @@ export async function getKPITargets(
 
   if (globalRow) return cacheSet(key, rowToTargets(globalRow as RecruiterKpiTargetRow, "platform"));
   return cacheSet(key, fallback);
+}
+
+/**
+ * Every target snapshot for a level — platform rows plus (when scoped) the
+ * caller's own org rows. RLS already restricts which org rows are visible.
+ */
+async function loadTargetVersions(
+  level: RecruiterLevel,
+  orgId?: string,
+): Promise<TargetVersionRecord[]> {
+  const key = `targetVersions:${level}:${orgId ?? "global"}`;
+  const cached = cacheGet<TargetVersionRecord[]>(key);
+  if (cached) return cached;
+
+  const { data, error } = await extClient()
+    .from("recruiter_kpi_target_versions")
+    .select("*")
+    .eq("recruiter_level", level)
+    .order("effective_from", { ascending: true });
+
+  if (error) {
+    console.error("[loadTargetVersions]", error.message);
+    return [];
+  }
+
+  const fallback = PLATFORM_DEFAULTS[level];
+  const rows = ((data as RecruiterKpiTargetVersionRow[] | null) ?? []).filter(
+    (r) => r.organization_id == null || r.organization_id === orgId,
+  );
+  return cacheSet(
+    key,
+    rows.map((r) => toTargetVersion(r, fallback)),
+  );
+}
+
+/**
+ * Targets in force at `atIso`. For a closed period that is the period end, so
+ * recomputing yesterday's dashboard after today's target change still uses
+ * yesterday's target. Falls back to the current target row (then to in-code
+ * defaults) when no version history exists yet.
+ */
+export async function getKPITargetsAt(
+  recruiterLevel: RecruiterLevel,
+  orgId: string | undefined,
+  atIso: string,
+): Promise<ResolvedTargets> {
+  const level = normalizeRecruiterLevel(recruiterLevel);
+  const versions = await loadTargetVersions(level, orgId);
+  const resolved = resolveTargetsAt({
+    versions,
+    recruiterLevel: level,
+    organizationId: orgId ?? null,
+    atIso,
+    platformDefaults: PLATFORM_DEFAULTS[level],
+  });
+
+  if (resolved.basis !== "platform_defaults") return resolved;
+
+  // No snapshots at all (database predates the versioning migration): use the
+  // live row so the dashboard stays correct, and say so through `basis`.
+  const current = await getKPITargets(level, orgId);
+  const { source, ...metrics } = current;
+  return {
+    metrics,
+    source,
+    basis: "current_row",
+    targetVersionId: null,
+    targetId: null,
+    effectiveFrom: null,
+    supersededAt: null,
+    resolvedAt: atIso,
+  };
+}
+
+export function resolvedToTargets(resolved: ResolvedTargets): KpiTargets {
+  return { ...resolved.metrics, source: resolved.source };
 }
 
 export async function listKpiTargets(orgId?: string | null): Promise<RecruiterKpiTargetRow[]> {
@@ -617,12 +762,13 @@ async function loadRecruiterContext(
 function buildKpisFromContext(
   recruiterId: string,
   ctx: LoadedContext,
-  targets: KpiTargets,
+  resolvedTargets: ResolvedTargets,
   thresholds: Record<string, number>,
   period: KpiPeriod,
   window: DateWindow,
   nowIso: string,
 ): RecruiterKPIs {
+  const targets = resolvedToTargets(resolvedTargets);
   const apps = ctx.apps.map(toAppSnap);
   const history = ctx.history.map(toHistSnap);
   const assessments: AssessmentSnapshot[] = ctx.assessments.map((a) => ({
@@ -800,6 +946,9 @@ function buildKpisFromContext(
     targets,
     period,
     window,
+    targetVersionId: resolvedTargets.targetVersionId,
+    targetSource: resolvedTargets.source,
+    targetVersion: resolvedTargets,
   };
 }
 
@@ -813,12 +962,19 @@ export async function getRecruiterKPIs(
 ): Promise<RecruiterKPIs> {
   const period = periodFromLegacy(dateRange);
   const window = periodToWindow(period, new Date(), customWindow);
-  const key = `kpis:${recruiterId}:${period}:${scope.jobRoleId ?? ""}:${scope.employerOrgId ?? ""}:${orgId ?? ""}`;
+  const key = `kpis:${recruiterId}:${period}:${window.since}:${window.until}:${scope.jobRoleId ?? ""}:${scope.employerOrgId ?? ""}:${orgId ?? ""}`;
   const cached = cacheGet<RecruiterKPIs>(key);
   if (cached) return cached;
 
-  const [targets, thresholds, ctx] = await Promise.all([
-    getKPITargets(recruiterLevel, orgId),
+  const nowIso = new Date().toISOString();
+  // Grade against the target in force at the period end, so recomputing a
+  // closed period stays stable after the target changes. `until` is exclusive,
+  // so a closed period resolves at its last instant, not at `until` itself.
+  const resolveAt =
+    window.until <= nowIso ? new Date(new Date(window.until).getTime() - 1).toISOString() : nowIso;
+
+  const [resolvedTargets, thresholds, ctx] = await Promise.all([
+    getKPITargetsAt(recruiterLevel, orgId, resolveAt),
     loadStageThresholds(orgId),
     loadRecruiterContext(recruiterId, window, scope),
   ]);
@@ -826,11 +982,11 @@ export async function getRecruiterKPIs(
   const result = buildKpisFromContext(
     recruiterId,
     ctx,
-    targets,
+    resolvedTargets,
     thresholds,
     period,
     window,
-    new Date().toISOString(),
+    nowIso,
   );
   return cacheSet(key, result);
 }
@@ -1584,3 +1740,621 @@ export async function revokeRoleFromRecruiter(params: {
 }
 
 export { RECRUITER_LEVELS, formatDurationHours };
+
+// =============================================================================
+// Attention-first recruiter dashboard
+// =============================================================================
+
+export interface KpiJobOption {
+  id: string;
+  title: string;
+  employerOrgId: string | null;
+  applicationCount: number;
+}
+
+export interface KpiStageOption {
+  key: string;
+  count: number;
+}
+
+export interface RecruiterKpiFilterOptions {
+  roles: AssignedRole[];
+  employers: KpiCompany[];
+  jobs: KpiJobOption[];
+  stages: KpiStageOption[];
+}
+
+export interface TargetProgressRow {
+  key: string;
+  label: string;
+  /** Null when the metric has no data in the period. */
+  achieved: number | null;
+  target: number;
+  /** How much is still needed to hit the target (0 when met or not countable). */
+  remaining: number;
+  progressPct: number | null;
+  direction: "higher_is_better" | "lower_is_better" | "max_allowed";
+  status: KpiStatus;
+  unit: string;
+}
+
+export interface RecruiterCxGuardrails {
+  overdueCandidateUpdates: OverdueCandidateUpdate[];
+  withdrawals: WithdrawalReasonBreakdown;
+  reschedules: RescheduleCounts;
+  unansweredNotifications: UnansweredNotifications;
+  /** Hours of silence tolerated before an application is flagged. */
+  maxCandidateSilenceHours: number;
+}
+
+export interface RecruiterAttentionDashboard {
+  recruiterId: string;
+  filters: KpiFilterState;
+  window: GrainWindow;
+  generatedAt: string;
+  queue: AttentionQueue;
+  kpis: RecruiterKPIs;
+  targets: KpiTargets;
+  targetVersionId: string | null;
+  targetSource: TargetSource;
+  targetVersion: ResolvedTargets;
+  targetVersionLabel: string;
+  progress: TargetProgressRow[];
+  periodElapsedPct: number;
+  responseTimes: { employer: ResponseTimeResult; candidate: ResponseTimeResult };
+  cx: RecruiterCxGuardrails;
+  /** Drill-down key → application ids, already restricted to the caller's scope. */
+  drilldowns: Record<string, string[]>;
+  options: RecruiterKpiFilterOptions;
+}
+
+/** Silence tolerated before "candidate update overdue" fires. */
+const MAX_CANDIDATE_SILENCE_HOURS = 168;
+/** Employer / candidate response targets until per-org SLA rows say otherwise. */
+const DEFAULT_EMPLOYER_RESPONSE_TARGET_HOURS = 120;
+const DEFAULT_CANDIDATE_RESPONSE_TARGET_HOURS = 72;
+
+type AttentionExtras = {
+  appIdsWithScreeningNotes: Set<string>;
+  jobOwnerByJobOrder: Map<string, string | null>;
+  submissionResponse: Map<string, SubmissionResponseColumns>;
+  interviewResponse: Map<string, InterviewResponseColumns>;
+  consents: ConsentResponseSnapshot[];
+  scheduleChanges: InterviewScheduleChange[];
+  notifications: StaffNotificationSnapshot[];
+  lastCandidateUpdate: Map<string, string>;
+  responseSla: { employerHours: number; candidateHours: number };
+};
+
+const emptyExtras = (): AttentionExtras => ({
+  appIdsWithScreeningNotes: new Set(),
+  jobOwnerByJobOrder: new Map(),
+  submissionResponse: new Map(),
+  interviewResponse: new Map(),
+  consents: [],
+  scheduleChanges: [],
+  notifications: [],
+  lastCandidateUpdate: new Map(),
+  responseSla: {
+    employerHours: DEFAULT_EMPLOYER_RESPONSE_TARGET_HOURS,
+    candidateHours: DEFAULT_CANDIDATE_RESPONSE_TARGET_HOURS,
+  },
+});
+
+/**
+ * Second-pass reads for the attention queue: the columns and tables added by
+ * the 20260805* migrations, plus the screening-note and job-owner lookups.
+ * Split from `loadRecruiterContext` so the trend/company loaders don't pay for
+ * queries they never use.
+ */
+async function loadAttentionExtras(
+  appIds: string[],
+  jobIds: string[],
+  orgId: string | undefined,
+): Promise<AttentionExtras> {
+  const extras = emptyExtras();
+  if (appIds.length === 0) return extras;
+
+  const supabase = createClient();
+  const ext = extClient();
+
+  const [
+    { data: notes },
+    { data: assignments },
+    { data: subCols },
+    { data: intCols },
+    { data: appCols },
+    { data: schedule },
+    { data: sla },
+    { data: updates, error: updatesErr },
+  ] = await Promise.all([
+    supabase
+      .from("recruiter_notes")
+      .select("subject_id,body")
+      .eq("subject_type", "application")
+      .in("subject_id", appIds),
+    jobIds.length
+      ? supabase
+          .from("job_assignments")
+          .select("job_order_id,recruiter_user_id,role")
+          .in("job_order_id", jobIds)
+      : Promise.resolve({ data: [] }),
+    ext
+      .from("employer_submissions")
+      .select("id,application_id,response_due_at,responded_at")
+      .in("application_id", appIds),
+    ext
+      .from("interviews")
+      .select("id,application_id,created_at,candidate_response_due_at,candidate_responded_at")
+      .in("application_id", appIds),
+    ext
+      .from("applications")
+      .select("id,consent_requested_at,consent_responded_at")
+      .in("id", appIds),
+    ext.from("kpi_interview_schedule_events").select("*").in("application_id", appIds),
+    ext.from("kpi_response_sla").select("*"),
+    ext.rpc("kpi_candidate_update_status", { p_application_ids: appIds }),
+  ]);
+
+  for (const n of (notes as { subject_id: string; body: string | null }[] | null) ?? []) {
+    if ((n.body ?? "").trim().length > 0) extras.appIdsWithScreeningNotes.add(n.subject_id);
+  }
+
+  for (const a of (assignments as
+    { job_order_id: string; recruiter_user_id: string; role: string }[] | null) ?? []) {
+    const current = extras.jobOwnerByJobOrder.get(a.job_order_id);
+    if (!current || a.role === "owner") {
+      extras.jobOwnerByJobOrder.set(a.job_order_id, a.recruiter_user_id);
+    }
+  }
+
+  for (const s of (subCols as SubmissionResponseColumns[] | null) ?? []) {
+    extras.submissionResponse.set(s.id, s);
+  }
+  for (const i of (intCols as InterviewResponseColumns[] | null) ?? []) {
+    extras.interviewResponse.set(i.id, i);
+  }
+  extras.consents = ((appCols as ApplicationConsentColumns[] | null) ?? []).map(toConsentSnapshot);
+  extras.scheduleChanges = ((schedule as KpiInterviewScheduleEventRow[] | null) ?? []).map(
+    toScheduleChange,
+  );
+
+  const slaRows =
+    (sla as { scope_key: string; organization_id: string | null; max_hours: number }[] | null) ??
+    [];
+  const slaFor = (scope: string, fallback: number) => {
+    const org = slaRows.find((r) => r.scope_key === scope && r.organization_id === orgId);
+    const global = slaRows.find((r) => r.scope_key === scope && r.organization_id == null);
+    return org?.max_hours ?? global?.max_hours ?? fallback;
+  };
+  extras.responseSla = {
+    employerHours: slaFor("employer_submission", DEFAULT_EMPLOYER_RESPONSE_TARGET_HOURS),
+    candidateHours: slaFor("candidate_interview", DEFAULT_CANDIDATE_RESPONSE_TARGET_HOURS),
+  };
+
+  if (updatesErr) {
+    // Guardrail degrades to "no data" rather than guessing at candidate contact.
+    console.error("[kpi_candidate_update_status]", updatesErr.message);
+  } else {
+    const rows = (updates as CandidateUpdateStatusRow[] | null) ?? [];
+    extras.notifications = rows.map(toStaffNotification);
+    extras.lastCandidateUpdate = lastCandidateUpdateByApp(rows);
+  }
+
+  return extras;
+}
+
+function progressRow(input: {
+  key: string;
+  label: string;
+  achieved: number | null;
+  target: number;
+  direction: TargetProgressRow["direction"];
+  status: KpiStatus;
+  unit: string;
+}): TargetProgressRow {
+  const { achieved, target, direction } = input;
+  if (achieved == null) {
+    return { ...input, remaining: 0, progressPct: null };
+  }
+  if (direction === "higher_is_better") {
+    const { pct: p, remaining } = targetProgress({ achieved, target });
+    return { ...input, remaining, progressPct: p };
+  }
+  // Lower-is-better / max-allowed: "progress" is headroom used against the cap.
+  const used = target > 0 ? Math.round(Math.min(200, (achieved / target) * 100) * 10) / 10 : null;
+  return { ...input, remaining: Math.max(0, target - achieved), progressPct: used };
+}
+
+function buildProgress(kpis: RecruiterKPIs, queue: AttentionQueue): TargetProgressRow[] {
+  const t = kpis.targets;
+  return [
+    progressRow({
+      key: "applications_reviewed",
+      label: "Applications reviewed",
+      achieved: kpis.applicationsReviewed.numerator,
+      target: t.appsReviewedPerWeek,
+      direction: "higher_is_better",
+      status: kpis.applicationsReviewed.status,
+      unit: "applications",
+    }),
+    progressRow({
+      key: "placement_rate",
+      label: "Placement rate",
+      achieved: kpis.placementRate.value,
+      target: t.placementRatePct,
+      direction: "higher_is_better",
+      status: kpis.placementRate.status,
+      unit: "%",
+    }),
+    progressRow({
+      key: "interview_conversion",
+      label: "Interview conversion",
+      achieved: kpis.interviewConversion.value,
+      target: t.interviewConversionPct,
+      direction: "higher_is_better",
+      status: kpis.interviewConversion.status,
+      unit: "%",
+    }),
+    progressRow({
+      key: "client_submission_acceptance",
+      label: "Client submission acceptance",
+      achieved: kpis.clientSubmissionAcceptance.value,
+      target: t.clientSubmissionAcceptancePct,
+      direction: "higher_is_better",
+      status: kpis.clientSubmissionAcceptance.status,
+      unit: "%",
+    }),
+    progressRow({
+      key: "time_to_first_review",
+      label: "Time to first review",
+      achieved: kpis.timeToFirstReview.value,
+      target: t.maxTimeToFirstReviewHours,
+      direction: "lower_is_better",
+      status: kpis.timeToFirstReview.status,
+      unit: "h",
+    }),
+    progressRow({
+      key: "active_workload",
+      label: "Active workload",
+      achieved: kpis.activeWorkload.total,
+      target: t.maxActiveWorkload,
+      direction: "max_allowed",
+      status: kpis.activeWorkload.status,
+      unit: "applications",
+    }),
+    progressRow({
+      key: "stalled_applications",
+      label: "Stalled applications",
+      achieved: queue.countsByKind.stalled_in_stage,
+      target: t.maxStalledApplicationCount,
+      direction: "max_allowed",
+      status: compareMaxCount(queue.countsByKind.stalled_in_stage, t.maxStalledApplicationCount, 1),
+      unit: "applications",
+    }),
+  ];
+}
+
+/** Filter options a recruiter is entitled to pick from — their own scope only. */
+export async function getRecruiterKpiFilterOptions(
+  recruiterId: string,
+): Promise<RecruiterKpiFilterOptions> {
+  const key = `filterOptions:${recruiterId}`;
+  const cached = cacheGet<RecruiterKpiFilterOptions>(key);
+  if (cached) return cached;
+
+  const window = periodToWindow("90d");
+  const [roles, employers, ctx] = await Promise.all([
+    getRecruiterAssignedRoles(recruiterId),
+    getRecruiterCompanies(recruiterId),
+    loadRecruiterContext(recruiterId, window, {}),
+  ]);
+
+  const jobCounts = new Map<string, number>();
+  const stageCounts = new Map<string, number>();
+  for (const a of ctx.apps) {
+    jobCounts.set(a.job_order_id, (jobCounts.get(a.job_order_id) ?? 0) + 1);
+    stageCounts.set(a.current_stage, (stageCounts.get(a.current_stage) ?? 0) + 1);
+  }
+
+  const jobs: KpiJobOption[] = [...jobCounts.entries()]
+    .map(([id, count]) => {
+      const job = ctx.jobsById.get(id);
+      return {
+        id,
+        title: job?.title ?? "Job order",
+        employerOrgId: job?.employer_org_id ?? null,
+        applicationCount: count,
+      };
+    })
+    .sort((a, b) => b.applicationCount - a.applicationCount || a.title.localeCompare(b.title));
+
+  const stages: KpiStageOption[] = [...stageCounts.entries()]
+    .map(([key2, count]) => ({ key: key2, count }))
+    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+
+  return cacheSet(key, { roles, employers, jobs, stages });
+}
+
+/**
+ * The attention-first dashboard payload.
+ *
+ * `recruiterId` always comes from the session — never from a query parameter —
+ * and every returned id is filtered through `scopedApplicationIds`, so filters
+ * can narrow the view but never widen it to another recruiter's work.
+ */
+export async function getRecruiterAttentionDashboard(input: {
+  recruiterId: string;
+  filters: KpiFilterState;
+  recruiterLevel?: RecruiterLevel;
+  organizationId?: string | null;
+  now?: Date;
+}): Promise<RecruiterAttentionDashboard> {
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const recruiterId = input.recruiterId;
+  const orgId = input.organizationId ?? undefined;
+  const level = normalizeRecruiterLevel(input.recruiterLevel);
+
+  const options = await getRecruiterKpiFilterOptions(recruiterId);
+  // Drop any filter value outside the recruiter's own option lists. A crafted
+  // id is ignored rather than rejected, so the response never confirms it.
+  const filters = constrainFiltersToOptions(input.filters, {
+    roleIds: options.roles.map((r) => r.roleId),
+    employerOrgIds: options.employers.map((e) => e.id),
+    jobOrderIds: options.jobs.map((j) => j.id),
+    stages: options.stages.map((s) => s.key),
+  });
+
+  const grainWindow = grainToWindow(filters, now);
+  const window: DateWindow = { since: grainWindow.since, until: grainWindow.until };
+  const resolveAt = targetResolutionInstant(grainWindow, now);
+
+  const scope: KpiScope = {
+    jobRoleId: filters.roleId,
+    employerOrgId: filters.employerOrgId,
+    // Recruiter scope is their membership org — never a cross-franchise picker.
+    organizationId: orgId,
+  };
+
+  const [resolvedTargets, thresholds, ctx] = await Promise.all([
+    getKPITargetsAt(level, orgId, resolveAt),
+    loadStageThresholds(orgId),
+    loadRecruiterContext(recruiterId, window, scope),
+  ]);
+
+  // Job and stage filters narrow the already-scoped context.
+  const filteredApps = ctx.apps.filter((a) => {
+    if (filters.jobOrderId && a.job_order_id !== filters.jobOrderId) return false;
+    if (filters.stage && a.current_stage !== filters.stage) return false;
+    return true;
+  });
+  const keepAppIds = new Set(filteredApps.map((a) => a.id));
+  const narrowed: typeof ctx = {
+    ...ctx,
+    apps: filteredApps,
+    history: ctx.history.filter((h) => keepAppIds.has(h.application_id)),
+    assessments: ctx.assessments.filter((a) => keepAppIds.has(a.application_id)),
+    submissions: ctx.submissions.filter(
+      (s) => s.application_id != null && keepAppIds.has(s.application_id),
+    ),
+    offers: ctx.offers.filter((o) => keepAppIds.has(o.application_id)),
+    placements: ctx.placements.filter((p) => keepAppIds.has(p.application_id)),
+    interviews: ctx.interviews.filter(
+      (i) => i.application_id != null && keepAppIds.has(i.application_id),
+    ),
+  };
+
+  const appIds = [...keepAppIds];
+  const jobIds = [...new Set(filteredApps.map((a) => a.job_order_id))];
+  const extras = await loadAttentionExtras(appIds, jobIds, orgId);
+
+  const kpis = buildKpisFromContext(
+    recruiterId,
+    narrowed,
+    resolvedTargets,
+    thresholds,
+    "custom",
+    window,
+    nowIso,
+  );
+
+  const apps = narrowed.apps.map(toAppSnap);
+  const history = narrowed.history.map(toHistSnap);
+  const allowedAppIds = scopedApplicationIds(apps, history, recruiterId);
+
+  const submissions: SubmissionSnapshot[] = narrowed.submissions.map((s) => {
+    const cols = extras.submissionResponse.get(s.id);
+    return {
+      id: s.id,
+      applicationId: s.application_id,
+      status: s.status,
+      submittedAt: s.submitted_at,
+      updatedAt: s.updated_at,
+      submittingOrgId: s.submitting_org_id,
+      responseDueAt: cols?.response_due_at ?? null,
+      respondedAt: cols?.responded_at ?? null,
+    };
+  });
+
+  const interviews: InterviewSnapshot[] = narrowed.interviews
+    .filter((i) => i.application_id)
+    .map((i) => {
+      const cols = extras.interviewResponse.get(i.id);
+      return {
+        id: i.id,
+        applicationId: i.application_id as string,
+        status: i.status,
+        scheduledAt: i.scheduled_at,
+        createdAt: cols?.created_at ?? i.created_at,
+        candidateResponseDueAt: cols?.candidate_response_due_at ?? null,
+        candidateRespondedAt: cols?.candidate_responded_at ?? null,
+      };
+    });
+
+  const offers: OfferSnapshot[] = narrowed.offers.map((o) => ({
+    id: o.id,
+    applicationId: o.application_id,
+    status: o.status,
+    updatedAt: o.updated_at,
+    createdAt: o.created_at,
+    expiresAt: o.expires_at,
+    owningOrgId: o.owning_org_id,
+  }));
+
+  const assessments: AssessmentSnapshot[] = narrowed.assessments.map((a) => ({
+    id: a.id,
+    applicationId: a.application_id,
+    status: a.status,
+    score: a.score,
+    passThreshold: a.pass_threshold,
+    humanReviewRequired: a.human_review_required,
+    gradedAt: a.graded_at,
+    dueAt: a.due_at,
+    graderId: a.grader_id,
+  }));
+
+  const placements: PlacementSnapshot[] = narrowed.placements.map((p) => ({
+    id: p.id,
+    applicationId: p.application_id,
+    offerId: p.offer_id,
+    recruiterId: p.recruiter_id,
+    status: p.status,
+    fee: p.fee != null ? Number(p.fee) : null,
+    createdAt: p.created_at,
+    owningOrgId: p.owning_org_id,
+  }));
+
+  const placementAppIds = new Set(placements.map((p) => p.applicationId));
+  const hiredAwaiting = new Set(
+    apps.filter((a) => a.currentStage === "hired" && !placementAppIds.has(a.id)).map((a) => a.id),
+  );
+
+  const queue = restrictToScope(
+    buildAttentionQueue({
+      recruiterId,
+      nowIso,
+      apps,
+      history,
+      assessments,
+      interviews,
+      offers,
+      submissions,
+      appIdsWithScreeningNotes: extras.appIdsWithScreeningNotes,
+      stageThresholds: thresholds,
+      firstReviewTargetHours: kpis.targets.maxTimeToFirstReviewHours,
+      jobOwnerByJobOrder: extras.jobOwnerByJobOrder,
+      lastCandidateUpdateByApp: extras.lastCandidateUpdate,
+      maxCandidateSilenceHours: MAX_CANDIDATE_SILENCE_HOURS,
+      hiredAppIdsAwaitingPlacement: hiredAwaiting,
+    }),
+    allowedAppIds,
+  );
+
+  const responseTimes = {
+    employer: computeEmployerResponseTime(
+      submissions,
+      window,
+      extras.responseSla.employerHours,
+      nowIso,
+    ),
+    candidate: computeCandidateResponseTime(
+      interviews,
+      extras.consents.filter((c) => keepAppIds.has(c.applicationId)),
+      window,
+      extras.responseSla.candidateHours,
+      nowIso,
+    ),
+  };
+
+  const cx: RecruiterCxGuardrails = {
+    overdueCandidateUpdates: computeOverdueCandidateUpdates(
+      apps,
+      history,
+      extras.lastCandidateUpdate,
+      nowIso,
+      MAX_CANDIDATE_SILENCE_HOURS,
+      recruiterId,
+    ),
+    withdrawals: computeWithdrawalReasonBreakdown(apps, history, window, recruiterId),
+    reschedules: computeInterviewRescheduleCounts(extras.scheduleChanges, window),
+    unansweredNotifications: computeUnansweredStaffNotifications(
+      extras.notifications,
+      window,
+      nowIso,
+    ),
+    maxCandidateSilenceHours: MAX_CANDIDATE_SILENCE_HOURS,
+  };
+
+  const workload = computeActiveWorkload(apps, recruiterId, narrowed.closedJobOrderIds);
+  const metricDrilldowns = buildDrilldowns({
+    recruiterId,
+    window,
+    apps,
+    history,
+    assessments,
+    submissions,
+    offers,
+    placements,
+    workloadAppIds: workload.appIds,
+    reviewedInWindowAppIds: kpis.timeToFirstReview.reviewedAppIds,
+    awaitingFirstReviewAppIds: kpis.timeToFirstReview.awaitingAppIds,
+  });
+
+  const drilldowns = restrictDrilldowns(
+    {
+      ...metricDrilldowns,
+      ...Object.fromEntries(ATTENTION_KINDS.map((k) => [k, queue.appIdsByKind[k]])),
+    },
+    allowedAppIds,
+  );
+
+  return {
+    recruiterId,
+    filters,
+    window: grainWindow,
+    generatedAt: nowIso,
+    queue,
+    kpis,
+    targets: kpis.targets,
+    targetVersionId: resolvedTargets.targetVersionId,
+    targetSource: resolvedTargets.source,
+    targetVersion: resolvedTargets,
+    targetVersionLabel: describeTargetVersion(resolvedTargets),
+    progress: buildProgress(kpis, queue),
+    periodElapsedPct: periodElapsedPct(window, nowIso),
+    responseTimes,
+    cx,
+    drilldowns,
+    options,
+  };
+}
+
+/**
+ * Compact attention counts for the recruiter dashboard strip. Same scoping as
+ * the full dashboard; returns counts and nothing that could identify work
+ * outside the caller's own queue.
+ */
+export async function getRecruiterAttentionStrip(input: {
+  recruiterId: string;
+  recruiterLevel?: RecruiterLevel;
+  organizationId?: string | null;
+}): Promise<{
+  countsByKind: Record<AttentionKind, number>;
+  overdueCountsByKind: Record<AttentionKind, number>;
+  totalOverdue: number;
+  generatedAt: string;
+}> {
+  const dash = await getRecruiterAttentionDashboard({
+    recruiterId: input.recruiterId,
+    filters: { grain: "week" },
+    recruiterLevel: input.recruiterLevel,
+    organizationId: input.organizationId,
+  });
+  return {
+    countsByKind: dash.queue.countsByKind,
+    overdueCountsByKind: dash.queue.overdueCountsByKind,
+    totalOverdue: dash.queue.totalOverdue,
+    generatedAt: dash.generatedAt,
+  };
+}
