@@ -456,7 +456,11 @@ export function VideoInterviewCard({
     <Card className={spotlight ? "border-brand-200 shadow-sm" : undefined}>
       <CardHeader>
         <div>
-          <CardTitle>Video interview</CardTitle>
+          <CardTitle>
+            {sortedAssignments.some((a) => a.interview_mode === "live_ai_voice")
+              ? "Interview"
+              : "Video interview"}
+          </CardTitle>
           {spotlight && awaitingReview.length > 0 ? (
             <p className="mt-0.5 text-sm text-ink-muted">
               {awaitingReview.length === 1
@@ -466,6 +470,11 @@ export function VideoInterviewCard({
           ) : alreadyCompleted ? (
             <p className="mt-0.5 text-sm text-ink-muted">
               This candidate has already completed their video interview for this application.
+            </p>
+          ) : spotlight && sortedAssignments.length === 0 ? (
+            <p className="mt-0.5 text-sm text-ink-muted">
+              The application is in Interview Screening. Assign a video or AI voice template so the
+              candidate can start — stage alone does not create an invitation.
             </p>
           ) : null}
         </div>
@@ -592,7 +601,9 @@ export function VideoInterviewCard({
                 </option>
                 {templates.map((template) => (
                   <option key={template.id} value={template.id}>
-                    {template.name} ({template.default_deadline_days ?? 7}d deadline)
+                    {template.name} ·{" "}
+                    {template.interview_mode === "live_ai_voice" ? "AI voice" : "Async video"} (
+                    {template.default_deadline_days ?? 7}d deadline)
                   </option>
                 ))}
               </Select>

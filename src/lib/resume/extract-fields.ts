@@ -1,7 +1,7 @@
 import "server-only";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env.server";
 import { COUNTRIES } from "@/lib/constants";
 import { resumeExtractionSchema, type ResumeExtraction } from "@/lib/resume/extraction-schema";
 import {
@@ -24,7 +24,7 @@ const SYSTEM_PROMPT = `You are an information-extraction assistant for a recruit
  * profile fields from raw CV text. Never logs the raw API key or CV bytes.
  */
 export async function extractResumeFields(resumeText: string): Promise<ResumeExtraction> {
-  const model = env.openaiResumeModel();
+  const model = serverEnv.openaiResumeModel();
   const cvChars = resumeText.length;
   const cvCharsSent = Math.min(cvChars, 60_000);
   const userContent = `CV text:\n\n${resumeText.slice(0, 60_000)}`;
@@ -48,7 +48,7 @@ export async function extractResumeFields(resumeText: string): Promise<ResumeExt
     tip: "This is a PAID call — rule-based stub is free when OPENAI_API_KEY is unset",
   });
 
-  const client = new OpenAI({ apiKey: env.openaiApiKey() });
+  const client = new OpenAI({ apiKey: serverEnv.openaiApiKey() });
   const started = Date.now();
   try {
     aiLog("openai", "CALL_START", {

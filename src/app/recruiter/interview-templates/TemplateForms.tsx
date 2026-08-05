@@ -37,6 +37,7 @@ function useAction() {
 }
 
 function TemplateFields({ template }: { template?: InterviewTemplateRow }) {
+  const isLiveAi = template?.interview_mode === "live_ai_voice";
   return (
     <>
       <Field label="Template name" htmlFor="template-name" required>
@@ -62,40 +63,50 @@ function TemplateFields({ template }: { template?: InterviewTemplateRow }) {
           defaultValue={template?.instructions ?? ""}
         />
       </Field>
+      {isLiveAi ? (
+        <p className="rounded-lg border border-surface-border bg-surface-muted/40 p-3 text-sm text-ink-muted">
+          Live AI voice interviews run as one continuous conversation — no per-question breaks, prep
+          timers, or recording review.
+        </p>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Preparation (seconds)" htmlFor="template-preparation">
-          <Input
-            id="template-preparation"
-            name="default_preparation_seconds"
-            type="number"
-            min={0}
-            max={600}
-            defaultValue={template?.default_preparation_seconds ?? 30}
-            required
-          />
-        </Field>
-        <Field label="Response (seconds)" htmlFor="template-response">
-          <Input
-            id="template-response"
-            name="default_response_seconds"
-            type="number"
-            min={10}
-            max={300}
-            defaultValue={template?.default_response_seconds ?? 120}
-            required
-          />
-        </Field>
-        <Field label="Maximum attempts" htmlFor="template-attempts">
-          <Input
-            id="template-attempts"
-            name="default_max_attempts"
-            type="number"
-            min={1}
-            max={5}
-            defaultValue={template?.default_max_attempts ?? 2}
-            required
-          />
-        </Field>
+        {!isLiveAi ? (
+          <>
+            <Field label="Preparation (seconds)" htmlFor="template-preparation">
+              <Input
+                id="template-preparation"
+                name="default_preparation_seconds"
+                type="number"
+                min={0}
+                max={600}
+                defaultValue={template?.default_preparation_seconds ?? 30}
+                required
+              />
+            </Field>
+            <Field label="Response (seconds)" htmlFor="template-response">
+              <Input
+                id="template-response"
+                name="default_response_seconds"
+                type="number"
+                min={10}
+                max={300}
+                defaultValue={template?.default_response_seconds ?? 120}
+                required
+              />
+            </Field>
+            <Field label="Maximum attempts" htmlFor="template-attempts">
+              <Input
+                id="template-attempts"
+                name="default_max_attempts"
+                type="number"
+                min={1}
+                max={5}
+                defaultValue={template?.default_max_attempts ?? 2}
+                required
+              />
+            </Field>
+          </>
+        ) : null}
         <Field
           label="Recording retention (days)"
           htmlFor="template-retention"
@@ -142,21 +153,31 @@ function TemplateFields({ template }: { template?: InterviewTemplateRow }) {
           />
         </Field>
       </div>
-      <div className="space-y-2 rounded-lg border border-surface-border bg-surface-muted/40 p-3">
-        <p className="text-sm font-medium text-ink">Candidate session rules</p>
-        <Checkbox
-          id="template-allow-pause"
-          name="allow_pause_between_questions"
-          defaultChecked={template?.allow_pause_between_questions ?? false}
-          label="Allow a controlled break between questions"
-        />
-        <Checkbox
-          id="template-allow-review"
-          name="allow_response_review"
-          defaultChecked={template?.allow_response_review ?? true}
-          label="Allow candidates to review recordings before submitting each answer"
-        />
-      </div>
+      {!isLiveAi ? (
+        <div className="space-y-2 rounded-lg border border-surface-border bg-surface-muted/40 p-3">
+          <p className="text-sm font-medium text-ink">Candidate session rules</p>
+          <Checkbox
+            id="template-allow-pause"
+            name="allow_pause_between_questions"
+            defaultChecked={template?.allow_pause_between_questions ?? false}
+            label="Allow a controlled break between questions"
+          />
+          <Checkbox
+            id="template-allow-review"
+            name="allow_response_review"
+            defaultChecked={template?.allow_response_review ?? true}
+            label="Allow candidates to review recordings before submitting each answer"
+          />
+        </div>
+      ) : (
+        <>
+          <input type="hidden" name="default_preparation_seconds" value="0" />
+          <input type="hidden" name="default_response_seconds" value="180" />
+          <input type="hidden" name="default_max_attempts" value="1" />
+          <input type="hidden" name="allow_pause_between_questions" value="" />
+          <input type="hidden" name="allow_response_review" value="" />
+        </>
+      )}
     </>
   );
 }

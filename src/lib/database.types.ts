@@ -424,7 +424,7 @@ export type ApplicationAiReviewItemRow = {
   ordinal: number;
   created_at: string;
 };
-export type AiUsageFeature = "resume" | "screening" | "assessment";
+export type AiUsageFeature = "resume" | "screening" | "assessment" | "interview";
 export type AiUsageEventRow = {
   id: string;
   feature: AiUsageFeature;
@@ -437,6 +437,13 @@ export type AiUsageEventRow = {
   duration_ms: number | null;
   actor_id: string | null;
   created_at: string;
+  assignment_id: string | null;
+  job_order_id: string | null;
+  session_id: string | null;
+  audio_input_tokens: number | null;
+  audio_output_tokens: number | null;
+  cached_input_tokens: number | null;
+  modality_detail: Json;
 };
 export type CandidateConsentRow = {
   id: string;
@@ -1202,7 +1209,117 @@ export type InterviewEventType =
   | "break_started"
   | "break_ended"
   | "document_change_attempted"
-  | "document_snapshot_locked";
+  | "document_snapshot_locked"
+  | "brief_submitted"
+  | "brief_approved"
+  | "plan_generated"
+  | "plan_edited"
+  | "plan_frozen"
+  | "live_session_ready"
+  | "live_session_started"
+  | "live_session_ended"
+  | "live_question_started"
+  | "live_question_completed"
+  | "live_clarification"
+  | "live_technical_issue"
+  | "live_reconnect"
+  | "live_upload_completed"
+  | "transcription_started"
+  | "transcription_completed"
+  | "transcription_failed"
+  | "ai_evaluation_started"
+  | "ai_evaluation_completed"
+  | "ai_evaluation_failed"
+  | "human_review_opened"
+  | "human_review_completed"
+  | "evidence_overridden";
+
+export type InterviewMode = "async_video" | "live_ai_voice";
+export type InterviewPlanStatus = "draft" | "approved" | "frozen";
+export type JobInterviewBriefStatus = "draft" | "submitted" | "approved" | "rejected";
+export type LiveSessionStatus =
+  "ready" | "live" | "completed" | "incomplete_technical" | "abandoned" | "failed";
+
+export type JobInterviewBriefRow = {
+  id: string;
+  job_order_id: string;
+  version: number;
+  status: JobInterviewBriefStatus;
+  use_ai_voice: boolean;
+  language: string;
+  duration_seconds: number;
+  role_priorities: string | null;
+  must_have_competencies: string | null;
+  required_topics: string | null;
+  situational_scenario: string | null;
+  company_values: string | null;
+  objective_requirements: string | null;
+  employer_notes: string | null;
+  original_notes: string | null;
+  sanitised_brief: Json;
+  policy_warnings: string[];
+  submitted_by: string | null;
+  submitted_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InterviewLiveSessionRow = {
+  id: string;
+  assignment_id: string;
+  status: LiveSessionStatus;
+  model: string;
+  prompt_version: string | null;
+  rubric_version: string | null;
+  openai_session_ref: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  reconnect_count: number;
+  reserved_usd: number;
+  estimated_cost_usd: number | null;
+  token_breakdown: Json;
+  transcription_usage: Json;
+  candidate_audio_bucket: string | null;
+  candidate_audio_path: string | null;
+  candidate_audio_mime: string | null;
+  error_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InterviewTurnRow = {
+  id: string;
+  session_id: string;
+  assignment_question_id: string | null;
+  speaker: "ai" | "candidate" | "system";
+  turn_type: "utterance" | "question" | "clarification" | "welcome" | "close" | "system";
+  transcript: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  audio_offset_ms: number | null;
+  interruption_state: string | null;
+  completion_state: "complete" | "partial" | "interrupted" | "missing";
+  metadata: Json;
+  created_at: string;
+};
+
+export type InterviewAiEvaluationRow = {
+  id: string;
+  session_id: string;
+  assignment_id: string;
+  model: string;
+  prompt_version: string | null;
+  rubric_version: string | null;
+  structured_evidence: Json;
+  question_results: Json;
+  overall_confidence: string | null;
+  review_flags: string[];
+  completed_at: string | null;
+  created_at: string;
+};
 
 export type InterviewDocumentSnapshotItem = {
   document_id: string;
@@ -1235,6 +1352,17 @@ export type InterviewTemplateRow = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  interview_mode: InterviewMode;
+  duration_seconds: number;
+  language: string;
+  model: string | null;
+  prompt_version: string | null;
+  rubric_version: string | null;
+  plan_status: InterviewPlanStatus;
+  approved_by: string | null;
+  approved_at: string | null;
+  job_interview_brief_id: string | null;
+  frozen_context: Json;
 };
 export type InterviewTemplateQuestionRow = {
   id: string;
@@ -1248,6 +1376,11 @@ export type InterviewTemplateQuestionRow = {
   is_required: boolean;
   created_at: string;
   updated_at: string;
+  competency: string | null;
+  expected_evidence: string | null;
+  rubric_anchors: Json;
+  source_context: string | null;
+  follow_up_policy: string;
 };
 export type InterviewAssignmentRow = {
   id: string;
@@ -1283,6 +1416,13 @@ export type InterviewAssignmentRow = {
   document_snapshot: InterviewDocumentSnapshotItem[] | Json;
   created_at: string;
   updated_at: string;
+  interview_mode: InterviewMode;
+  duration_seconds: number | null;
+  language: string | null;
+  model: string | null;
+  prompt_version: string | null;
+  rubric_version: string | null;
+  frozen_context: Json;
 };
 export type InterviewAssignmentQuestionRow = {
   id: string;
@@ -1298,6 +1438,11 @@ export type InterviewAssignmentQuestionRow = {
   status: InterviewQuestionStatus;
   started_at: string | null;
   completed_at: string | null;
+  competency: string | null;
+  expected_evidence: string | null;
+  rubric_anchors: Json;
+  source_context: string | null;
+  follow_up_policy: string | null;
 };
 export type InterviewResponseAttemptRow = {
   id: string;
@@ -1330,6 +1475,8 @@ export type InterviewReviewRow = {
   internal_notes: string | null;
   created_at: string;
   updated_at: string;
+  evidence_overrides: Json;
+  ai_evaluation_id: string | null;
 };
 export type InterviewEventRow = {
   id: number;
@@ -1497,6 +1644,10 @@ export type Database = {
       interview_response_attempts: Tbl<InterviewResponseAttemptRow>;
       interview_reviews: Tbl<InterviewReviewRow>;
       interview_events: Tbl<InterviewEventRow>;
+      job_interview_briefs: Tbl<JobInterviewBriefRow>;
+      interview_live_sessions: Tbl<InterviewLiveSessionRow>;
+      interview_turns: Tbl<InterviewTurnRow>;
+      interview_ai_evaluations: Tbl<InterviewAiEvaluationRow>;
     };
     Views: {
       public_jobs: { Row: PublicJobRow; Relationships: [] };

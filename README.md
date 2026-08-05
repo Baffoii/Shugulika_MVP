@@ -10,7 +10,9 @@ focused, app-owned subset of that model in [`supabase/migrations/`](supabase/mig
 ---
 
 ## 1. Prerequisites
-- Node.js 20+ and npm
+- **Node.js 22+** and npm. Enforced by `engines` in `package.json` and matched by
+  CI (`.github/workflows/ci.yml`) and the deployment runtime. The floor comes
+  from the OpenAI SDK v7, which requires Node >= 22.
 - A Supabase project (URL + **publishable/anon** key). The service-role key is **never** used by this app.
 
 ## 2. Environment

@@ -1,12 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import type { JobOrderRow } from "@/lib/database.types";
-import { Badge } from "@/components/ui/primitives";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import type { JobInterviewBriefRow, JobOrderRow } from "@/lib/database.types";
+import { Alert, Badge, Button } from "@/components/ui/primitives";
 import { TR, TD } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDate, formatMoney, titleCase } from "@/lib/format";
 import { CandidateAssessmentFileButton } from "@/components/assessments/CandidateAssessmentFileButton";
+import {
+  AiInterviewPlanPanel,
+  type FrozenAiTemplateRef,
+} from "@/components/interviews/AiInterviewPlanPanel";
+import { X } from "lucide-react";
 
 function DetailBlock({ label, children }: { label: string; children: React.ReactNode }) {
   if (!children) return null;
@@ -18,7 +24,19 @@ function DetailBlock({ label, children }: { label: string; children: React.React
   );
 }
 
-function JobOrderDetailsPanel({ job }: { job: JobOrderRow }) {
+function JobOrderDetailsPanel({
+  job,
+  aiBrief,
+  canGenerateAiPlan,
+  frozenAiTemplate,
+  onAiPlanGenerated,
+}: {
+  job: JobOrderRow;
+  aiBrief?: JobInterviewBriefRow | null;
+  canGenerateAiPlan?: boolean;
+  frozenAiTemplate?: FrozenAiTemplateRef | null;
+  onAiPlanGenerated?: (info: { templateId: string; jobTitle?: string }) => void;
+}) {
   const salary =
     job.salary_min != null || job.salary_max != null
       ? [
@@ -78,21 +96,72 @@ function JobOrderDetailsPanel({ job }: { job: JobOrderRow }) {
           ) : null}
         </DetailBlock>
       </div>
+      {aiBrief !== undefined ? (
+        <div className="pt-2">
+          <AiInterviewPlanPanel
+            jobOrderId={job.id}
+            brief={aiBrief}
+            allowGenerate={canGenerateAiPlan}
+            frozenTemplate={frozenAiTemplate}
+            jobTitle={job.title}
+            onGenerated={onAiPlanGenerated}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
 
 const COLUMN_COUNT = 7;
+const BANNER_MS = 6000;
 
 /** Job-order table row with a full-width details panel that drops under the row. */
 export function JobOrderListRow({
   job,
   workflow,
+  aiBrief,
+  frozenAiTemplate = null,
+  canGenerateAiPlan = false,
 }: {
   job: JobOrderRow;
   workflow?: React.ReactNode;
+  /** Pass null when no brief exists yet; omit to hide the AI brief editor. */
+  aiBrief?: JobInterviewBriefRow | null;
+  frozenAiTemplate?: FrozenAiTemplateRef | null;
+  canGenerateAiPlan?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [banner, setBanner] = useState<string | null>(null);
+  const [optimisticFrozen, setOptimisticFrozen] = useState<FrozenAiTemplateRef | null>(null);
+  const effectiveFrozen = optimisticFrozen ?? frozenAiTemplate;
+
+  // Drop the optimistic value once the server confirms the frozen template.
+  // Adjusted during render (React's "state derived from props" pattern) rather
+  // than in an effect, which would render stale once and then cascade.
+  const [prevFrozenAi, setPrevFrozenAi] = useState(frozenAiTemplate);
+  if (prevFrozenAi !== frozenAiTemplate) {
+    setPrevFrozenAi(frozenAiTemplate);
+    if (frozenAiTemplate) setOptimisticFrozen(null);
+  }
+
+  useEffect(() => {
+    if (!banner) return;
+    const timer = window.setTimeout(() => setBanner(null), BANNER_MS);
+    return () => window.clearTimeout(timer);
+  }, [banner]);
+
+  function handleAiPlanGenerated(info: { templateId: string; jobTitle?: string }) {
+    const title = info.jobTitle ?? job.title;
+    setOptimisticFrozen({
+      id: info.templateId,
+      name: `AI voice — ${title}`.slice(0, 160),
+    });
+    setOpen(false);
+    setBanner(
+      `AI voice plan standardized for ${title} — assign it from Interview templates or the candidate application.`,
+    );
+  }
+
   return (
     <>
       <TR>
@@ -125,10 +194,43 @@ export function JobOrderListRow({
       {open ? (
         <TR className="border-t-0">
           <TD colSpan={COLUMN_COUNT} className="bg-surface-muted/30 px-4 pb-4 pt-0">
-            <JobOrderDetailsPanel job={job} />
+            <JobOrderDetailsPanel
+              job={job}
+              aiBrief={aiBrief}
+              canGenerateAiPlan={canGenerateAiPlan}
+              frozenAiTemplate={effectiveFrozen}
+              onAiPlanGenerated={handleAiPlanGenerated}
+            />
           </TD>
         </TR>
       ) : null}
+      {/* `banner` is null on the server and only set by client handlers, so the
+          portal branch never evaluates during SSR or hydration. */}
+      {banner
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4"
+              aria-live="polite"
+            >
+              <div className="pointer-events-auto relative w-full max-w-xl shadow-lg">
+                <Alert tone="success" title="AI voice plan ready">
+                  <div className="pr-8">{banner}</div>
+                </Alert>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-2 top-2 h-8 w-8 p-0"
+                  aria-label="Dismiss"
+                  onClick={() => setBanner(null)}
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </Button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

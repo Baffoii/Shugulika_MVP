@@ -15,6 +15,7 @@ import {
   StatCard,
 } from "@/components/ui/primitives";
 import { CancelInterviewButton, Playback, ReminderButton, ReviewForm } from "./ResultsClient";
+import { LiveAiEvidencePanel } from "@/components/interviews/LiveAiEvidencePanel";
 
 export const metadata = { title: "Interview results" };
 
@@ -35,6 +36,9 @@ export default async function InterviewResultsPage({
     review,
     questionAnalytics,
     assignmentAnalytics,
+    liveSession,
+    turns,
+    aiEvaluation,
   } = results;
   const candidateName =
     [candidate?.given_name, candidate?.family_name].filter(Boolean).join(" ") || "Candidate";
@@ -56,9 +60,18 @@ export default async function InterviewResultsPage({
       </Link>
       <PageHeader
         title={candidateName}
-        description={`${job?.title ?? assignment.template_name_snapshot} · ${assignment.template_name_snapshot}`}
+        description={`${job?.title ?? assignment.template_name_snapshot} · ${assignment.template_name_snapshot}${assignment.interview_mode === "live_ai_voice" ? " · AI voice" : ""}`}
         actions={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
       />
+      {assignment.interview_mode === "live_ai_voice" ? (
+        <LiveAiEvidencePanel
+          assignmentId={assignment.id}
+          liveSession={liveSession}
+          turns={turns}
+          questions={questions}
+          aiEvaluation={aiEvaluation}
+        />
+      ) : null}
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Completion"

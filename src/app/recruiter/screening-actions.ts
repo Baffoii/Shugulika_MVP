@@ -15,7 +15,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionContext, rolesCanAccessPortal } from "@/lib/auth";
-import { isResumeParsingConfigured, env } from "@/lib/env";
+import { isResumeParsingConfigured, serverEnv } from "@/lib/env.server";
 import { extractResumeText, UnsupportedResumeFileError } from "@/lib/resume/extract-text";
 import {
   scoreApplication,
@@ -156,7 +156,7 @@ export async function screenApplicationAction(
     applicationId,
     force: !!opts.force,
     openaiConfigured: isResumeParsingConfigured(),
-    model: isResumeParsingConfigured() ? env.openaiScreeningModel() : null,
+    model: isResumeParsingConfigured() ? serverEnv.openaiScreeningModel() : null,
   });
 
   const supabase = createClient();
@@ -314,7 +314,7 @@ export async function screenApplicationAction(
     return { ok: false, error: gate.error };
   }
 
-  const model = env.openaiScreeningModel();
+  const model = serverEnv.openaiScreeningModel();
   const { data: runData, error: runErr } = await supabase
     .from("application_ai_reviews")
     .insert({

@@ -298,6 +298,35 @@ export async function submitJobOrderAction(
     }
   }
 
+  const useAiVoice =
+    formData.get("use_ai_voice") === "on" || formData.get("use_ai_voice") === "true";
+  if (useAiVoice) {
+    const { detectBriefPolicyWarnings } = await import("@/lib/interviews/generate-interview-plan");
+    const employerNotes = optionalText(formData, "ai_employer_notes");
+    const warnings = detectBriefPolicyWarnings(employerNotes);
+    // A failed brief insert must not leave the order looking AI-enabled downstream.
+    const { error: briefError } = await supabase.from("job_interview_briefs").insert({
+      job_order_id: jobOrderId,
+      version: 1,
+      status: "submitted",
+      use_ai_voice: true,
+      language: optionalText(formData, "ai_interview_language") || "en",
+      duration_seconds: Number(optionalText(formData, "ai_interview_duration") || "600") || 600,
+      role_priorities: optionalText(formData, "ai_role_priorities"),
+      must_have_competencies: optionalText(formData, "ai_must_have_competencies"),
+      required_topics: optionalText(formData, "ai_required_topics"),
+      situational_scenario: optionalText(formData, "ai_situational_scenario"),
+      company_values: optionalText(formData, "ai_company_values"),
+      objective_requirements: optionalText(formData, "ai_objective_requirements"),
+      employer_notes: employerNotes,
+      original_notes: employerNotes,
+      policy_warnings: warnings,
+      submitted_by: ctx.userId,
+      submitted_at: new Date().toISOString(),
+    });
+    if (briefError) return { ok: false, error: "Could not save the AI interview brief." };
+  }
+
   revalidateJobOrderPaths();
   return { ok: true, message: "Job order submitted to Shugulika for approval." };
 }

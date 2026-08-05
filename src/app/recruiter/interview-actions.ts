@@ -415,6 +415,12 @@ export async function createAssignmentAction(formData: FormData): Promise<Interv
   if (!template) {
     return { ok: false, error: "Application or template not found in your organization." };
   }
+  if (template.interview_mode === "live_ai_voice" && template.plan_status !== "frozen") {
+    return {
+      ok: false,
+      error: "Standardize the AI voice interview plan before assigning it to a candidate.",
+    };
+  }
 
   const { data: completedExisting } = await context.supabase
     .from("interview_assignments")
@@ -456,6 +462,13 @@ export async function createAssignmentAction(formData: FormData): Promise<Interv
       allow_pause_between_questions: template.allow_pause_between_questions,
       allow_response_review: template.allow_response_review,
       expiration_grace_hours: template.expiration_grace_hours,
+      interview_mode: template.interview_mode ?? "async_video",
+      duration_seconds: template.duration_seconds ?? null,
+      language: template.language ?? "en",
+      model: template.model,
+      prompt_version: template.prompt_version,
+      rubric_version: template.rubric_version,
+      frozen_context: template.frozen_context ?? {},
     })
     .select("*")
     .single();
@@ -471,6 +484,11 @@ export async function createAssignmentAction(formData: FormData): Promise<Interv
     response_seconds: question.response_seconds ?? template.default_response_seconds,
     max_attempts: question.max_attempts ?? template.default_max_attempts,
     is_required: question.is_required,
+    competency: question.competency ?? null,
+    expected_evidence: question.expected_evidence ?? null,
+    rubric_anchors: question.rubric_anchors ?? [],
+    source_context: question.source_context ?? null,
+    follow_up_policy: question.follow_up_policy ?? "one_clarification",
   }));
   const { error: snapshotError } = await context.supabase
     .from("interview_assignment_questions")
@@ -501,11 +519,12 @@ export async function createAssignmentAction(formData: FormData): Promise<Interv
   ]);
   const candidateUserId = (candidate as { user_id: string } | null)?.user_id;
   if (candidateUserId) {
+    const isLive = template.interview_mode === "live_ai_voice";
     await context.supabase.from("notifications").insert({
       user_id: candidateUserId,
       category: "interview",
-      title: "Video interview invitation",
-      body: `You have been invited to complete a video interview${(job as { title: string } | null)?.title ? ` for ${(job as { title: string }).title}` : ""}.`,
+      title: isLive ? "AI voice interview invitation" : "Video interview invitation",
+      body: `You have been invited to complete ${isLive ? "an AI voice interview" : "a video interview"}${(job as { title: string } | null)?.title ? ` for ${(job as { title: string }).title}` : ""}.`,
       subject_type: "interview_assignment",
       subject_id: assignment.id,
     });

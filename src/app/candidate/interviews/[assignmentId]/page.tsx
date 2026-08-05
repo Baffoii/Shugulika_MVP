@@ -35,11 +35,17 @@ export default async function InterviewInvitationPage({
   const maxRetries = Math.max(...questions.map((q) => q.max_attempts), 1) - 1;
   const totalSeconds = expectedTotalSeconds(questions);
 
+  const isLiveAi = assignment.interview_mode === "live_ai_voice";
+
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
-        title="Video interview invitation"
-        description="Record short video answers at your own pace — one question at a time."
+        title={isLiveAi ? "AI voice interview invitation" : "Video interview invitation"}
+        description={
+          isLiveAi
+            ? "Complete a timed live voice interview with Shugulika’s AI interviewer. A human recruiter reviews everything afterward."
+            : "Record short video answers at your own pace — one question at a time."
+        }
       />
 
       <Card className="mb-4">
@@ -67,7 +73,11 @@ export default async function InterviewInvitationPage({
               <dt className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
                 Expected duration
               </dt>
-              <dd className="mt-0.5 text-ink">About {formatDuration(totalSeconds)}</dd>
+              <dd className="mt-0.5 text-ink">
+                {isLiveAi
+                  ? `About ${Math.round((assignment.duration_seconds ?? 600) / 60)} minutes`
+                  : `About ${formatDuration(totalSeconds)}`}
+              </dd>
             </div>
             <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
@@ -77,21 +87,34 @@ export default async function InterviewInvitationPage({
                 {assignment.expires_at ? formatDateTime(assignment.expires_at) : "No deadline"}
               </dd>
             </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
-                Retries
-              </dt>
-              <dd className="mt-0.5 text-ink">
-                {maxRetries === 0
-                  ? "One recording per question (no retries)"
-                  : `Up to ${maxRetries} retr${maxRetries === 1 ? "y" : "ies"} per question`}
-              </dd>
-            </div>
+            {!isLiveAi ? (
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Retries
+                </dt>
+                <dd className="mt-0.5 text-ink">
+                  {maxRetries === 0
+                    ? "One recording per question (no retries)"
+                    : `Up to ${maxRetries} retr${maxRetries === 1 ? "y" : "ies"} per question`}
+                </dd>
+              </div>
+            ) : (
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Interviewer
+                </dt>
+                <dd className="mt-0.5 text-ink">Shugulika AI voice agent</dd>
+              </div>
+            )}
             <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
                 You will need
               </dt>
-              <dd className="mt-0.5 text-ink">A working camera, microphone and a quiet spot</dd>
+              <dd className="mt-0.5 text-ink">
+                {isLiveAi
+                  ? "A working microphone, speakers, and a quiet spot"
+                  : "A working camera, microphone and a quiet spot"}
+              </dd>
             </div>
             <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
@@ -108,7 +131,7 @@ export default async function InterviewInvitationPage({
               {assignment.candidate_instructions}
             </Alert>
           ) : null}
-          {assignment.template_instructions_snapshot ? (
+          {assignment.template_instructions_snapshot && !isLiveAi ? (
             <div className="rounded-lg border border-surface-border bg-surface-muted px-4 py-3 text-sm text-ink-muted">
               {assignment.template_instructions_snapshot}
             </div>
@@ -117,11 +140,17 @@ export default async function InterviewInvitationPage({
       </Card>
 
       {assignment.status === "submitted" || assignment.status === "reviewed" ? (
-        <Alert tone="success" title="Interview submitted">
-          Your responses were submitted
-          {assignment.submitted_at ? ` on ${formatDateTime(assignment.submitted_at)}` : ""}. The
-          recruiting team will review them and move your application forward.
-          <div className="mt-3">
+        <Alert tone="success" title="Interview completed">
+          {isLiveAi
+            ? "Your AI voice interview was submitted successfully. You cannot retake this interview. A recruiter will review the recording and evidence before any pipeline decision."
+            : `Your responses were submitted${assignment.submitted_at ? ` on ${formatDateTime(assignment.submitted_at)}` : ""}. The recruiting team will review them and move your application forward.`}
+          {assignment.submitted_at && isLiveAi ? (
+            <p className="mt-2 text-sm">Submitted {formatDateTime(assignment.submitted_at)}.</p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <ButtonLink href="/candidate/interviews" variant="outline" size="sm">
+              Back to interviews
+            </ButtonLink>
             <ButtonLink href="/candidate/applications" variant="outline" size="sm">
               Back to my applications
             </ButtonLink>
@@ -136,6 +165,22 @@ export default async function InterviewInvitationPage({
           The submission deadline for this interview has passed. Contact the recruiting team if you
           believe this is a mistake.
         </Alert>
+      ) : isLiveAi ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Ready when you are</CardTitle>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <p className="text-sm text-ink-muted">
+              You will see AI disclosure and a microphone check before the live session starts. You
+              can skip a question if needed — just say so. The interviewer may ask brief follow-ups.
+              A human recruiter reviews the recording and evidence afterward.
+            </p>
+            <ButtonLink href={`/candidate/interviews/${assignment.id}/session`}>
+              Open AI voice interview
+            </ButtonLink>
+          </CardBody>
+        </Card>
       ) : (
         <StartInterviewForm
           assignmentId={assignment.id}

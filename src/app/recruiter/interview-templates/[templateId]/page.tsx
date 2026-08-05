@@ -55,16 +55,27 @@ export default async function InterviewTemplatePage({
             </p>
           ) : null}
           <div className="flex flex-wrap gap-2 text-xs">
-            <Badge tone="neutral">
-              {template.allow_pause_between_questions
-                ? "Breaks between questions allowed"
-                : "Continuous questions (no break)"}
-            </Badge>
-            <Badge tone="neutral">
-              {template.allow_response_review
-                ? "Candidates may review before submit"
-                : "Auto-submit recording (no review)"}
-            </Badge>
+            {template.interview_mode === "live_ai_voice" ? (
+              <>
+                <Badge tone="brand">Continuous AI voice conversation</Badge>
+                <Badge tone="neutral">
+                  {Math.round((template.duration_seconds ?? 600) / 60)} min target
+                </Badge>
+              </>
+            ) : (
+              <>
+                <Badge tone="neutral">
+                  {template.allow_pause_between_questions
+                    ? "Breaks between questions allowed"
+                    : "Continuous questions (no break)"}
+                </Badge>
+                <Badge tone="neutral">
+                  {template.allow_response_review
+                    ? "Candidates may review before submit"
+                    : "Auto-submit recording (no review)"}
+                </Badge>
+              </>
+            )}
             <Badge tone="neutral">{template.default_deadline_days}d suggested deadline</Badge>
             <Badge tone="neutral">{template.expiration_grace_hours}h grace after deadline</Badge>
           </div>
@@ -75,6 +86,7 @@ export default async function InterviewTemplatePage({
                   question.preparation_seconds ?? template.default_preparation_seconds;
                 const response = question.response_seconds ?? template.default_response_seconds;
                 const attempts = question.max_attempts ?? template.default_max_attempts;
+                const isLiveAi = template.interview_mode === "live_ai_voice";
                 return (
                   <li key={question.id} className="rounded-lg border border-surface-border p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -83,11 +95,17 @@ export default async function InterviewTemplatePage({
                       </p>
                       <div className="flex flex-wrap gap-2">
                         {question.is_required ? <Badge tone="brand">Required</Badge> : null}
-                        <Badge tone="neutral">{formatClock(preparation)} prep</Badge>
-                        <Badge tone="neutral">{formatClock(response)} response</Badge>
-                        <Badge tone="neutral">
-                          {attempts} attempt{attempts === 1 ? "" : "s"}
-                        </Badge>
+                        {!isLiveAi ? (
+                          <>
+                            <Badge tone="neutral">{formatClock(preparation)} prep</Badge>
+                            <Badge tone="neutral">{formatClock(response)} response</Badge>
+                            <Badge tone="neutral">
+                              {attempts} attempt{attempts === 1 ? "" : "s"}
+                            </Badge>
+                          </>
+                        ) : question.competency ? (
+                          <Badge tone="neutral">{question.competency}</Badge>
+                        ) : null}
                       </div>
                     </div>
                     <p className="mt-2 font-medium text-ink">{question.question_text}</p>

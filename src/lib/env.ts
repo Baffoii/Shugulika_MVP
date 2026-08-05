@@ -1,7 +1,13 @@
 /**
- * Centralized, validated access to public environment variables.
- * Only NEXT_PUBLIC_* values are safe for the browser. A missing value throws a
- * clear error at first use rather than failing deep inside the Supabase client.
+ * Browser-safe environment access.
+ *
+ * This module is imported by client components, so it must only ever read
+ * NEXT_PUBLIC_* values. Server-only configuration (OpenAI keys and models)
+ * lives in `env.server.ts`, which is marked `server-only` so that importing it
+ * from client code is a build error rather than a silent leak.
+ *
+ * A missing value throws a clear error at first use rather than failing deep
+ * inside the Supabase client.
  */
 function required(name: string, value: string | undefined): string {
   if (!value || value.length === 0) {
@@ -20,24 +26,7 @@ export const env = {
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     ),
   siteUrl: () => process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
-  /** Server-only. Never expose to the client. */
-  openaiApiKey: () => required("OPENAI_API_KEY", process.env.OPENAI_API_KEY),
-  /** Server-only. Never expose to the client. */
-  openaiResumeModel: () => process.env.OPENAI_RESUME_MODEL ?? "gpt-4.1-mini",
-  /** Server-only. Model used for AI CV screening (role-fit reviews). */
-  openaiScreeningModel: () =>
-    process.env.OPENAI_SCREENING_MODEL ?? process.env.OPENAI_RESUME_MODEL ?? "gpt-4.1-mini",
 };
-
-/** True when the OpenAI key is configured (used to gracefully disable CV parsing). */
-export function isResumeParsingConfigured(): boolean {
-  return !!process.env.OPENAI_API_KEY;
-}
-
-/** Alias for assessment/screening callers — same gate as resume parsing. */
-export function isOpenAiConfigured(): boolean {
-  return isResumeParsingConfigured();
-}
 
 /** True when both required Supabase values are present (used for graceful degradation). */
 export function isSupabaseConfigured(): boolean {
