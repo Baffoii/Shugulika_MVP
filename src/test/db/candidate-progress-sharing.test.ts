@@ -360,4 +360,63 @@ d("candidate progress, result sharing, and CV consent security", () => {
       ).rows[0]?.count,
     ).toBe(1);
   });
+
+  it("routes unassigned support only to HQ and the responsible franchise", async () => {
+    const franchiseAdminB = "a0000000-0000-4000-8000-000000000033";
+    await client.query(
+      `insert into auth.users (id, email, raw_user_meta_data)
+       values ($1, 'fa-b@test.io', jsonb_build_object(
+         'role', 'candidate', 'full_name', 'Franchise Admin B'
+       ))`,
+      [franchiseAdminB],
+    );
+    await client.query(`delete from public.memberships where user_id = $1`, [franchiseAdminB]);
+    await client.query(`delete from public.candidate_profiles where user_id = $1`, [
+      franchiseAdminB,
+    ]);
+    await client.query(
+      `insert into public.memberships
+         (user_id, organization_id, role, status, country_code)
+       values ($1, $2, 'franchise_admin', 'active', 'TZ')`,
+      [franchiseAdminB, ids.franchiseB],
+    );
+    await client.query(
+      `update public.applications set assigned_recruiter_id = null where id = $1`,
+      [ids.applicationC1],
+    );
+
+    const orgMessage = "Please help me understand the next step for this application.";
+    await commitAs(
+      client,
+      ids.candidate1,
+      `select public.candidate_request_support('help', 'application', $1, $2)`,
+      [ids.applicationC1, orgMessage],
+    );
+    const orgRecipients = (
+      await client.query(
+        `select user_id from public.notifications
+         where category = 'candidate_support' and body = $1`,
+        [orgMessage],
+      )
+    ).rows.map((row) => row.user_id);
+    expect(orgRecipients).toContain(ids.hqAdmin);
+    expect(orgRecipients).toContain(ids.franchiseAdminA);
+    expect(orgRecipients).not.toContain(franchiseAdminB);
+
+    const hqMessage = "Please review a possible duplicate account for this candidate profile.";
+    await commitAs(
+      client,
+      ids.candidate1,
+      `select public.candidate_request_support('duplicate_review', 'candidate', $1, $2)`,
+      [candidate1Profile, hqMessage],
+    );
+    const duplicateRecipients = (
+      await client.query(
+        `select user_id from public.notifications
+         where category = 'candidate_support' and body = $1`,
+        [hqMessage],
+      )
+    ).rows.map((row) => row.user_id);
+    expect(duplicateRecipients).toEqual([ids.hqAdmin]);
+  });
 });

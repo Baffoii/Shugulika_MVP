@@ -572,7 +572,8 @@ create or replace function public.candidate_request_support(
   p_request_type text, p_subject_type text, p_subject_id uuid, p_message text
 ) returns bigint language plpgsql security definer set search_path = public as $$
 declare v_candidate uuid := public.auth_candidate_id();
-declare v_application uuid; v_assigned_to uuid; v_event bigint; v_event_type text;
+declare v_application uuid; v_job_order uuid; v_responsible_org uuid;
+declare v_assigned_to uuid; v_event bigint; v_event_type text;
 begin
   if v_candidate is null then raise exception 'candidate profile required'; end if;
   if p_request_type not in ('help', 'reschedule', 'duplicate_review') then
@@ -586,21 +587,31 @@ begin
       raise exception 'invalid duplicate review subject';
     end if;
   elsif p_subject_type = 'assessment' then
-    select application_id, assigned_by into v_application, v_assigned_to
+    select application_id, job_order_id, assigned_by
+      into v_application, v_job_order, v_assigned_to
       from public.assessment_assignments
       where id = p_subject_id and candidate_id = v_candidate;
     if not found then raise exception 'assessment not found'; end if;
   elsif p_subject_type = 'interview' then
-    select application_id, assigned_by into v_application, v_assigned_to
+    select application_id, job_order_id, assigned_by
+      into v_application, v_job_order, v_assigned_to
       from public.interview_assignments
       where id = p_subject_id and candidate_id = v_candidate;
     if not found then raise exception 'interview not found'; end if;
   elsif p_subject_type = 'application' then
-    select id, assigned_recruiter_id into v_application, v_assigned_to
+    select id, job_order_id, assigned_recruiter_id
+      into v_application, v_job_order, v_assigned_to
       from public.applications where id = p_subject_id and candidate_id = v_candidate;
     if not found then raise exception 'application not found'; end if;
   else
     raise exception 'unsupported request subject';
+  end if;
+  if v_application is not null then
+    select owning_org_id into v_responsible_org
+      from public.applications where id = v_application;
+  elsif v_job_order is not null then
+    select responsible_org_id into v_responsible_org
+      from public.job_orders where id = v_job_order;
   end if;
   v_event_type := case p_request_type
     when 'reschedule' then 'reschedule_requested'
@@ -634,7 +645,15 @@ begin
         else 'Candidate requested help' end,
       trim(p_message), 'candidate', v_candidate
     from public.memberships m
-    where m.status = 'active' and m.role in ('hq_admin', 'franchise_admin');
+    where m.status = 'active'
+      and (
+        m.role = 'hq_admin'
+        or (
+          m.role = 'franchise_admin'
+          and v_responsible_org is not null
+          and m.organization_id = v_responsible_org
+        )
+      );
   end if;
   return v_event;
 end $$;
