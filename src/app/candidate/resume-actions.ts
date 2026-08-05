@@ -49,6 +49,20 @@ import type {
   ResumeSuggestionTargetEntity,
 } from "@/lib/database.types";
 import type { ActionResult } from "@/app/candidate/actions";
+import { asAtsClient } from "@/lib/candidates/db";
+import {
+  confirmedProvenance,
+  parserVersion,
+  suggestionIsRedundant,
+} from "@/lib/candidates/provenance";
+import { applyProvenance, loadCandidateProvenance } from "@/lib/candidates/provenance-store";
+import { buildExtractionProvenance } from "@/lib/resume/provenance-mapping";
+import {
+  normalizeEmployer,
+  normalizeInstitution,
+  normalizeSkill,
+} from "@/lib/candidates/normalize";
+import type { ProvenanceEntity } from "@/lib/candidates/constants";
 
 const CV_CONFIG = DOCUMENT_TYPES.find((d) => d.key === "cv")!;
 
@@ -312,13 +326,19 @@ async function startResumeParse(
       : "No OpenAI key — free rule-based stub only",
   });
 
-  const { data: runData, error: runErr } = await supabase
+  const { data: runData, error: runErr } = await asAtsClient(supabase)
     .from("resume_parse_runs")
     .insert({
       candidate_id: cid,
       document_id: document.id,
       status: "queued",
       provider: usingAi ? "openai" : "rule_based",
+      // Stamped up front so a run that fails mid-way still records which parser
+      // attempted it.
+      parser_version: parserVersion({
+        usingAi,
+        model: usingAi ? (process.env.OPENAI_RESUME_MODEL ?? "gpt-4.1-mini") : null,
+      }),
     })
     .select("id")
     .single();
@@ -536,7 +556,29 @@ async function continueResumeParse(
       });
     }
 
-    const profileSuggestions = buildProfileSuggestions(profile, extraction.personal, currentPhone);
+    // Fields the candidate has already confirmed. A parse that merely restates
+    // one of them produces no suggestion: re-asking about a decision they
+    // already made reads as the product ignoring them. A parse that proposes
+    // something *different* still gets through — they are always free to change
+    // their mind.
+    const priorProvenance = await loadCandidateProvenance(supabase, cid);
+    const profileProvenance = new Map(
+      priorProvenance
+        .filter((p) => p.targetEntity === "profile")
+        .map((p) => [p.fieldPath, p] as const),
+    );
+
+    const profileSuggestions = buildProfileSuggestions(
+      profile,
+      extraction.personal,
+      currentPhone,
+    ).filter(
+      (s) =>
+        !suggestionIsRedundant(
+          profileProvenance.get(s.field_path) ?? null,
+          typeof s.suggested_value === "string" ? s.suggested_value : null,
+        ),
+    );
     const suggestions: SuggestionInsert[] = [
       ...profileSuggestions,
       ...buildExperienceSuggestions(
@@ -586,10 +628,36 @@ async function continueResumeParse(
       suggestionCount: suggestions.length,
     });
 
+    const model = usingAi ? (process.env.OPENAI_RESUME_MODEL ?? "gpt-4.1-mini") : null;
+    const runParserVersion = parserVersion({ usingAi, model });
+    const extractedAt = new Date().toISOString();
+
+    // Record what the parser produced, at what confidence, before any of it is
+    // offered to the candidate. `applyProvenance` refuses to overwrite a field
+    // the candidate already confirmed, and reports which ones it held back.
+    const provenanceResult = await applyProvenance(
+      supabase,
+      cid,
+      buildExtractionProvenance(extraction, {
+        candidateId: cid,
+        parseRunId: runId,
+        parserVersion: runParserVersion,
+        extractedAt,
+      }),
+    );
+
     if (suggestions.length > 0) {
-      const { error: insertErr } = await supabase
+      const { error: insertErr } = await asAtsClient(supabase)
         .from("resume_field_suggestions")
-        .insert(suggestions.map((s) => ({ ...s, parse_run_id: runId, candidate_id: cid })));
+        .insert(
+          suggestions.map((s) => ({
+            ...s,
+            parse_run_id: runId,
+            candidate_id: cid,
+            parser_version: runParserVersion,
+            extracted_at: extractedAt,
+          })),
+        );
       if (insertErr) {
         aiError("resume", "SUGGESTION_INSERT_FAILED", insertErr, { runId });
         return await fail(
@@ -598,11 +666,21 @@ async function continueResumeParse(
       }
     }
 
-    await supabase
+    aiLog("resume", "PROVENANCE_RECORDED", {
+      runId,
+      parserVersion: runParserVersion,
+      written: provenanceResult.written,
+      // Field names and reasons only — never the values themselves.
+      heldBack: provenanceResult.skipped.map((s) => `${s.key}:${s.reason}`),
+      rejectedByGuard: provenanceResult.failed,
+    });
+
+    await asAtsClient(supabase)
       .from("resume_parse_runs")
       .update({
         status: "succeeded",
-        model: usingAi ? (process.env.OPENAI_RESUME_MODEL ?? "gpt-4.1-mini") : "rule-based-v1",
+        model: model ?? "rule-based-v1",
+        parser_version: runParserVersion,
         completed_at: new Date().toISOString(),
       })
       .eq("id", runId);
@@ -641,18 +719,21 @@ export async function parseResumeAction(documentId: string): Promise<ActionResul
   return { ok: true };
 }
 
+/** The generated row type predates the provenance columns from 20260809090000. */
+type SuggestionWithProvenance = ResumeFieldSuggestionRow & { parser_version: string | null };
+
 async function getOwnedPendingSuggestion(
   supabase: ReturnType<typeof createClient>,
   cid: string,
   id: string,
-): Promise<ResumeFieldSuggestionRow | null> {
+): Promise<SuggestionWithProvenance | null> {
   const { data } = await supabase
     .from("resume_field_suggestions")
     .select("*")
     .eq("id", id)
     .eq("candidate_id", cid)
     .maybeSingle();
-  return (data as ResumeFieldSuggestionRow | null) ?? null;
+  return (data as SuggestionWithProvenance | null) ?? null;
 }
 
 /**
@@ -675,11 +756,39 @@ export async function acceptSuggestionAction(
 
   const edited = !!formData;
   const resolvedAt = new Date().toISOString();
-  const markResolved = async (status: "accepted" | "edited") => {
+  const { data: actor } = await supabase.auth.getUser();
+
+  /**
+   * Resolve the suggestion and record the candidate's decision as provenance.
+   * From here on this field is theirs: `applyProvenance` — and, behind it, the
+   * trigger on candidate_field_provenance — will not let a later parse
+   * overwrite it, whatever confidence that parse reports.
+   */
+  const markResolved = async (
+    status: "accepted" | "edited",
+    confirmed?: { entity: ProvenanceEntity; fieldPath: string; valueText: string | null },
+  ) => {
     await supabase
       .from("resume_field_suggestions")
       .update({ status, resolved_at: resolvedAt })
       .eq("id", id);
+
+    if (confirmed && actor.user) {
+      await applyProvenance(supabase, cid, [
+        confirmedProvenance({
+          candidateId: cid,
+          targetEntity: confirmed.entity,
+          targetEntityId: null,
+          fieldPath: confirmed.fieldPath,
+          valueText: confirmed.valueText,
+          confirmedBy: actor.user.id,
+          confirmedAt: resolvedAt,
+          parserVersion: suggestion.parser_version ?? null,
+          parseRunId: suggestion.parse_run_id,
+          evidenceText: suggestion.evidence_text,
+        }),
+      ]);
+    }
     revalidatePath("/candidate/profile");
   };
 
@@ -730,7 +839,11 @@ export async function acceptSuggestionAction(
         .eq("id", cid);
       if (error) return { ok: false, error: error.message };
     }
-    await markResolved(edited ? "edited" : "accepted");
+    await markResolved(edited ? "edited" : "accepted", {
+      entity: "profile",
+      fieldPath: field,
+      valueText: value || null,
+    });
     return { ok: true };
   }
 
@@ -789,7 +902,13 @@ export async function acceptSuggestionAction(
           .eq("candidate_id", cid)
       : await supabase.from("candidate_experiences").insert({ ...payload, candidate_id: cid });
     if (error) return { ok: false, error: error.message };
-    await markResolved(edited ? "edited" : "accepted");
+    await markResolved(edited ? "edited" : "accepted", {
+      entity: "experience",
+      fieldPath: `experience:${normalizeEmployer(payload.employer_name) || normalizeEmployer(payload.title)}`,
+      valueText: [payload.title, payload.employer_name, payload.start_date, payload.end_date]
+        .filter(Boolean)
+        .join(" | "),
+    });
     return { ok: true };
   }
 
@@ -844,7 +963,13 @@ export async function acceptSuggestionAction(
           .eq("candidate_id", cid)
       : await supabase.from("candidate_education").insert({ ...payload, candidate_id: cid });
     if (error) return { ok: false, error: error.message };
-    await markResolved(edited ? "edited" : "accepted");
+    await markResolved(edited ? "edited" : "accepted", {
+      entity: "education",
+      fieldPath: `education:${normalizeInstitution(payload.institution)}`,
+      valueText: [payload.institution, payload.qualification, payload.end_date]
+        .filter(Boolean)
+        .join(" | "),
+    });
     return { ok: true };
   }
 
@@ -856,7 +981,11 @@ export async function acceptSuggestionAction(
       .from("candidate_skills")
       .insert({ candidate_id: cid, name: name.trim() });
     if (error) return { ok: false, error: error.message };
-    await markResolved(edited ? "edited" : "accepted");
+    await markResolved(edited ? "edited" : "accepted", {
+      entity: "skill",
+      fieldPath: `skill:${normalizeSkill(name)}`,
+      valueText: name.trim(),
+    });
     return { ok: true };
   }
 
@@ -899,7 +1028,11 @@ export async function acceptSuggestionAction(
           .eq("candidate_id", cid)
       : await supabase.from("candidate_certifications").insert({ ...payload, candidate_id: cid });
     if (error) return { ok: false, error: error.message };
-    await markResolved(edited ? "edited" : "accepted");
+    await markResolved(edited ? "edited" : "accepted", {
+      entity: "certification",
+      fieldPath: `certification:${normalizeSkill(payload.name)}`,
+      valueText: [payload.name, payload.issuer].filter(Boolean).join(" | "),
+    });
     return { ok: true };
   }
 
@@ -943,7 +1076,11 @@ export async function acceptSuggestionAction(
           .eq("candidate_id", cid)
       : await supabase.from("candidate_languages").insert({ ...payload, candidate_id: cid });
     if (error) return { ok: false, error: error.message };
-    await markResolved(edited ? "edited" : "accepted");
+    await markResolved(edited ? "edited" : "accepted", {
+      entity: "language",
+      fieldPath: `language:${normalizeSkill(payload.language)}`,
+      valueText: [payload.language, payload.proficiency].filter(Boolean).join(" | "),
+    });
     return { ok: true };
   }
 
