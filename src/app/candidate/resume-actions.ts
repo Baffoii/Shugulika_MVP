@@ -719,7 +719,7 @@ export async function parseResumeAction(documentId: string): Promise<ActionResul
   return { ok: true };
 }
 
-/** The generated row type predates the provenance columns from 20260809090000. */
+/** The generated row type predates the provenance columns from 20260809090500. */
 type SuggestionWithProvenance = ResumeFieldSuggestionRow & { parser_version: string | null };
 
 async function getOwnedPendingSuggestion(

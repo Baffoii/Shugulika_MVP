@@ -8,7 +8,7 @@
  * confident as what it would replace.
  *
  * The same rule is enforced by a trigger in
- * `20260809090000_ats_parser_provenance.sql`. This module is the fast path that
+ * `20260809090500_ats_parser_provenance.sql`. This module is the fast path that
  * keeps callers from ever tripping it; the trigger is the backstop for code
  * that does not come through here.
  *

@@ -249,6 +249,10 @@ declare
   v_event_id uuid;
   v_updates jsonb := coalesce(p_profile_updates, '{}'::jsonb);
   v_skipped_applications uuid[];
+  v_primary public.candidate_profiles%rowtype;
+  v_merged public.candidate_profiles%rowtype;
+  v_reassigned jsonb;
+  v_before_snapshot jsonb;
 begin
   if not public.auth_is_hq() then
     raise exception 'apply_candidate_merge: HQ role required' using errcode = 'insufficient_privilege';
@@ -266,6 +270,42 @@ begin
       using errcode = 'check_violation';
   end if;
 
+  -- Lock both records in a stable order so concurrent reviews cannot create a
+  -- merge chain or capture a stale before-state.
+  perform 1
+    from public.candidate_profiles
+   where id in (p_primary_candidate_id, p_merged_candidate_id)
+   order by id
+   for update;
+
+  select * into v_primary
+    from public.candidate_profiles
+   where id = p_primary_candidate_id;
+  select * into v_merged
+    from public.candidate_profiles
+   where id = p_merged_candidate_id;
+
+  if v_primary.id is null or v_merged.id is null then
+    raise exception 'apply_candidate_merge: both candidate records must exist'
+      using errcode = 'no_data_found';
+  end if;
+  if v_primary.merged_into_candidate_id is not null or v_merged.merged_into_candidate_id is not null then
+    raise exception 'apply_candidate_merge: an already-merged candidate cannot be merged again'
+      using errcode = 'check_violation';
+  end if;
+
+  if p_duplicate_link_id is not null and not exists (
+    select 1
+      from public.candidate_duplicate_links l
+     where l.id = p_duplicate_link_id
+       and l.candidate_id_low = least(p_primary_candidate_id, p_merged_candidate_id)
+       and l.candidate_id_high = greatest(p_primary_candidate_id, p_merged_candidate_id)
+       and l.status in ('suspected', 'confirmed_duplicate')
+  ) then
+    raise exception 'apply_candidate_merge: duplicate link does not match this candidate pair'
+      using errcode = 'check_violation';
+  end if;
+
   -- Applications are unique per (candidate, job order). When both records
   -- applied to the same job, the duplicate's row stays put rather than being
   -- destroyed. Work this out BEFORE writing the audit row: before_snapshot is
@@ -279,6 +319,32 @@ begin
           and b.job_order_id = a.job_order_id
      );
 
+  -- Capture the exact rows this transaction is about to move. Reversal must
+  -- never depend on an RLS-filtered browser snapshot assembled earlier.
+  v_reassigned := jsonb_build_object(
+    'experiences', coalesce((select jsonb_agg(id) from public.candidate_experiences where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'education', coalesce((select jsonb_agg(id) from public.candidate_education where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'skills', coalesce((select jsonb_agg(id) from public.candidate_skills where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'certifications', coalesce((select jsonb_agg(id) from public.candidate_certifications where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'languages', coalesce((select jsonb_agg(id) from public.candidate_languages where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'documents', coalesce((select jsonb_agg(id) from public.candidate_documents where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'applications', coalesce((
+      select jsonb_agg(id)
+        from public.applications
+       where candidate_id = p_merged_candidate_id
+         and not (id = any(v_skipped_applications))
+    ), '[]'::jsonb),
+    'externalMappings', '[]'::jsonb
+  );
+
+  v_before_snapshot := p_before_snapshot || jsonb_build_object(
+    'primary', to_jsonb(v_primary),
+    'duplicate', to_jsonb(v_merged),
+    'reassigned', v_reassigned,
+    'skippedApplicationIds', to_jsonb(v_skipped_applications),
+    'capturedAt', now()
+  );
+
   -- The audit row comes next: the pointer guard below refuses to flag a
   -- candidate merged unless this row already exists.
   insert into public.candidate_merge_events (
@@ -287,7 +353,7 @@ begin
   ) values (
     p_duplicate_link_id, p_primary_candidate_id, p_merged_candidate_id,
     'merged', coalesce(p_field_decisions, '[]'::jsonb),
-    p_before_snapshot || jsonb_build_object('skippedApplicationIds', to_jsonb(v_skipped_applications)),
+    v_before_snapshot,
     v_actor
   )
   returning id into v_event_id;
@@ -342,7 +408,7 @@ begin
   insert into public.audit_logs (actor_id, action, entity_type, entity_id, before_value, after_value, metadata)
   values (
     v_actor, 'candidate.merge', 'candidate_profile', p_merged_candidate_id,
-    p_before_snapshot,
+    v_before_snapshot,
     jsonb_build_object('primaryCandidateId', p_primary_candidate_id, 'profileUpdates', v_updates),
     jsonb_build_object('mergeEventId', v_event_id, 'duplicateLinkId', p_duplicate_link_id,
                        'skippedApplicationIds', to_jsonb(v_skipped_applications))
@@ -386,7 +452,8 @@ begin
   update public.candidate_profiles
      set merged_into_candidate_id = null,
          merged_at = null,
-         profile_status = 'active'
+         profile_status = coalesce(v_event.before_snapshot->'duplicate'->>'profile_status', 'active'),
+         open_to_work = coalesce((v_event.before_snapshot->'duplicate'->>'open_to_work')::boolean, true)
    where id = v_event.merged_candidate_id;
 
   v_reassigned := coalesce(v_event.before_snapshot->'reassigned', '{}'::jsonb);

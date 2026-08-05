@@ -198,6 +198,9 @@ export async function recordHumanDecision(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const client = atsServiceClient();
   if (!client) return { ok: false, error: "Service role is not configured." };
+  if (input.decision === "link_existing" && !input.matchedCandidateId) {
+    return { ok: false, error: "Choose the existing candidate to link." };
+  }
 
   const { error } = await client
     .from("zoho_candidate_import_records")
@@ -206,9 +209,8 @@ export async function recordHumanDecision(input: {
       reviewed_by: input.reviewedBy,
       reviewed_at: new Date().toISOString(),
       status: input.decision === "skip" ? "skipped" : "matched",
-      ...(input.matchedCandidateId !== undefined
-        ? { matched_candidate_id: input.matchedCandidateId }
-        : {}),
+      matched_candidate_id:
+        input.decision === "create_new" ? null : (input.matchedCandidateId ?? null),
     })
     .eq("id", input.recordId);
 
@@ -240,7 +242,7 @@ export async function recordExternalMapping(input: {
       last_external_fingerprint: input.fingerprint,
       last_synced_at: new Date().toISOString(),
     },
-    { onConflict: "connection_id,local_entity_type,local_entity_id" },
+    { onConflict: "connection_id,zoho_module,zoho_record_id" },
   );
 
   if (error) {

@@ -102,10 +102,20 @@ curl -X POST "$SITE_URL/api/integrations/zoho-recruit/workers/import" -H "Author
 A gated-off import returns `200 {"skipped": true, "reason": …}` rather than an
 error — a disabled import is a normal state, not something to retry against.
 
-## What this does not do
+## Canonical upsert behavior
 
-`canonical_upsert` reports which records are approved and ready, but does not
-itself create candidate accounts. Provisioning a candidate creates an auth user,
-which is a larger surface than this workstream owns; the staged decisions are
-complete and durable, and the write step hands off to the existing
-candidate-provisioning path.
+For a non-dry-run batch with every write gate enabled, `canonical_upsert` now
+performs the approved write:
+
+- an existing durable Zoho mapping wins and is followed through any candidate
+  merge pointer;
+- an approved existing match is enriched conservatively — imported values fill
+  blanks but do not overwrite established candidate data;
+- a new record provisions a candidate Auth account from its email, then writes
+  the canonical profile, skills, experience, education, and Zoho provenance;
+- every successful row writes the durable external identity mapping and becomes
+  `upserted`; a failed row becomes `failed` with a reason and is safe to retry.
+
+Phone-only source records cannot provision a new account under the current
+identity schema and fail explicitly at the write stage. They may still link to
+an existing candidate after human review.

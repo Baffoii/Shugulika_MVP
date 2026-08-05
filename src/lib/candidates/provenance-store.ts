@@ -9,7 +9,7 @@ import "server-only";
  *
  * The precedence rule lives in `provenance.ts`; this module only applies it. A
  * write that the rule rejects is never sent to the database — and if some other
- * path ever tries, the trigger in 20260809090000 stops it there.
+ * path ever tries, the trigger in 20260809090500 stops it there.
  */
 import { asAtsClient, fromProvenanceRecord, toProvenanceRecord } from "@/lib/candidates/db";
 import {

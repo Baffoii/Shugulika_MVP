@@ -1,7 +1,7 @@
 /**
  * The acceptance criterion this file exists for: a value the candidate has
  * confirmed is never overwritten by a lower-confidence re-parse. The database
- * trigger in 20260809090000 enforces the same rule; these tests cover the
+ * trigger in 20260809090500 enforces the same rule; these tests cover the
  * decision logic that keeps callers from ever reaching it.
  */
 import { describe, it, expect } from "vitest";

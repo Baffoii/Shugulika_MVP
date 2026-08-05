@@ -292,6 +292,14 @@ describeDb("candidate dedupe and merge", () => {
     await client.query(`update public.candidate_profiles set city = 'Dodoma' where id = $1`, [
       candidateB,
     ]);
+    const child = await client.query(
+      `insert into public.candidate_experiences
+         (candidate_id, title, employer_name, kind)
+       values ($1, 'Imported role', 'Example Ltd', 'formal')
+       returning id`,
+      [candidateB],
+    );
+    const experienceId = child.rows[0].id as string;
 
     const snapshot = JSON.stringify({
       primary: { id: candidateA, city: "Dar" },
@@ -316,19 +324,24 @@ describeDb("candidate dedupe and merge", () => {
       `select p.city,
               d.merged_into_candidate_id,
               l.status as link_status,
-              e.performed_by
+              e.performed_by,
+              e.before_snapshot->'reassigned'->'experiences' as moved_experiences,
+              x.candidate_id as experience_candidate_id
          from public.candidate_profiles p
          join public.candidate_profiles d on d.id = $2
          join public.candidate_duplicate_links l on l.id = $3
          join public.candidate_merge_events e on e.id = $4
+         join public.candidate_experiences x on x.id = $5
         where p.id = $1`,
-      [candidateA, candidateB, linkId, eventId],
+      [candidateA, candidateB, linkId, eventId, experienceId],
     );
     expect(after.rows[0]).toMatchObject({
       city: "Dodoma",
       merged_into_candidate_id: candidateA,
       link_status: "merged",
+      experience_candidate_id: candidateA,
     });
+    expect(after.rows[0].moved_experiences).toContain(experienceId);
     // The merge is attributed to a real person, not to the system.
     expect(after.rows[0].performed_by).toBeTruthy();
 
@@ -341,19 +354,24 @@ describeDb("candidate dedupe and merge", () => {
     );
 
     const reverted = await client.query(
-      `select p.city, d.merged_into_candidate_id, e.status, e.reverted_by, l.status as link_status
+      `select p.city, d.merged_into_candidate_id, d.open_to_work,
+              e.status, e.reverted_by, l.status as link_status,
+              x.candidate_id as experience_candidate_id
          from public.candidate_profiles p
          join public.candidate_profiles d on d.id = $2
          join public.candidate_merge_events e on e.id = $3
          join public.candidate_duplicate_links l on l.id = $4
+         join public.candidate_experiences x on x.id = $5
         where p.id = $1`,
-      [candidateA, candidateB, eventId, linkId],
+      [candidateA, candidateB, eventId, linkId, experienceId],
     );
     expect(reverted.rows[0]).toMatchObject({
       city: "Dar",
       merged_into_candidate_id: null,
       status: "reverted",
       link_status: "suspected",
+      open_to_work: true,
+      experience_candidate_id: candidateB,
     });
     expect(reverted.rows[0].reverted_by).toBeTruthy();
   });

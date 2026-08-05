@@ -18,6 +18,7 @@ import { asAtsClient } from "@/lib/candidates/db";
 import type { ImportStage } from "@/lib/candidates/constants";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { getImportGateStatus } from "@/lib/integrations/zoho-recruit/import/gates";
+import { upsertCanonicalCandidate } from "@/lib/integrations/zoho-recruit/import/canonical-upsert";
 import {
   draftIdentityInput,
   findIntraBatchDuplicates,
@@ -375,7 +376,7 @@ async function humanReviewNotes(batchId: string): Promise<string[]> {
 }
 
 async function stageCanonicalUpsert(
-  batch: { id: string; stage: ImportStage; is_dry_run: boolean },
+  batch: { id: string; connection_id: string; stage: ImportStage; is_dry_run: boolean },
   notes: string[],
 ): Promise<void> {
   const gates = await getImportGateStatus();
@@ -395,12 +396,72 @@ async function stageCanonicalUpsert(
     return;
   }
 
-  // Writing canonical records creates auth users and candidate profiles, which
-  // is a larger surface than this workstream owns. The staged decisions are
-  // complete and durable; the write step is deliberately left to the operator
-  // path that already provisions candidate accounts.
+  const ready = records.filter((record) => record.status === "matched");
+  let written = 0;
+  let created = 0;
+  let failed = 0;
+
+  for (const record of ready) {
+    const draft = ((record.mapped_payload ?? {}) as { draft?: CandidateDraft }).draft;
+    if (!draft) {
+      failed += 1;
+      await upsertStagedRecord({
+        batchId: batch.id,
+        zohoRecordId: record.zoho_record_id,
+        stage: "canonical_upsert",
+        status: "failed",
+        mappedPayload: record.mapped_payload as Record<string, unknown>,
+        sourceFingerprint: record.source_fingerprint,
+        matchedCandidateId: record.matched_candidate_id,
+        matchScore: record.match_score,
+        matchKind: record.match_kind,
+        lastError: "Mapped candidate draft is missing.",
+      });
+      continue;
+    }
+
+    const result = await upsertCanonicalCandidate({
+      connectionId: batch.connection_id,
+      zohoRecordId: record.zoho_record_id,
+      draft,
+      matchedCandidateId: record.decision === "create_new" ? null : record.matched_candidate_id,
+      fingerprint: record.source_fingerprint,
+    });
+
+    if (!result.ok) {
+      failed += 1;
+      await upsertStagedRecord({
+        batchId: batch.id,
+        zohoRecordId: record.zoho_record_id,
+        stage: "canonical_upsert",
+        status: "failed",
+        mappedPayload: record.mapped_payload as Record<string, unknown>,
+        sourceFingerprint: record.source_fingerprint,
+        matchedCandidateId: record.matched_candidate_id,
+        matchScore: record.match_score,
+        matchKind: record.match_kind,
+        lastError: result.error,
+      });
+      continue;
+    }
+
+    written += 1;
+    if (result.created) created += 1;
+    await upsertStagedRecord({
+      batchId: batch.id,
+      zohoRecordId: record.zoho_record_id,
+      stage: "canonical_upsert",
+      status: "upserted",
+      mappedPayload: record.mapped_payload as Record<string, unknown>,
+      sourceFingerprint: record.source_fingerprint,
+      matchedCandidateId: result.candidateId,
+      matchScore: record.match_score,
+      matchKind: record.match_kind,
+    });
+  }
+
   notes.push(
-    `${records.filter((r) => r.status === "matched").length} record(s) are approved and ready for canonical upsert.`,
+    `Canonical upsert: ${written} written (${created} new), ${failed} failed. Durable Zoho mappings were recorded for every successful row.`,
   );
 }
 

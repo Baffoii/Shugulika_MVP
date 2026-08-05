@@ -6,7 +6,7 @@
  * regenerated in this workstream, so — following the same pattern as
  * `src/lib/kpi/db-extensions.ts` — these live here as a local schema fragment.
  * Keep them in sync with:
- *   * 20260809090000_ats_parser_provenance.sql
+ *   * 20260809090500_ats_parser_provenance.sql
  *   * 20260809091000_candidate_dedupe.sql
  *   * 20260809092000_zoho_candidate_import.sql
  *   * 20260809093000_work_authorization.sql
@@ -95,7 +95,7 @@ export type CandidateMergeColumns = {
   merged_at: string | null;
 };
 
-/** resume_parse_runs, including the parser_version column added by 20260809090000. */
+/** resume_parse_runs, including the parser_version column added by 20260809090500. */
 export type ResumeParseRunParserColumns = {
   id: string;
   candidate_id: string;
@@ -110,7 +110,7 @@ export type ResumeParseRunParserColumns = {
   created_at: string;
 };
 
-/** resume_field_suggestions, including the provenance columns added by 20260809090000. */
+/** resume_field_suggestions, including the provenance columns added by 20260809090500. */
 export type ResumeFieldSuggestionParserColumns = {
   id: string;
   parse_run_id: string;

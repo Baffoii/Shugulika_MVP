@@ -141,6 +141,7 @@ as `src/lib/kpi/db-extensions.ts`.
 
 - Employer deduplication. `probableDuplicateEmployers` stays an honest zero
   rather than a borrowed number.
-- Creating candidate accounts from an import (see the import doc).
+- Sending candidate invitations after import. Canonical account provisioning is
+  implemented, but invitations remain a separate, deliberate communication.
 - A nav entry for `/hq/merge-review` — it is linked from `/hq/data-quality`,
   which is in the HQ nav.
