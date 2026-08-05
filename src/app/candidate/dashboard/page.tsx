@@ -19,13 +19,18 @@ import {
   getMySkills,
   getMyDocuments,
   getMyInterviews,
+  getMyAssessmentAssignments,
+  getMyResultSnapshots,
+  getMyNotifications,
   computeCompletion,
   applicationRoleLabel,
 } from "@/lib/data/candidate";
+import { getMyInterviewAssignments } from "@/lib/data/video-interviews";
+import { nextCandidateDeadline, pendingAssessments } from "@/lib/candidate/progress";
 import { listPublicJobs } from "@/lib/data/jobs";
 import { JobCard } from "@/components/jobs/JobCard";
 import { CANDIDATE_FACING_STATUS } from "@/lib/constants";
-import { formatDate, titleCase } from "@/lib/format";
+import { formatDate, formatDateTime, titleCase } from "@/lib/format";
 import { CheckCircle2, Circle } from "lucide-react";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -40,15 +45,33 @@ export default async function CandidateDashboard() {
       />
     );
   }
-  const [apps, exp, edu, skills, docs, interviews, jobsRes] = await Promise.all([
+  const [
+    apps,
+    exp,
+    edu,
+    skills,
+    docs,
+    interviews,
+    videoInterviews,
+    assessments,
+    notifications,
+    jobsRes,
+  ] = await Promise.all([
     getMyApplications(candidate.id),
     getMyExperiences(candidate.id),
     getMyEducation(candidate.id),
     getMySkills(candidate.id),
     getMyDocuments(candidate.id),
     getMyInterviews(candidate.id),
+    getMyInterviewAssignments(candidate.id),
+    getMyAssessmentAssignments(candidate.id),
+    getMyNotifications(),
     listPublicJobs({}),
   ]);
+  const snapshots = await getMyResultSnapshots(
+    candidate.id,
+    assessments.map((assessment) => assessment.id),
+  );
   const completion = computeCompletion({
     profile: candidate,
     experiences: exp.length,
@@ -61,6 +84,45 @@ export default async function CandidateDashboard() {
   const upcoming = interviews.filter((i) =>
     ["requested", "scheduled", "confirmed"].includes(i.status),
   );
+  const openVideoInterviews = videoInterviews.filter((item) =>
+    ["invited", "in_progress"].includes(item.status),
+  );
+  const openAssessments = pendingAssessments(assessments);
+  const unreadNotifications = notifications.filter((notification) => !notification.read_at);
+  const nextDeadline = nextCandidateDeadline([
+    ...activeApps
+      .filter((app) => app.next_action_due)
+      .map((app) => ({
+        kind: "application" as const,
+        label: `Application update · ${applicationRoleLabel(app)}`,
+        at: app.next_action_due as string,
+        href: `/candidate/applications/${app.id}`,
+      })),
+    ...openAssessments
+      .filter((assessment) => assessment.due_at)
+      .map((assessment) => ({
+        kind: "assessment" as const,
+        label: "Assessment deadline",
+        at: assessment.due_at as string,
+        href: `/candidate/assessments/${assessment.id}`,
+      })),
+    ...openVideoInterviews
+      .filter((interview) => interview.expires_at)
+      .map((interview) => ({
+        kind: "interview" as const,
+        label: `Video interview · ${interview.job_title ?? interview.template_name_snapshot}`,
+        at: interview.expires_at as string,
+        href: `/candidate/interviews/${interview.id}`,
+      })),
+    ...upcoming
+      .filter((interview) => interview.scheduled_at)
+      .map((interview) => ({
+        kind: "interview" as const,
+        label: "Scheduled interview",
+        at: interview.scheduled_at as string,
+        href: "/candidate/interviews",
+      })),
+  ]);
 
   const checklist = [
     { label: "Add your headline", done: !!candidate.headline },
@@ -75,24 +137,73 @@ export default async function CandidateDashboard() {
     <div>
       <PageHeader
         title={`Welcome, ${candidate.given_name ?? "there"}`}
-        description="Track your applications, keep your profile fresh, and discover new roles."
+        description="Your progress home: what is complete, what is pending, and what has been shared."
         actions={
-          <ButtonLink href="/candidate/jobs" size="sm">
-            Browse jobs
-          </ButtonLink>
+          <>
+            <ButtonLink href="/candidate/help" size="sm" variant="outline">
+              Help & accessibility
+            </ButtonLink>
+            <ButtonLink href="/candidate/jobs" size="sm">
+              Browse jobs
+            </ButtonLink>
+          </>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active applications" value={activeApps.length} tone="brand" />
-        <StatCard label="Upcoming interviews" value={upcoming.length} tone="info" />
-        <StatCard label="Saved documents" value={docs.length} tone="neutral" />
+        <StatCard
+          label="Pending assessments / interviews"
+          value={openAssessments.length + upcoming.length + openVideoInterviews.length}
+          tone="info"
+          hint="Actions assigned to you"
+        />
+        <StatCard
+          label="Unread notifications"
+          value={unreadNotifications.length}
+          tone={unreadNotifications.length ? "warn" : "neutral"}
+        />
+        <StatCard
+          label="Results available"
+          value={snapshots.length}
+          tone={snapshots.length ? "success" : "neutral"}
+          hint="Verified offline snapshots"
+        />
       </div>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Your next step</CardTitle>
+          <Link href="/candidate/notifications" className="text-sm text-brand-700 hover:underline">
+            Notifications ({unreadNotifications.length} unread)
+          </Link>
+        </CardHeader>
+        <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {nextDeadline ? (
+            <>
+              <div>
+                <p className="text-sm font-medium text-ink">{nextDeadline.label}</p>
+                <p className="text-sm text-ink-muted">Due {formatDateTime(nextDeadline.at)}</p>
+              </div>
+              <ButtonLink href={nextDeadline.href} size="sm">
+                Open next step
+              </ButtonLink>
+            </>
+          ) : (
+            <div>
+              <p className="text-sm font-medium text-ink">No upcoming deadline</p>
+              <p className="text-sm text-ink-muted">
+                We will show your next assessment, interview, or application deadline here.
+              </p>
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <CardHeader>
-            <CardTitle>Get ready to apply — {completion}% complete</CardTitle>
+            <CardTitle>Your profile — {completion}% complete</CardTitle>
           </CardHeader>
           <CardBody>
             <div className="mb-4 h-2 w-full overflow-hidden rounded-full bg-surface-border">

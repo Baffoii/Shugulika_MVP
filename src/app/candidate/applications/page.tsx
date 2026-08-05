@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, Card, EmptyState, Badge, ButtonLink } from "@/components/ui/primitives";
 import { DataTable, THead, TH, TR, TD } from "@/components/ui/table";
-import { getMyCandidate, getMyApplications, applicationRoleLabel } from "@/lib/data/candidate";
+import {
+  getMyCandidate,
+  getMyApplications,
+  getMyVisibleEvents,
+  applicationRoleLabel,
+} from "@/lib/data/candidate";
 import { CANDIDATE_FACING_STATUS } from "@/lib/constants";
 import { statusTone } from "@/components/StatusBadge";
 import { formatDate, titleCase } from "@/lib/format";
@@ -13,7 +18,16 @@ export const metadata: Metadata = { title: "Applications" };
 export default async function CandidateApplicationsPage() {
   const candidate = await getMyCandidate();
   if (!candidate) return null;
-  const apps = await getMyApplications(candidate.id);
+  const [apps, events] = await Promise.all([
+    getMyApplications(candidate.id),
+    getMyVisibleEvents(candidate.id),
+  ]);
+  const latestEventByApplication = new Map<string, (typeof events)[number]>();
+  for (const event of events) {
+    if (event.application_id && !latestEventByApplication.has(event.application_id)) {
+      latestEventByApplication.set(event.application_id, event);
+    }
+  }
 
   return (
     <div>
@@ -38,12 +52,14 @@ export default async function CandidateApplicationsPage() {
               <TH>Role</TH>
               <TH>Applied</TH>
               <TH>Status</TH>
+              <TH>Last visible update</TH>
               <TH>Route</TH>
               <TH className="text-right">Action</TH>
             </TR>
           </THead>
           <tbody>
             {apps.map((a) => {
+              const latestEvent = latestEventByApplication.get(a.id);
               const label = a.withdrawn_at
                 ? "Withdrawn"
                 : (CANDIDATE_FACING_STATUS[a.current_stage] ?? titleCase(a.current_stage));
@@ -70,25 +86,46 @@ export default async function CandidateApplicationsPage() {
                     )}
                   </TD>
                   <TD className="text-ink-muted">
+                    {latestEvent ? (
+                      <span>
+                        {latestEvent.label}
+                        <span className="block text-xs text-ink-subtle">
+                          {formatDate(latestEvent.occurred_at)}
+                        </span>
+                      </span>
+                    ) : (
+                      "Application received"
+                    )}
+                  </TD>
+                  <TD className="text-ink-muted">
                     {a.recruitment_path === "A" ? "Direct employer" : "Shugulika-managed"}
                   </TD>
                   <TD className="text-right">
-                    {a.withdrawn_at || a.current_stage === "rejected" ? (
+                    <span className="inline-flex flex-wrap items-center justify-end gap-2">
                       <ButtonLink
-                        href={`/candidate/apply/${a.job_order_id}?reapply=1`}
-                        variant="outline"
+                        href={`/candidate/applications/${a.id}`}
+                        variant="secondary"
                         size="sm"
                       >
-                        Apply again
+                        Progress & sharing
                       </ButtonLink>
-                    ) : (
-                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
-                        {a.consent_status === "pending" ? (
-                          <GrantEmployerConsentButton applicationId={a.id} />
-                        ) : null}
-                        <WithdrawButton applicationId={a.id} />
-                      </span>
-                    )}
+                      {a.withdrawn_at || a.current_stage === "rejected" ? (
+                        <ButtonLink
+                          href={`/candidate/apply/${a.job_order_id}?reapply=1`}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Apply again
+                        </ButtonLink>
+                      ) : (
+                        <>
+                          {a.consent_status === "pending" ? (
+                            <GrantEmployerConsentButton applicationId={a.id} />
+                          ) : null}
+                          <WithdrawButton applicationId={a.id} />
+                        </>
+                      )}
+                    </span>
                   </TD>
                 </TR>
               );

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   ApplicationRow,
   CandidateProfileRow,
@@ -15,6 +16,14 @@ import type {
   CandidateCertificationRow,
   CandidateLanguageRow,
 } from "@/lib/database.types";
+import type {
+  AssessmentResultSnapshot,
+  CandidateAssessmentListItem,
+  CandidateVisibleEvent,
+  CvShareEvent,
+  ResultShareGrant,
+} from "@/lib/candidate/types";
+import { readCandidateResultSnapshot } from "@/lib/assessments/result-snapshot";
 
 /** The current user's candidate profile row (null if not a candidate). */
 export async function getMyCandidate(): Promise<CandidateProfileRow | null> {
@@ -23,7 +32,22 @@ export async function getMyCandidate(): Promise<CandidateProfileRow | null> {
   return (data as CandidateProfileRow | null) ?? null;
 }
 
-export interface ApplicationWithJob extends ApplicationRow {
+export type CandidateApplicationRow = Pick<
+  ApplicationRow,
+  | "id"
+  | "candidate_id"
+  | "job_order_id"
+  | "recruitment_path"
+  | "current_stage"
+  | "consent_status"
+  | "cv_document_id"
+  | "next_action_due"
+  | "withdrawn_at"
+  | "created_at"
+  | "updated_at"
+>;
+
+export interface ApplicationWithJob extends CandidateApplicationRow {
   job_orders:
     | (Pick<
         JobOrderRow,
@@ -43,7 +67,9 @@ export async function getMyApplications(candidateId: string): Promise<Applicatio
   const supabase = createClient();
   const { data, error } = await supabase
     .from("applications")
-    .select("*")
+    .select(
+      "id,candidate_id,job_order_id,recruitment_path,current_stage,consent_status,cv_document_id,next_action_due,withdrawn_at,created_at,updated_at",
+    )
     .eq("candidate_id", candidateId)
     .order("created_at", { ascending: false });
 
@@ -52,7 +78,7 @@ export async function getMyApplications(candidateId: string): Promise<Applicatio
     return [];
   }
 
-  const apps = (data as ApplicationRow[] | null) ?? [];
+  const apps = (data as CandidateApplicationRow[] | null) ?? [];
   if (apps.length === 0) return [];
 
   const orderIds = [...new Set(apps.map((a) => a.job_order_id))];
@@ -242,6 +268,143 @@ export async function getMyConsents(candidateId: string): Promise<CandidateConse
     .eq("candidate_id", candidateId)
     .order("granted_at", { ascending: false });
   return (data as CandidateConsentRow[] | null) ?? [];
+}
+
+/** Candidate-safe assessment fields only; no grading notes, AI reviews, or responses. */
+export async function getMyAssessmentAssignments(
+  candidateId: string,
+): Promise<CandidateAssessmentListItem[]> {
+  const db = createClient() as unknown as SupabaseClient;
+  const { data, error } = await db
+    .from("assessment_assignments")
+    .select(
+      "id,application_id,job_order_id,assessment_mode,assessment_seniority,status,assigned_at,due_at,opened_at,submitted_at,provider,paid_by",
+    )
+    .eq("candidate_id", candidateId)
+    .order("assigned_at", { ascending: false });
+  if (error) {
+    console.error("[getMyAssessmentAssignments]", error.message);
+    return [];
+  }
+  return (data as CandidateAssessmentListItem[] | null) ?? [];
+}
+
+export async function getMyVisibleEvents(
+  candidateId: string,
+  applicationId?: string,
+  limit = 100,
+): Promise<CandidateVisibleEvent[]> {
+  const db = createClient() as unknown as SupabaseClient;
+  let query = db
+    .from("candidate_visible_events")
+    .select("id,candidate_id,application_id,event_type,label,details,occurred_at")
+    .eq("candidate_id", candidateId)
+    .order("occurred_at", { ascending: false })
+    .limit(limit);
+  if (applicationId) query = query.eq("application_id", applicationId);
+  const { data, error } = await query;
+  if (error) {
+    console.error("[getMyVisibleEvents]", error.message);
+    return [];
+  }
+  return (data as CandidateVisibleEvent[] | null) ?? [];
+}
+
+export async function getMyResultShareGrants(candidateId: string): Promise<ResultShareGrant[]> {
+  const db = createClient() as unknown as SupabaseClient;
+  const { data, error } = await db
+    .from("result_share_grants")
+    .select(
+      "id,candidate_id,assignment_id,recipient_org_id,purpose,job_order_id,scope,consent_id,shared_at,expires_at,revoked_at,revoked_by",
+    )
+    .eq("candidate_id", candidateId)
+    .order("shared_at", { ascending: false });
+  if (error) {
+    console.error("[getMyResultShareGrants]", error.message);
+    return [];
+  }
+  const grants = (data as ResultShareGrant[] | null) ?? [];
+  if (!grants.length) return [];
+
+  const recipientIds = [...new Set(grants.map((row) => row.recipient_org_id))];
+  const jobIds = [...new Set(grants.map((row) => row.job_order_id))];
+  const [orgResult, jobResult] = await Promise.all([
+    db.from("organizations").select("id,name").in("id", recipientIds),
+    db.from("job_orders").select("id,title").in("id", jobIds),
+  ]);
+  const orgNames = new Map(
+    ((orgResult.data as { id: string; name: string }[] | null) ?? []).map((row) => [
+      row.id,
+      row.name,
+    ]),
+  );
+  const jobTitles = new Map(
+    ((jobResult.data as { id: string; title: string }[] | null) ?? []).map((row) => [
+      row.id,
+      row.title,
+    ]),
+  );
+  return grants.map((row) => ({
+    ...row,
+    recipient_name: orgNames.get(row.recipient_org_id) ?? "Recipient organization",
+    job_title: jobTitles.get(row.job_order_id) ?? "Job application",
+  }));
+}
+
+export async function getMyCvShareEvents(
+  candidateId: string,
+  applicationId?: string,
+): Promise<CvShareEvent[]> {
+  const db = createClient() as unknown as SupabaseClient;
+  let query = db
+    .from("cv_share_events")
+    .select(
+      "id,application_id,recipient_org_id,document_id,consent_id,channel,portal_path,created_at",
+    )
+    .eq("candidate_id", candidateId)
+    .order("created_at", { ascending: false });
+  if (applicationId) query = query.eq("application_id", applicationId);
+  const { data, error } = await query;
+  if (error) {
+    console.error("[getMyCvShareEvents]", error.message);
+    return [];
+  }
+  return (data as CvShareEvent[] | null) ?? [];
+}
+
+export async function getMyResultSnapshot(
+  candidateId: string,
+  assignmentId: string,
+): Promise<AssessmentResultSnapshot | null> {
+  return readCandidateResultSnapshot(
+    createClient() as unknown as SupabaseClient,
+    candidateId,
+    assignmentId,
+  );
+}
+
+export async function getMyResultSnapshots(
+  candidateId: string,
+  assignmentIds: string[],
+): Promise<AssessmentResultSnapshot[]> {
+  if (!assignmentIds.length) return [];
+  const db = createClient() as unknown as SupabaseClient;
+  const { data, error } = await db
+    .from("assessment_result_snapshots")
+    .select("assignment_id,provider,permitted_payload,visibility_tier,captured_at")
+    .in("assignment_id", assignmentIds);
+  if (error) {
+    console.error("[getMyResultSnapshots]", error.message);
+    return [];
+  }
+  // RLS limits rows to this candidate; retaining the assignment id allowlist
+  // makes the ownership boundary explicit at the query layer too.
+  const ownIds = new Set(
+    (await getMyAssessmentAssignments(candidateId)).map((assignment) => assignment.id),
+  );
+  return ((data as AssessmentResultSnapshot[] | null) ?? []).filter((row) =>
+    ownIds.has(row.assignment_id),
+  );
 }
 
 // Profile-completion is a pure function extracted to lib/candidate-completion.ts

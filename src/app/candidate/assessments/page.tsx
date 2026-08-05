@@ -1,10 +1,22 @@
 import type { Metadata } from "next";
 import { ClipboardList } from "lucide-react";
-import { Badge, Card, CardBody, EmptyState, PageHeader } from "@/components/ui/primitives";
+import {
+  Badge,
+  ButtonLink,
+  Card,
+  CardBody,
+  EmptyState,
+  PageHeader,
+} from "@/components/ui/primitives";
 import { StatusBadge } from "@/components/StatusBadge";
 import { createClient } from "@/lib/supabase/server";
-import { getMyCandidate } from "@/lib/data/candidate";
-import type { AssessmentAssignmentRow, JobOrderRow } from "@/lib/database.types";
+import {
+  getMyAssessmentAssignments,
+  getMyCandidate,
+  getMyResultSnapshots,
+} from "@/lib/data/candidate";
+import type { JobOrderRow } from "@/lib/database.types";
+import type { CandidateAssessmentListItem } from "@/lib/candidate/types";
 import { formatDate, titleCase } from "@/lib/format";
 import { CandidateAssessmentActions } from "@/components/assessments/CandidateAssessmentActions";
 
@@ -19,12 +31,12 @@ export default async function CandidateAssessmentsPage() {
   const candidate = await getMyCandidate();
   if (!candidate) return null;
   const supabase = createClient();
-  const { data } = await supabase
-    .from("assessment_assignments")
-    .select("*")
-    .eq("candidate_id", candidate.id)
-    .order("assigned_at", { ascending: false });
-  const assignments = (data as AssessmentAssignmentRow[] | null) ?? [];
+  const assignments = await getMyAssessmentAssignments(candidate.id);
+  const snapshots = await getMyResultSnapshots(
+    candidate.id,
+    assignments.map((assignment) => assignment.id),
+  );
+  const resultIds = new Set(snapshots.map((snapshot) => snapshot.assignment_id));
   const jobIds = [...new Set(assignments.map((item) => item.job_order_id))];
   const { data: jobsData } = jobIds.length
     ? await supabase
@@ -56,12 +68,18 @@ export default async function CandidateAssessmentsPage() {
       <PageHeader
         title="Assessments"
         description="Aptitude assessments for applications in Skills assessment."
+        actions={
+          <ButtonLink href="/candidate/help" size="sm" variant="outline">
+            Preparation & help
+          </ButtonLink>
+        }
       />
       <AssessmentSection
         title="Assigned & in progress"
         assignments={active}
         jobs={jobs}
         employers={employers}
+        resultIds={resultIds}
       />
       <div className="mt-8">
         <AssessmentSection
@@ -69,6 +87,7 @@ export default async function CandidateAssessmentsPage() {
           assignments={completed}
           jobs={jobs}
           employers={employers}
+          resultIds={resultIds}
         />
       </div>
     </div>
@@ -80,11 +99,13 @@ function AssessmentSection({
   assignments,
   jobs,
   employers,
+  resultIds,
 }: {
   title: string;
-  assignments: AssessmentAssignmentRow[];
+  assignments: CandidateAssessmentListItem[];
   jobs: Map<string, JobMeta>;
   employers: Map<string, string>;
+  resultIds: Set<string>;
 }) {
   return (
     <section>
@@ -134,13 +155,24 @@ function AssessmentSection({
                       {assignment.due_at ? ` · Due ${formatDate(assignment.due_at)}` : ""}
                     </p>
                   </div>
-                  <CandidateAssessmentActions
-                    assignmentId={assignment.id}
-                    jobOrderId={assignment.job_order_id}
-                    mode={assignment.assessment_mode}
-                    status={assignment.status}
-                    fileName={includesEmployer ? (job?.assessment_file_name ?? null) : null}
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {resultIds.has(assignment.id) ? (
+                      <ButtonLink
+                        href={`/candidate/assessments/${assignment.id}/result`}
+                        size="sm"
+                        variant="secondary"
+                      >
+                        View permitted result
+                      </ButtonLink>
+                    ) : null}
+                    <CandidateAssessmentActions
+                      assignmentId={assignment.id}
+                      jobOrderId={assignment.job_order_id}
+                      mode={assignment.assessment_mode}
+                      status={assignment.status}
+                      fileName={includesEmployer ? (job?.assessment_file_name ?? null) : null}
+                    />
+                  </div>
                 </CardBody>
               </Card>
             );
