@@ -45,7 +45,12 @@ export interface ScreeningInput {
   answers: ScreeningAnswer[];
 }
 
-const SYSTEM_PROMPT = `You are a senior technical recruiter reviewing a candidate's CV against a specific job's requirements. Produce a rigorous, EVIDENCE-BASED role-fit assessment. Be direct and honest — do not soften weak matches, and do not inflate scores to be encouraging. Your reader is a recruiter deciding whether to advance this candidate.
+/**
+ * Exported so the nationality-ban regression test can assert the instruction is
+ * still in the prompt. A protected-characteristic ban that lives only in a
+ * string nobody checks is a ban that quietly disappears in the next edit.
+ */
+export const SYSTEM_PROMPT = `You are a senior technical recruiter reviewing a candidate's CV against a specific job's requirements. Produce a rigorous, EVIDENCE-BASED role-fit assessment. Be direct and honest — do not soften weak matches, and do not inflate scores to be encouraging. Your reader is a recruiter deciding whether to advance this candidate.
 
 Rules:
 - Judge ONLY the fit between this CV and THIS job's requirements. Ignore anything not relevant to the role.

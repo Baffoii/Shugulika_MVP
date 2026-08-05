@@ -97,6 +97,59 @@ describe("nationality is never a KPI signal", () => {
   });
 });
 
+describe("ATS work-eligibility never leaks into KPI filters", () => {
+  // Work AUTHORIZATION ("may this person legally work here") is lawful and
+  // job-related. It is still not a KPI dimension, and it must never become a
+  // back door for the nationality filter the rest of this file bans.
+  const ELIGIBILITY_KEYS = [
+    "work_authorization",
+    "workauthorization",
+    "eligibility_status",
+    "permit_type",
+    "right_to_work",
+    "visa",
+    "work_permit",
+  ];
+
+  it("no KPI module reads a work-eligibility field", () => {
+    for (const file of kpiSourceFiles()) {
+      const source = readFileSync(file, "utf8").toLowerCase();
+      for (const key of ELIGIBILITY_KEYS) {
+        expect(source).not.toContain(key);
+      }
+    }
+  });
+
+  it("a work-eligibility query parameter is dropped like any other unknown key", () => {
+    const parsed = parseKpiFilters({
+      grain: "month",
+      work_authorization: "eligible_with_permit",
+      permit_type: "class-B",
+      visa: "yes",
+    });
+    const serialized = JSON.stringify(parsed);
+    expect(serialized).not.toContain("eligible_with_permit");
+    expect(serialized).not.toContain("class-B");
+    expect(Object.keys(parsed).sort()).toEqual(
+      ["employerOrgId", "from", "grain", "jobOrderId", "kind", "roleId", "stage", "to"].sort(),
+    );
+  });
+
+  it("the prohibited list stays a superset of every nationality synonym", () => {
+    for (const synonym of ["nationality", "nationalities", "citizenship", "national_origin"]) {
+      expect(containsProhibitedFilterKey([synonym])).toBe(true);
+      expect(containsProhibitedFilterKey([synonym.toUpperCase()])).toBe(true);
+    }
+  });
+
+  it("no allowed filter key is a protected characteristic or an eligibility field", () => {
+    for (const key of ALLOWED_FILTER_KEYS) {
+      expect(PROTECTED_TERMS).not.toContain(key);
+      expect(ELIGIBILITY_KEYS).not.toContain(key);
+    }
+  });
+});
+
 describe("AI-derived signals stay advisory", () => {
   it("no KPI module can reject, decide, or auto-advance", () => {
     // KPI code summarizes and flags; the decision to reject or advance lives in

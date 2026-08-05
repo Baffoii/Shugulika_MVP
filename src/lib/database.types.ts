@@ -1,9 +1,16 @@
 /**
- * Hand-authored Supabase types matching supabase/migrations/0001_mvp_schema.sql.
- * (Generated types are unavailable without a service key/CLI; keep this in sync
- * with the migrations.) Row types are exact; Insert/Update are permissive
- * partials — runtime validation is done by Zod + database constraints.
+ * Supabase types matching the fully migrated public schema. Row types are exact;
+ * Insert/Update are permissive partials — runtime validation is done by Zod and
+ * database constraints.
  */
+import type {
+  CandidateDuplicateLinkRow,
+  CandidateFieldProvenanceRow,
+  CandidateMergeEventRow,
+  CandidateWorkAuthorizationRow,
+  ZohoCandidateImportBatchRow,
+  ZohoCandidateImportRecordRow,
+} from "@/lib/candidates/db";
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 type Tbl<R> = { Row: R; Insert: Partial<R>; Update: Partial<R>; Relationships: [] };
@@ -1423,6 +1430,10 @@ export type Database = {
       candidate_search_access_events: Tbl<CandidateSearchAccessEventRow>;
       candidate_documents: Tbl<CandidateDocumentRow>;
       candidate_consents: Tbl<CandidateConsentRow>;
+      candidate_field_provenance: Tbl<CandidateFieldProvenanceRow>;
+      candidate_duplicate_links: Tbl<CandidateDuplicateLinkRow>;
+      candidate_merge_events: Tbl<CandidateMergeEventRow>;
+      candidate_work_authorizations: Tbl<CandidateWorkAuthorizationRow>;
       assessment_result_snapshots: Tbl<AssessmentResultSnapshotRow>;
       result_share_grants: Tbl<ResultShareGrantRow>;
       candidate_visible_events: Tbl<CandidateVisibleEventRow>;
@@ -1477,6 +1488,8 @@ export type Database = {
       zoho_recruit_offline_cases: Tbl<ZohoRecruitOfflineCaseRow>;
       zoho_recruit_production_approvals: Tbl<ZohoRecruitProductionApprovalRow>;
       zoho_recruit_sync_observations: Tbl<ZohoRecruitSyncObservationRow>;
+      zoho_candidate_import_batches: Tbl<ZohoCandidateImportBatchRow>;
+      zoho_candidate_import_records: Tbl<ZohoCandidateImportRecordRow>;
       interview_templates: Tbl<InterviewTemplateRow>;
       interview_template_questions: Tbl<InterviewTemplateQuestionRow>;
       interview_assignments: Tbl<InterviewAssignmentRow>;
