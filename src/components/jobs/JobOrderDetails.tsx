@@ -132,17 +132,17 @@ export function JobOrderListRow({
 }) {
   const [open, setOpen] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
   const [optimisticFrozen, setOptimisticFrozen] = useState<FrozenAiTemplateRef | null>(null);
   const effectiveFrozen = optimisticFrozen ?? frozenAiTemplate;
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
+  // Drop the optimistic value once the server confirms the frozen template.
+  // Adjusted during render (React's "state derived from props" pattern) rather
+  // than in an effect, which would render stale once and then cascade.
+  const [prevFrozenAi, setPrevFrozenAi] = useState(frozenAiTemplate);
+  if (prevFrozenAi !== frozenAiTemplate) {
+    setPrevFrozenAi(frozenAiTemplate);
     if (frozenAiTemplate) setOptimisticFrozen(null);
-  }, [frozenAiTemplate]);
+  }
 
   useEffect(() => {
     if (!banner) return;
@@ -204,7 +204,9 @@ export function JobOrderListRow({
           </TD>
         </TR>
       ) : null}
-      {mounted && banner
+      {/* `banner` is null on the server and only set by client handlers, so the
+          portal branch never evaluates during SSR or hydration. */}
+      {banner
         ? createPortal(
             <div
               className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4"

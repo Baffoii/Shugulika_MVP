@@ -58,20 +58,27 @@ export function AiInterviewPlanPanel({
   const [generating, setGenerating] = useState(false);
   const [stageIndex, setStageIndex] = useState(0);
 
-  useEffect(() => {
+  // Re-sync local state when the server sends a new frozen template. Done during
+  // render (React's "adjusting state when a prop changes" pattern) rather than in
+  // an effect, which would render once with stale state and then cascade.
+  const [prevFrozen, setPrevFrozen] = useState(frozenTemplate);
+  if (prevFrozen !== frozenTemplate) {
+    setPrevFrozen(frozenTemplate);
     setLocalFrozen(frozenTemplate);
     if (frozenTemplate) setEditing(false);
-  }, [frozenTemplate]);
+  }
 
   useEffect(() => {
-    if (!generating) {
-      setStageIndex(0);
-      return;
-    }
+    if (!generating) return;
     const timer = window.setInterval(() => {
       setStageIndex((index) => (index + 1) % GENERATING_STAGES.length);
     }, 2500);
-    return () => window.clearInterval(timer);
+    // Reset on teardown rather than synchronously in the effect body, which
+    // would trigger a cascading render on every `generating` change.
+    return () => {
+      window.clearInterval(timer);
+      setStageIndex(0);
+    };
   }, [generating]);
 
   const activeFrozen = localFrozen;

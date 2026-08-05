@@ -24,7 +24,7 @@ import {
   gradeShugulikaAssessment,
   type StoredAssessmentResponses,
 } from "@/lib/assessments/grade-shugulika";
-import { isOpenAiConfigured } from "@/lib/env";
+import { isOpenAiConfigured } from "@/lib/env.server";
 import { asJson, buildEmployerDisclosedProfiles } from "@/lib/employer-entitlements";
 
 export interface ActionResult {

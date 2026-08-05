@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env.server";
 import { aiError, aiLog, aiWarn } from "@/lib/ai-cost-log";
 import {
   AI_INTERVIEW_PROMPT_VERSION,
@@ -180,7 +180,7 @@ export async function createRealtimeClientSecret(opts: {
   questions: InterviewAssignmentQuestionRow[];
   jobTitle: string;
 }): Promise<EphemeralSessionResult> {
-  const model = opts.assignment.model || env.openaiRealtimeModel();
+  const model = opts.assignment.model || serverEnv.openaiRealtimeModel();
   const instructions = buildRealtimeInstructions(opts.assignment, opts.questions, opts.jobTitle);
   const started = Date.now();
 
@@ -194,7 +194,7 @@ export async function createRealtimeClientSecret(opts: {
     const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.openaiApiKey()}`,
+        Authorization: `Bearer ${serverEnv.openaiApiKey()}`,
         "Content-Type": "application/json",
         "OpenAI-Safety-Identifier": safetyIdentifier(opts.userId),
       },
@@ -222,27 +222,45 @@ export async function createRealtimeClientSecret(opts: {
 
     const durationMs = Date.now() - started;
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
+      // Never log the raw provider body: it can echo request content and, on
+      // some error paths, fragments of the Authorization header. Status only.
       aiWarn("interview", "REALTIME_SECRET_FAILED", {
         status: response.status,
         durationMs,
-        bodyPreview: body.slice(0, 200),
       });
       throw new RealtimeSessionError("Could not start the live interview session.");
     }
 
-    const data = (await response.json()) as {
-      value?: string;
-      client_secret?: { value?: string; expires_at?: number };
-      expires_at?: number;
-      session?: { id?: string };
+    let data: {
+      value?: unknown;
+      client_secret?: { value?: unknown; expires_at?: unknown };
+      expires_at?: unknown;
+      session?: { id?: unknown };
     };
-    const clientSecret = data.value ?? data.client_secret?.value;
-    if (!clientSecret) {
-      throw new RealtimeSessionError("OpenAI did not return a client secret.");
+    try {
+      data = await response.json();
+    } catch {
+      throw new RealtimeSessionError("OpenAI returned a malformed client secret response.");
+    }
+    if (typeof data !== "object" || data === null) {
+      throw new RealtimeSessionError("OpenAI returned a malformed client secret response.");
     }
 
-    const expiresRaw = data.expires_at ?? data.client_secret?.expires_at;
+    // Validate the shape before handing anything to the browser — a truthiness
+    // check would happily forward an object or a number as a "secret".
+    const rawSecret = data.value ?? data.client_secret?.value;
+    if (typeof rawSecret !== "string" || rawSecret.length === 0) {
+      throw new RealtimeSessionError("OpenAI did not return a client secret.");
+    }
+    // Defence in depth: a Realtime client secret is short-lived and must never
+    // be the permanent `sk-` key, even if the provider response is wrong.
+    if (/^sk-/.test(rawSecret)) {
+      throw new RealtimeSessionError("Refusing to return a non-ephemeral credential.");
+    }
+    const clientSecret = rawSecret;
+
+    const expiresCandidate = data.expires_at ?? data.client_secret?.expires_at;
+    const expiresRaw = typeof expiresCandidate === "number" ? expiresCandidate : null;
     aiLog("interview", "REALTIME_SECRET_OK", {
       durationMs,
       model,
@@ -253,7 +271,7 @@ export async function createRealtimeClientSecret(opts: {
       clientSecret,
       expiresAt: expiresRaw ? new Date(expiresRaw * 1000).toISOString() : null,
       model,
-      sessionIdHint: data.session?.id ?? null,
+      sessionIdHint: typeof data.session?.id === "string" ? data.session.id : null,
     };
   } catch (error) {
     if (error instanceof RealtimeSessionError) throw error;

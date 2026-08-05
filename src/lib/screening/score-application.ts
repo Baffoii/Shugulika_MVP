@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env.server";
 import { screeningResultSchema, type ScreeningResult } from "@/lib/screening/screening-schema";
 import {
   aiError,
@@ -124,7 +124,7 @@ export async function scoreApplication(input: ScreeningInput): Promise<Screening
     throw new ScreeningError("The CV has no extractable text to screen.");
   }
 
-  const model = env.openaiScreeningModel();
+  const model = serverEnv.openaiScreeningModel();
   const cvChars = input.cvText.length;
   const cvCharsSent = Math.min(cvChars, 60_000);
   const userPrompt = buildUserPrompt(input);
@@ -153,7 +153,7 @@ export async function scoreApplication(input: ScreeningInput): Promise<Screening
     tip: "This is a PAID call — cache hits skip this path",
   });
 
-  const client = new OpenAI({ apiKey: env.openaiApiKey() });
+  const client = new OpenAI({ apiKey: serverEnv.openaiApiKey() });
   const started = Date.now();
   try {
     aiLog("openai", "CALL_START", {

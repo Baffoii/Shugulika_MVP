@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  env,
-  isSupabaseConfigured,
-  isResumeParsingConfigured,
-  isOpenAiConfigured,
-} from "@/lib/env";
+import { env, isSupabaseConfigured } from "@/lib/env";
+import { isOpenAiConfigured, isResumeParsingConfigured, serverEnv } from "@/lib/env.server";
 
 const KEYS = [
   "NEXT_PUBLIC_SUPABASE_URL",
@@ -59,15 +55,15 @@ describe("env access", () => {
   });
 
   it("defaults the resume model but never treats it as public", () => {
-    expect(env.openaiResumeModel()).toBe("gpt-4.1-mini");
+    expect(serverEnv.openaiResumeModel()).toBe("gpt-4.1-mini");
   });
 
   it("defaults realtime and transcribe models", () => {
-    expect(env.openaiRealtimeModel()).toBe("gpt-realtime-2.1");
-    expect(env.openaiTranscribeModel()).toBe("gpt-4o-transcribe");
+    expect(serverEnv.openaiRealtimeModel()).toBe("gpt-realtime-2.1");
+    expect(serverEnv.openaiTranscribeModel()).toBe("gpt-4o-transcribe");
     process.env.OPENAI_REALTIME_MODEL = "gpt-realtime-2.1-mini";
     process.env.OPENAI_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
-    expect(env.openaiRealtimeModel()).toBe("gpt-realtime-2.1-mini");
-    expect(env.openaiTranscribeModel()).toBe("gpt-4o-mini-transcribe");
+    expect(serverEnv.openaiRealtimeModel()).toBe("gpt-realtime-2.1-mini");
+    expect(serverEnv.openaiTranscribeModel()).toBe("gpt-4o-mini-transcribe");
   });
 });

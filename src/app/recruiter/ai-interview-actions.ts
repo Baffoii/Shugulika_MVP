@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { isOpenAiConfigured, env } from "@/lib/env";
+import { isOpenAiConfigured, serverEnv } from "@/lib/env.server";
 import {
   AI_INTERVIEW_INSTRUCTIONS_VERSION,
   AI_INTERVIEW_PRIVACY_NOTICE_VERSION,
@@ -292,7 +292,7 @@ export async function generateAndFreezeAiInterviewPlanAction(
       interview_mode: "live_ai_voice" as const,
       duration_seconds: brief.duration_seconds,
       language: brief.language,
-      model: env.openaiRealtimeModel(),
+      model: serverEnv.openaiRealtimeModel(),
       prompt_version: AI_INTERVIEW_PROMPT_VERSION,
       rubric_version: AI_INTERVIEW_RUBRIC_VERSION,
       plan_status: "frozen" as const,
@@ -430,7 +430,7 @@ export async function freezeAiInterviewTemplateAction(
       approved_at: new Date().toISOString(),
       prompt_version: template.prompt_version ?? AI_INTERVIEW_PROMPT_VERSION,
       rubric_version: template.rubric_version ?? AI_INTERVIEW_RUBRIC_VERSION,
-      model: template.model ?? env.openaiRealtimeModel(),
+      model: template.model ?? serverEnv.openaiRealtimeModel(),
     })
     .eq("id", templateId);
   if (error) return { ok: false, error: error.message };
@@ -807,46 +807,83 @@ export async function completeLiveAiInterviewAction(
   const session = sessionData as InterviewLiveSessionRow | null;
   if (!session) return { ok: false, error: "Session not found." };
 
-  // Ensure terminal status before submit_interview gate
-  if (!["completed", "incomplete_technical", "abandoned"].includes(session.status)) {
-    await supabase
+  const TERMINAL = ["completed", "incomplete_technical", "abandoned", "failed"];
+
+  // The browser calling "I'm done" is not evidence that the interview was
+  // actually answered. Derive the terminal status from recorded state instead:
+  // only a session that genuinely reached `live` and has every required
+  // question completed may be recorded as `completed`. Anything else stays
+  // visibly incomplete so a human picks it up. Never mass-complete questions —
+  // they are completed one at a time by the `complete_question` tool path.
+  if (!TERMINAL.includes(session.status)) {
+    const { data: questionRows, error: questionsError } = await supabase
+      .from("interview_assignment_questions")
+      .select("status,is_required")
+      .eq("assignment_id", session.assignment_id);
+    if (questionsError) return { ok: false, error: "Could not read interview questions." };
+
+    const questions = (questionRows as { status: string; is_required: boolean }[] | null) ?? [];
+    const requiredOutstanding = questions.filter(
+      (q) => q.is_required && q.status !== "completed",
+    ).length;
+    const reachedLive = session.started_at != null;
+    const finalStatus =
+      reachedLive && requiredOutstanding === 0 ? "completed" : "incomplete_technical";
+
+    const { error: statusError } = await supabase
       .from("interview_live_sessions")
       .update({
-        status: "completed",
+        status: finalStatus,
         ended_at: new Date().toISOString(),
+        ...(finalStatus === "incomplete_technical"
+          ? {
+              error_reason: reachedLive
+                ? `ended with ${requiredOutstanding} required question(s) unanswered`
+                : "session never started",
+            }
+          : {}),
       })
-      .eq("id", sessionId);
-  }
+      .eq("id", sessionId)
+      // Guard against a concurrent writer having already finalised this row.
+      .not("status", "in", `(${TERMINAL.join(",")})`);
+    // A failed write must not let the next workflow stage proceed.
+    if (statusError) return { ok: false, error: "Could not finalise the interview session." };
 
-  // Mark remaining questions complete for live mode
-  await supabase
-    .from("interview_assignment_questions")
-    .update({ status: "completed", completed_at: new Date().toISOString() })
-    .eq("assignment_id", session.assignment_id)
-    .neq("status", "completed");
+    session.status = finalStatus;
+  }
 
   const { error: submitError } = await supabase.rpc("submit_interview", {
     p_assignment_id: session.assignment_id,
   });
   if (submitError) {
-    // Last-resort finalize if the RPC rejects a already-ended live session.
-    const { data: assignmentRow } = await supabase
+    // submit_interview is idempotent for already-finalised assignments; tolerate
+    // only that case, and surface anything else as the failure it is.
+    const { data: assignmentRow, error: assignmentError } = await supabase
       .from("interview_assignments")
       .select("status")
       .eq("id", session.assignment_id)
       .maybeSingle();
+    if (assignmentError) return { ok: false, error: "Could not confirm interview submission." };
     const status = (assignmentRow as { status: string } | null)?.status;
-    if (status === "submitted" || status === "reviewed") {
-      // Already finalized.
-    } else {
+    if (status !== "submitted" && status !== "reviewed") {
       return { ok: false, error: submitError.message };
     }
   }
 
-  // Post-process (transcribe/evaluate) in the background so the candidate UI can close promptly.
-  void runPostInterviewProcessing(sessionId).catch(() => {
-    /* staff can retry from recruiter results */
-  });
+  // Post-processing (transcribe/evaluate) is awaited rather than fire-and-forget:
+  // a floating promise in a serverless request is not guaranteed to run. Failure
+  // is recorded on the session so staff can retry from the recruiter view, and
+  // must never be reported to the candidate as a successful evaluation.
+  // NOTE: this is still best-effort within one request. A durable claim/retry
+  // queue is required before enabling the feature — see docs/ai-interview-enablement.md.
+  try {
+    await runPostInterviewProcessing(sessionId);
+  } catch {
+    await supabase
+      .from("interview_live_sessions")
+      .update({ error_reason: "post-interview processing failed; staff retry required" })
+      .eq("id", sessionId);
+  }
 
   revalidatePath(`/candidate/interviews/${session.assignment_id}`);
   revalidatePath(`/candidate/interviews/${session.assignment_id}/session`);
@@ -972,7 +1009,7 @@ async function runPostInterviewProcessing(sessionId: string): Promise<void> {
       {
         session_id: sessionId,
         assignment_id: session.assignment_id,
-        model: env.openaiScreeningModel(),
+        model: serverEnv.openaiScreeningModel(),
         prompt_version: session.prompt_version,
         rubric_version: session.rubric_version,
         structured_evidence: {

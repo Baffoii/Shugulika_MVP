@@ -1,7 +1,7 @@
 import "server-only";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env.server";
 import {
   aiError,
   aiLog,
@@ -89,7 +89,7 @@ function buildUserPrompt(input: PlanGenerationInput): string {
 }
 
 export async function generateInterviewPlan(input: PlanGenerationInput): Promise<InterviewPlan> {
-  const model = env.openaiScreeningModel();
+  const model = serverEnv.openaiScreeningModel();
   const userPrompt = buildUserPrompt(input);
   aiLog("interview", "OPENAI_REQUEST_PREPARE", {
     purpose: "interview_plan_generation",
@@ -99,7 +99,7 @@ export async function generateInterviewPlan(input: PlanGenerationInput): Promise
     approxInputTokens: estimateTokensFromChars(SYSTEM_PROMPT.length + userPrompt.length),
   });
 
-  const client = new OpenAI({ apiKey: env.openaiApiKey() });
+  const client = new OpenAI({ apiKey: serverEnv.openaiApiKey() });
   const started = Date.now();
   try {
     aiLog("openai", "CALL_START", { purpose: "interview_plan_generation", model });

@@ -11,7 +11,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { DOCUMENT_TYPES } from "@/lib/constants";
-import { isResumeParsingConfigured } from "@/lib/env";
+import { isResumeParsingConfigured } from "@/lib/env.server";
 import {
   candidateProfileSchema,
   experienceSchema,

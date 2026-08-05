@@ -1,6 +1,6 @@
 import "server-only";
 import OpenAI from "openai";
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env.server";
 import { aiError, aiLog, aiLogOpenAiCall } from "@/lib/ai-cost-log";
 import { createClient } from "@/lib/supabase/server";
 import type { InterviewLiveSessionRow } from "@/lib/database.types";
@@ -26,8 +26,8 @@ export async function transcribeLiveSessionAudio(
     throw new InterviewTranscribeError(error?.message ?? "Could not download candidate audio.");
   }
 
-  const model = env.openaiTranscribeModel();
-  const client = new OpenAI({ apiKey: env.openaiApiKey() });
+  const model = serverEnv.openaiTranscribeModel();
+  const client = new OpenAI({ apiKey: serverEnv.openaiApiKey() });
   const started = Date.now();
   try {
     aiLog("openai", "CALL_START", { purpose: "interview_transcription", model });

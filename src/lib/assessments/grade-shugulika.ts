@@ -2,7 +2,7 @@ import "server-only";
 import OpenAI from "openai";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { env, isOpenAiConfigured } from "@/lib/env";
+import { isOpenAiConfigured, serverEnv } from "@/lib/env.server";
 import {
   aiError,
   aiLog,
@@ -68,7 +68,7 @@ async function gradeOneFreeResponse(
   answerText: string,
   passThresholdPercent: number,
 ): Promise<FreeResponseGradeResult> {
-  const model = env.openaiScreeningModel();
+  const model = serverEnv.openaiScreeningModel();
   const rubricLines = question.rubric.criteria
     .map(
       (criterion) =>
@@ -100,7 +100,7 @@ Never recommend rejecting a candidate yourself — only score the answer.`;
   ].join("\n");
 
   const started = Date.now();
-  const client = new OpenAI({ apiKey: env.openaiApiKey() });
+  const client = new OpenAI({ apiKey: serverEnv.openaiApiKey() });
   aiLog("openai", "CALL_START", {
     purpose: "assessment_free_response",
     model,

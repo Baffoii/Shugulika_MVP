@@ -34,14 +34,16 @@ export function GenerateAiPlanCard({ jobs }: { jobs: AiPlanJobOption[] }) {
   const selected = jobs.find((job) => job.id === jobOrderId) ?? null;
 
   useEffect(() => {
-    if (!pending) {
-      setStageIndex(0);
-      return;
-    }
+    if (!pending) return;
     const timer = window.setInterval(() => {
       setStageIndex((index) => (index + 1) % GENERATING_STAGES.length);
     }, 2500);
-    return () => window.clearInterval(timer);
+    // Reset on teardown rather than synchronously in the effect body, which
+    // would trigger a cascading render on every `pending` change.
+    return () => {
+      window.clearInterval(timer);
+      setStageIndex(0);
+    };
   }, [pending]);
 
   function run() {

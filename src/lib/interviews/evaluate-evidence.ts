@@ -1,7 +1,7 @@
 import "server-only";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env.server";
 import { aiError, aiLog, aiLogOpenAiCall, aiWarn } from "@/lib/ai-cost-log";
 import {
   interviewEvidenceSchema,
@@ -38,7 +38,7 @@ Rules:
 - Flag possible_transcription_error when the transcript looks garbled.`;
 
 export async function evaluateInterviewEvidence(input: EvidenceInput): Promise<InterviewEvidence> {
-  const model = env.openaiScreeningModel();
+  const model = serverEnv.openaiScreeningModel();
   const userPrompt = [
     `JOB_TITLE: ${input.jobTitle}`,
     "",
@@ -54,7 +54,7 @@ export async function evaluateInterviewEvidence(input: EvidenceInput): Promise<I
     ]),
   ].join("\n");
 
-  const client = new OpenAI({ apiKey: env.openaiApiKey() });
+  const client = new OpenAI({ apiKey: serverEnv.openaiApiKey() });
   const started = Date.now();
   try {
     aiLog("openai", "CALL_START", { purpose: "interview_evidence_review", model });

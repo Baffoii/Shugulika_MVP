@@ -11,7 +11,7 @@ import "server-only";
 import OpenAI from "openai";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env.server";
 import {
   aiError,
   aiLog,
@@ -180,7 +180,7 @@ function deriveClassification(aiProbability: number): AuthenticityClassification
 export async function detectAnswerAuthenticity(
   answerText: string,
 ): Promise<AnswerAuthenticityResult> {
-  const model = env.openaiScreeningModel();
+  const model = serverEnv.openaiScreeningModel();
   const text = answerText.trim() || "(empty)";
   const system = `You assess whether a short candidate free-response answer appears AI-generated.
 Return structured JSON only. This is an authenticity review signal — not a hire/reject decision and not a rubric grade.
@@ -214,7 +214,7 @@ Do not grade quality, correctness, or recommend hire/reject.`;
   const user = `CANDIDATE ANSWER:\n${text}`;
 
   const started = Date.now();
-  const client = new OpenAI({ apiKey: env.openaiApiKey() });
+  const client = new OpenAI({ apiKey: serverEnv.openaiApiKey() });
   aiLog("openai", "CALL_START", {
     purpose: "assessment_ai_authenticity",
     model,

@@ -1,7 +1,7 @@
 import "server-only";
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { env } from "@/lib/env";
+import { serverEnv } from "@/lib/env.server";
 import {
   professionalCopySchema,
   type ProfessionalCopy,
@@ -46,7 +46,7 @@ Rules:
  * `resumeLacksProfessionalSummary` is true.
  */
 export async function generateProfessionalCopy(resumeText: string): Promise<ProfessionalCopy> {
-  const model = env.openaiResumeModel();
+  const model = serverEnv.openaiResumeModel();
   const cvChars = resumeText.length;
   const cvCharsSent = Math.min(cvChars, 60_000);
   const userContent = `This CV has no professional summary section. Draft a headline and summary from the content below.\n\nCV text:\n\n${resumeText.slice(0, 60_000)}`;
@@ -70,7 +70,7 @@ export async function generateProfessionalCopy(resumeText: string): Promise<Prof
     tip: "Second paid call — only runs when CV extraction found no summary",
   });
 
-  const client = new OpenAI({ apiKey: env.openaiApiKey() });
+  const client = new OpenAI({ apiKey: serverEnv.openaiApiKey() });
   const started = Date.now();
   try {
     aiLog("openai", "CALL_START", {

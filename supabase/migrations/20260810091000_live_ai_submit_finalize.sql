@@ -101,4 +101,11 @@ begin
 end;
 $$;
 
+-- Re-assert execute privileges after the replace. `create or replace` keeps the
+-- existing ACL, so this also repairs databases where an older migration left
+-- EXECUTE granted to PUBLIC.
+revoke all on function public.submit_interview(uuid) from public;
+revoke all on function public.submit_interview(uuid) from anon;
 grant execute on function public.submit_interview(uuid) to authenticated;
+
+notify pgrst, 'reload schema';

@@ -1,14 +1,20 @@
 -- =============================================================================
 -- Live AI voice interview — extends async video interview domain.
 -- Adds employer briefs, plan freeze fields, live sessions/turns/evaluations,
--- interview AI usage metering, and enables the ai_interview_enabled flag for
--- controlled pilot testing.
+-- and interview AI usage metering.
 -- =============================================================================
 
--- ---- Feature flag: enable for immediate pilot testing ----------------------
+-- ---- Feature flag: ships DISABLED ------------------------------------------
+-- This migration must never enable the feature. Recording a candidate's voice,
+-- transcribing it and sending it to a third-party provider requires privacy and
+-- operational sign-off that a schema migration cannot represent. A production
+-- administrator enables it explicitly after that approval — see
+-- docs/ai-interview-enablement.md.
 update public.feature_flags
-set is_enabled = true,
-    notes = 'Live AI voice interview pilot (GPT-Realtime). Human recruiter decisions required.'
+set is_enabled = false,
+    notes = 'Live AI voice interview (GPT-Realtime). DISABLED pending privacy/ops '
+            || 'approval. Human recruiter decisions always required; AI output is '
+            || 'advisory evidence only.'
 where key = 'ai_interview_enabled';
 
 -- ---- Employer interview briefs ---------------------------------------------
@@ -724,3 +730,21 @@ using (
       and name like ('organization/' || a.organization_id::text || '/interviews/' || a.id::text || '/live/%')
   )
 );
+
+-- ---- Execute-privilege hardening -------------------------------------------
+-- Postgres grants EXECUTE to PUBLIC on every newly created function, so an
+-- unauthenticated `anon` caller could otherwise invoke these directly over
+-- PostgREST. Revoke first, then grant only the role that legitimately calls it.
+
+-- Trigger-only functions: never a callable API surface for any client role.
+revoke all on function public.tg_interview_assignment_guard() from public;
+revoke all on function public.tg_interview_assignment_guard() from anon, authenticated;
+revoke all on function public.tg_interview_question_guard() from public;
+revoke all on function public.tg_interview_question_guard() from anon, authenticated;
+
+-- Candidate-callable submit path: signed-in users only, never anon.
+revoke all on function public.submit_interview(uuid) from public;
+revoke all on function public.submit_interview(uuid) from anon;
+grant execute on function public.submit_interview(uuid) to authenticated;
+
+notify pgrst, 'reload schema';
