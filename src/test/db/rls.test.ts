@@ -127,15 +127,16 @@ d("Row-Level Security & tenant isolation", () => {
     expect(cand.rows[0]?.c).toBe(0);
   });
 
-  it("employer submits a job order and scoped staff atomically approve, publish, and audit it", async () => {
+  it("employer submits a job order and scoped staff approve then publish with audit", async () => {
     const jobOrderId = (
       await commitAs(
         client,
         ids.employerUserA,
         `insert into public.job_orders (
            employer_org_id, responsible_org_id, title, description, country_code,
-           vacancy_count, recruitment_path, status, created_by
-         ) values ($1, $2, 'Treasury Analyst', 'Manage treasury operations.', 'TZ', 1, 'B', 'submitted', $3)
+           vacancy_count, recruitment_path, status, origin, created_by
+         ) values ($1, $2, 'Treasury Analyst', 'Manage treasury operations.', 'TZ', 1, 'B',
+                   'submitted_to_shugulika', 'employer_online', $3)
          returning id`,
         [ids.employerA, ids.franchiseA, ids.employerUserA],
       )
@@ -187,9 +188,10 @@ d("Row-Level Security & tenant isolation", () => {
       ).rows[0]?.c,
     ).toBe(0);
 
-    await commitAs(client, ids.recruiterA, "select public.approve_and_publish_job_order($1)", [
+    await commitAs(client, ids.recruiterA, "select public.approve_job_order_by_shugulika($1)", [
       jobOrderId,
     ]);
+    await commitAs(client, ids.recruiterA, "select public.publish_job_order($1)", [jobOrderId]);
 
     const published = await queryAs(
       client,
@@ -209,7 +211,7 @@ d("Row-Level Security & tenant isolation", () => {
           client,
           ids.recruiterA,
           `select count(*)::int c from public.audit_logs
-           where entity_id = $1 and action = 'job_order.approved_and_published' and actor_id = $2`,
+           where entity_id = $1 and action = 'job_order.published' and actor_id = $2`,
           [jobOrderId, ids.recruiterA],
         )
       ).rows[0]?.c,
@@ -223,16 +225,15 @@ d("Row-Level Security & tenant isolation", () => {
         ids.employerUserA,
         `insert into public.job_orders (
            employer_org_id, responsible_org_id, title, country_code,
-           vacancy_count, recruitment_path, status, created_by
-         ) values ($1, $2, 'Forged Role', 'TZ', 1, 'B', 'submitted', $3)`,
+           vacancy_count, recruitment_path, status, origin, created_by
+         ) values ($1, $2, 'Forged Role', 'TZ', 1, 'B', 'submitted_to_shugulika',
+                   'employer_online', $3)`,
         [ids.employerA, ids.franchiseB, ids.employerUserA],
       ),
     ).rejects.toThrow();
 
     await expect(
-      queryAs(client, ids.recruiterB, "select public.approve_and_publish_job_order($1)", [
-        ids.jobOrderA,
-      ]),
+      queryAs(client, ids.recruiterB, "select public.publish_job_order($1)", [ids.jobOrderA]),
     ).rejects.toThrow();
   });
 
@@ -399,8 +400,9 @@ d("Row-Level Security & tenant isolation", () => {
         ids.employerUserA,
         `insert into public.job_orders (
            employer_org_id, responsible_org_id, title, country_code,
-           vacancy_count, recruitment_path, status, created_by
-         ) values ($1, $2, 'Zero Vacancy Role', 'TZ', 0, 'B', 'submitted', $3)`,
+           vacancy_count, recruitment_path, status, origin, created_by
+         ) values ($1, $2, 'Zero Vacancy Role', 'TZ', 0, 'B', 'submitted_to_shugulika',
+                   'employer_online', $3)`,
         [ids.employerA, ids.franchiseA, ids.employerUserA],
       ),
     ).rejects.toThrow();
@@ -413,8 +415,9 @@ d("Row-Level Security & tenant isolation", () => {
         ids.employerUserA,
         `insert into public.job_orders (
            employer_org_id, responsible_org_id, title, description, country_code,
-           vacancy_count, recruitment_path, status, created_by
-         ) values ($1, $2, 'Withdraw Me', 'Temp role.', 'TZ', 2, 'B', 'submitted', $3)
+           vacancy_count, recruitment_path, status, origin, created_by
+         ) values ($1, $2, 'Withdraw Me', 'Temp role.', 'TZ', 2, 'B',
+                   'submitted_to_shugulika', 'employer_online', $3)
          returning id`,
         [ids.employerA, ids.franchiseA, ids.employerUserA],
       )
@@ -456,8 +459,9 @@ d("Row-Level Security & tenant isolation", () => {
         ids.employerUserA,
         `insert into public.job_orders (
            employer_org_id, responsible_org_id, title, country_code,
-           vacancy_count, recruitment_path, status, created_by
-         ) values ($1, $2, 'Stay Put', 'TZ', 1, 'B', 'submitted', $3)
+           vacancy_count, recruitment_path, status, origin, created_by
+         ) values ($1, $2, 'Stay Put', 'TZ', 1, 'B', 'submitted_to_shugulika',
+                   'employer_online', $3)
          returning id`,
         [ids.employerA, ids.franchiseA, ids.employerUserA],
       )
