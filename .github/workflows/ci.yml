@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci # lockfile-consistent, reproducible install
       - name: Lockfile in sync
@@ -71,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
-        with: { node-version: 20, cache: npm }
+        with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: Unit + component tests (coverage + thresholds)
         run: npm run test:coverage
@@ -106,7 +106,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
-        with: { node-version: 20, cache: npm }
+        with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: RLS & tenant-isolation tests (applies migrations to a clean DB)
         run: npm run test:db
@@ -120,7 +120,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
-        with: { node-version: 20, cache: npm }
+        with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: Validate build environment
         run: npm run validate:env
@@ -139,7 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
-        with: { node-version: 20, cache: npm }
+        with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: Cache Playwright browsers
         uses: actions/cache@v6
@@ -167,7 +167,7 @@ jobs:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: actions/setup-node@v7
-        with: { node-version: 20, cache: npm }
+        with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: Dependency audit (block on high/critical in prod deps)
         # Blocks on high/critical prod advisories, minus a documented allowlist
