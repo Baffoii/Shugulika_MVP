@@ -25,6 +25,21 @@ const REQUIRED = {
   candidate_profiles: ["user_id", "completion_pct"],
   candidate_documents: ["candidate_id", "bucket_id", "object_path", "is_primary"],
   candidate_consents: ["candidate_id", "purpose", "covered_org_id", "withdrawn_at"],
+  candidate_field_provenance: [
+    "candidate_id",
+    "field_path",
+    "source",
+    "confidence",
+    "parser_version",
+  ],
+  candidate_duplicate_links: ["candidate_id_low", "candidate_id_high", "status", "score"],
+  candidate_merge_events: [
+    "primary_candidate_id",
+    "merged_candidate_id",
+    "before_snapshot",
+    "performed_by",
+  ],
+  candidate_work_authorizations: ["candidate_id", "work_country_code", "eligibility_status"],
   job_orders: [
     "employer_org_id",
     "responsible_org_id",
@@ -103,6 +118,21 @@ const REQUIRED = {
     "status",
   ],
   zoho_recruit_sync_observations: ["connection_id", "kind", "metrics"],
+  zoho_candidate_import_batches: [
+    "connection_id",
+    "stage",
+    "status",
+    "is_dry_run",
+    "stage_history",
+  ],
+  zoho_candidate_import_records: [
+    "batch_id",
+    "zoho_record_id",
+    "status",
+    "mapped_payload",
+    "matched_candidate_id",
+    "reviewed_by",
+  ],
   recruiter_kpi_targets: [
     "recruiter_level",
     "organization_id",

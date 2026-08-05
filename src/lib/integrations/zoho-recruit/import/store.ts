@@ -21,10 +21,23 @@ import {
 import type { ImportStage } from "@/lib/candidates/constants";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import type { BatchTotals, StageTransition } from "@/lib/integrations/zoho-recruit/import/stages";
+import { isWaivable } from "@/lib/integrations/zoho-recruit/import/quarantine";
+import type { QuarantineReason } from "@/lib/candidates/constants";
 
 function atsServiceClient() {
   const client = createServiceRoleClient();
   return client ? asAtsClient(client) : null;
+}
+
+function requireAtsServiceClient() {
+  const client = atsServiceClient();
+  if (!client)
+    throw new Error("Zoho import persistence is unavailable: service role is not configured.");
+  return client;
+}
+
+function persistenceError(operation: string, message: string): Error {
+  return new Error(`Zoho import persistence failed during ${operation}: ${message}`);
 }
 
 export interface CreateBatchInput {
@@ -36,9 +49,8 @@ export interface CreateBatchInput {
 
 export async function createImportBatch(
   input: CreateBatchInput,
-): Promise<ZohoCandidateImportBatchRow | null> {
-  const client = atsServiceClient();
-  if (!client) return null;
+): Promise<ZohoCandidateImportBatchRow> {
+  const client = requireAtsServiceClient();
 
   const { data, error } = await client
     .from("zoho_candidate_import_batches")
@@ -55,31 +67,30 @@ export async function createImportBatch(
     .single();
 
   if (error) {
-    console.error("[zoho-import/store] createImportBatch failed:", error.message);
-    return null;
+    throw persistenceError("createImportBatch", error.message);
   }
   return data as ZohoCandidateImportBatchRow;
 }
 
 export async function getImportBatch(id: string): Promise<ZohoCandidateImportBatchRow | null> {
-  const client = atsServiceClient();
-  if (!client) return null;
-  const { data } = await client
+  const client = requireAtsServiceClient();
+  const { data, error } = await client
     .from("zoho_candidate_import_batches")
     .select("*")
     .eq("id", id)
     .maybeSingle();
+  if (error) throw persistenceError("getImportBatch", error.message);
   return (data as ZohoCandidateImportBatchRow | null) ?? null;
 }
 
 export async function listRecentBatches(limit = 20): Promise<ZohoCandidateImportBatchRow[]> {
-  const client = atsServiceClient();
-  if (!client) return [];
-  const { data } = await client
+  const client = requireAtsServiceClient();
+  const { data, error } = await client
     .from("zoho_candidate_import_batches")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (error) throw persistenceError("listRecentBatches", error.message);
   return (data as ZohoCandidateImportBatchRow[] | null) ?? [];
 }
 
@@ -94,9 +105,8 @@ export async function updateBatch(
     completedAt?: string | null;
     lastError?: string | null;
   },
-): Promise<boolean> {
-  const client = atsServiceClient();
-  if (!client) return false;
+): Promise<void> {
+  const client = requireAtsServiceClient();
 
   const { error } = await client
     .from("zoho_candidate_import_batches")
@@ -114,10 +124,8 @@ export async function updateBatch(
     .eq("id", id);
 
   if (error) {
-    console.error("[zoho-import/store] updateBatch failed:", error.message);
-    return false;
+    throw persistenceError("updateBatch", error.message);
   }
-  return true;
 }
 
 export interface StagedRecordInput {
@@ -136,9 +144,8 @@ export interface StagedRecordInput {
 }
 
 /** Insert or refresh one staged row. Idempotent on (batch, zoho record). */
-export async function upsertStagedRecord(input: StagedRecordInput): Promise<boolean> {
-  const client = atsServiceClient();
-  if (!client) return false;
+export async function upsertStagedRecord(input: StagedRecordInput): Promise<void> {
+  const client = requireAtsServiceClient();
 
   const payload = {
     batch_id: input.batchId,
@@ -160,29 +167,31 @@ export async function upsertStagedRecord(input: StagedRecordInput): Promise<bool
     .upsert(payload, { onConflict: "batch_id,zoho_record_id" });
 
   if (error) {
-    console.error("[zoho-import/store] upsertStagedRecord failed:", error.message);
-    return false;
+    throw persistenceError("upsertStagedRecord", error.message);
   }
-  return true;
 }
 
 export async function listBatchRecords(
   batchId: string,
   filter: { status?: ZohoCandidateImportRecordRow["status"] } = {},
-  limit = 500,
 ): Promise<ZohoCandidateImportRecordRow[]> {
-  const client = atsServiceClient();
-  if (!client) return [];
-
-  let query = client
-    .from("zoho_candidate_import_records")
-    .select("*")
-    .eq("batch_id", batchId)
-    .limit(limit);
-  if (filter.status) query = query.eq("status", filter.status);
-
-  const { data } = await query;
-  return (data as ZohoCandidateImportRecordRow[] | null) ?? [];
+  const client = requireAtsServiceClient();
+  const records: ZohoCandidateImportRecordRow[] = [];
+  const pageSize = 500;
+  for (let from = 0; ; from += pageSize) {
+    let query = client
+      .from("zoho_candidate_import_records")
+      .select("*")
+      .eq("batch_id", batchId)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (filter.status) query = query.eq("status", filter.status);
+    const { data, error } = await query;
+    if (error) throw persistenceError("listBatchRecords", error.message);
+    const page = (data as ZohoCandidateImportRecordRow[] | null) ?? [];
+    records.push(...page);
+    if (page.length < pageSize) return records;
+  }
 }
 
 /**
@@ -195,11 +204,37 @@ export async function recordHumanDecision(input: {
   decision: "create_new" | "link_existing" | "skip";
   reviewedBy: string;
   matchedCandidateId?: string | null;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const client = atsServiceClient();
-  if (!client) return { ok: false, error: "Service role is not configured." };
+}): Promise<void> {
+  const client = requireAtsServiceClient();
   if (input.decision === "link_existing" && !input.matchedCandidateId) {
-    return { ok: false, error: "Choose the existing candidate to link." };
+    throw new Error("Choose the existing candidate to link.");
+  }
+
+  const { data: record, error: loadError } = await client
+    .from("zoho_candidate_import_records")
+    .select("batch_id,status,quarantine_reasons")
+    .eq("id", input.recordId)
+    .maybeSingle();
+  if (loadError) throw persistenceError("recordHumanDecision.load", loadError.message);
+  if (!record) throw new Error("The staged import record no longer exists.");
+  if (record.status !== "needs_human_review" && record.status !== "quarantined") {
+    throw new Error("This record is not awaiting a human decision.");
+  }
+  const { data: batch, error: batchError } = await client
+    .from("zoho_candidate_import_batches")
+    .select("stage,status")
+    .eq("id", record.batch_id)
+    .maybeSingle();
+  if (batchError) throw persistenceError("recordHumanDecision.batch", batchError.message);
+  if (!batch || batch.stage !== "human_review" || batch.status === "completed") {
+    throw new Error("Review decisions are accepted only while the batch is at human review.");
+  }
+  if (
+    record.status === "quarantined" &&
+    input.decision !== "skip" &&
+    !isWaivable(record.quarantine_reasons as QuarantineReason[])
+  ) {
+    throw new Error("This quarantine reason cannot be overridden; correct the source or skip it.");
   }
 
   const { error } = await client
@@ -214,8 +249,41 @@ export async function recordHumanDecision(input: {
     })
     .eq("id", input.recordId);
 
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  if (error) throw persistenceError("recordHumanDecision", error.message);
+}
+
+export async function getReconciliationTarget(input: {
+  connectionId: string;
+  zohoRecordId: string;
+}): Promise<{
+  candidateId: string;
+  fingerprint: string | null;
+  mergedIntoCandidateId: string | null;
+} | null> {
+  const client = createServiceRoleClient();
+  if (!client)
+    throw new Error("Zoho import persistence is unavailable: service role is not configured.");
+  const { data: mapping, error: mappingError } = await client
+    .from("zoho_recruit_external_mappings")
+    .select("local_entity_id,last_external_fingerprint")
+    .eq("connection_id", input.connectionId)
+    .eq("zoho_module", "Candidates")
+    .eq("zoho_record_id", input.zohoRecordId)
+    .maybeSingle();
+  if (mappingError) throw persistenceError("reconcile.mapping", mappingError.message);
+  if (!mapping) return null;
+  const { data: candidate, error: candidateError } = await asAtsClient(client)
+    .from("candidate_profiles")
+    .select("id,merged_into_candidate_id")
+    .eq("id", mapping.local_entity_id)
+    .maybeSingle();
+  if (candidateError) throw persistenceError("reconcile.candidate", candidateError.message);
+  if (!candidate) return null;
+  return {
+    candidateId: candidate.id,
+    fingerprint: mapping.last_external_fingerprint,
+    mergedIntoCandidateId: candidate.merged_into_candidate_id,
+  };
 }
 
 /**
@@ -227,9 +295,10 @@ export async function recordExternalMapping(input: {
   candidateId: string;
   zohoRecordId: string;
   fingerprint: string | null;
-}): Promise<boolean> {
+}): Promise<void> {
   const client = createServiceRoleClient();
-  if (!client) return false;
+  if (!client)
+    throw new Error("Zoho import persistence is unavailable: service role is not configured.");
 
   const { error } = await client.from("zoho_recruit_external_mappings").upsert(
     {
@@ -246,10 +315,8 @@ export async function recordExternalMapping(input: {
   );
 
   if (error) {
-    console.error("[zoho-import/store] recordExternalMapping failed:", error.message);
-    return false;
+    throw persistenceError("recordExternalMapping", error.message);
   }
-  return true;
 }
 
 /** Discard a finished batch's staging rows. Mappings and candidates are untouched. */

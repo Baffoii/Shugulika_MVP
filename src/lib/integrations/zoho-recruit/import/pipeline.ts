@@ -41,6 +41,7 @@ import {
 } from "@/lib/integrations/zoho-recruit/import/stages";
 import {
   getImportBatch,
+  getReconciliationTarget,
   listBatchRecords,
   updateBatch,
   upsertStagedRecord,
@@ -53,9 +54,17 @@ import {
  */
 export interface ZohoCandidateSource {
   listCandidates(options: { page: number; perPage: number }): Promise<{
-    records: Array<{ id: string; record: ZohoCandidateRecord }>;
+    records: Array<{
+      id: string;
+      record: ZohoCandidateRecord;
+      eligibility: { eligible: boolean; reasons: string[]; evidence: string[] };
+    }>;
     hasMore: boolean;
   }>;
+  getCandidate(id: string): Promise<{
+    record: ZohoCandidateRecord;
+    eligibility: { eligible: boolean; reasons: string[]; evidence: string[] };
+  } | null>;
 }
 
 export interface StageRunResult {
@@ -98,6 +107,16 @@ export async function runImportStage(
 ): Promise<StageRunResult | null> {
   const batch = await getImportBatch(batchId);
   if (!batch) return null;
+  if (batch.status === "completed" || batch.status === "cancelled" || batch.status === "failed") {
+    return {
+      batchId,
+      from: batch.stage,
+      to: null,
+      totals: totalsFrom(await listBatchRecords(batchId)),
+      notes: [],
+      blocked: [`Batch is ${batch.status} and cannot advance.`],
+    };
+  }
 
   const gates = await getImportGateStatus();
   if (!gates.stagingAllowed) {
@@ -115,36 +134,69 @@ export async function runImportStage(
   const history = (batch.stage_history ?? []) as unknown as StageTransition[];
   const notes: string[] = [];
 
-  switch (batch.stage) {
-    case "inventory":
-      await stageInventory(batchId, source, notes);
-      break;
-    case "map":
-      await stageMap(batchId, notes);
-      break;
-    case "dry_run":
-      await stageDryRun(batchId, notes);
-      break;
-    case "quarantine":
-      // Quarantine decisions are made during map/dry_run; this stage exists so
-      // an operator has a defined place to stop and look at them.
-      notes.push("Quarantined records are held for review; nothing was changed.");
-      break;
-    case "match":
-      await stageMatch(batchId, notes);
-      break;
-    case "human_review":
-      notes.push(...(await humanReviewNotes(batchId)));
-      break;
-    case "canonical_upsert":
-      await stageCanonicalUpsert(batch, notes);
-      break;
-    case "reconcile":
-      notes.push(...(await reconcileNotes(batchId)));
-      break;
-    case "report":
-      notes.push("Batch already reported.");
-      break;
+  try {
+    switch (batch.stage) {
+      case "inventory":
+        await stageInventory(batchId, source, notes);
+        break;
+      case "map":
+        await stageMap(batchId, notes);
+        break;
+      case "dry_run":
+        await stageDryRun(batchId, notes);
+        break;
+      case "quarantine":
+        // Quarantine decisions are made during map/dry_run; this stage exists so
+        // an operator has a defined place to stop and look at them.
+        notes.push("Quarantined records are held for review; nothing was changed.");
+        break;
+      case "match":
+        await stageMatch(batchId, notes);
+        break;
+      case "human_review": {
+        const review = await humanReviewStatus(batchId);
+        notes.push(...review.notes);
+        if (review.blocked.length > 0) {
+          const records = await listBatchRecords(batchId);
+          const totals = totalsFrom(records);
+          await updateBatch(batchId, { status: "blocked", totals, lastError: null });
+          return {
+            batchId,
+            from: batch.stage,
+            to: null,
+            totals,
+            notes,
+            blocked: review.blocked,
+          };
+        }
+        break;
+      }
+      case "canonical_upsert": {
+        const blocked = await stageCanonicalUpsert(batch, notes);
+        if (blocked.length > 0) {
+          const records = await listBatchRecords(batchId);
+          const totals = totalsFrom(records);
+          await updateBatch(batchId, { status: "blocked", totals, lastError: null });
+          return { batchId, from: batch.stage, to: null, totals, notes, blocked };
+        }
+        break;
+      }
+      case "reconcile":
+        notes.push(...(await reconcileBatch(batch, source)));
+        break;
+      case "report":
+        notes.push("Batch already reported.");
+        break;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown import failure";
+    try {
+      await updateBatch(batchId, { status: "failed", lastError: message });
+    } catch {
+      // Preserve the original failure. The caller must see it even if the
+      // secondary attempt to mark the batch failed also cannot persist.
+    }
+    throw error;
   }
 
   const records = await listBatchRecords(batchId);
@@ -197,7 +249,7 @@ async function stageInventory(
 
   while (hasMore && staged < MAX_RECORDS_PER_BATCH) {
     const { records, hasMore: more } = await source.listCandidates({ page, perPage: 200 });
-    for (const { id, record } of records) {
+    for (const { id, record, eligibility } of records) {
       if (staged >= MAX_RECORDS_PER_BATCH) break;
       await upsertStagedRecord({
         batchId,
@@ -206,7 +258,7 @@ async function stageInventory(
         status: "pending",
         // The raw record is kept only until the map stage rewrites this column
         // with the canonical draft.
-        mappedPayload: { source: record },
+        mappedPayload: { source: record, eligibility },
       });
       staged += 1;
     }
@@ -230,14 +282,29 @@ async function stageMap(batchId: string, notes: string[]): Promise<void> {
   }
 
   const countries = COUNTRIES.map((c) => ({ code: c.code, name: c.name }));
-  const mapped: Array<{ zohoRecordId: string; recordId: string; mapping: MappingResult }> = [];
+  const mapped: Array<{
+    zohoRecordId: string;
+    recordId: string;
+    mapping: MappingResult;
+    eligibility: { eligible: boolean; reasons: string[]; evidence: string[] };
+  }> = [];
 
   for (const row of staged) {
-    const raw = ((row.mapped_payload ?? {}) as { source?: ZohoCandidateRecord }).source ?? {};
+    const payload = (row.mapped_payload ?? {}) as {
+      source?: ZohoCandidateRecord;
+      eligibility?: { eligible: boolean; reasons: string[]; evidence: string[] };
+    };
+    const raw = payload.source ?? {};
+    const eligibility = payload.eligibility ?? {
+      eligible: false,
+      reasons: ["portal_consent_missing"],
+      evidence: [],
+    };
     mapped.push({
       zohoRecordId: row.zoho_record_id,
       recordId: row.id,
-      mapping: mapZohoCandidate(raw, { countries }),
+      mapping: mapZohoCandidate(raw, { countries, hasConsent: eligibility.eligible }),
+      eligibility,
     });
   }
 
@@ -266,6 +333,7 @@ async function stageMap(batchId: string, notes: string[]): Promise<void> {
       mappedPayload: {
         draft: item.mapping.draft as unknown as Record<string, unknown>,
         prohibitedFields: item.mapping.prohibitedFields,
+        consent: item.eligibility,
       },
       sourceFingerprint: item.mapping.fingerprint,
     });
@@ -366,22 +434,27 @@ async function stageMatch(batchId: string, notes: string[]): Promise<void> {
   );
 }
 
-async function humanReviewNotes(batchId: string): Promise<string[]> {
+async function humanReviewStatus(batchId: string): Promise<{ notes: string[]; blocked: string[] }> {
   const pending = await listBatchRecords(batchId, { status: "needs_human_review" });
   const quarantined = await listBatchRecords(batchId, { status: "quarantined" });
-  if (pending.length === 0 && quarantined.length === 0) return ["Nothing awaiting review."];
-  return [
-    `${pending.length} ambiguous match(es) and ${quarantined.length} quarantined record(s) are waiting on a person.`,
-  ];
+  if (pending.length === 0 && quarantined.length === 0)
+    return { notes: ["Nothing awaiting review."], blocked: [] };
+  const message = `${pending.length} ambiguous match(es) and ${quarantined.length} quarantined record(s) are waiting on a person.`;
+  return { notes: [message], blocked: [message] };
 }
 
 async function stageCanonicalUpsert(
   batch: { id: string; connection_id: string; stage: ImportStage; is_dry_run: boolean },
   notes: string[],
-): Promise<void> {
+): Promise<string[]> {
   const gates = await getImportGateStatus();
   const records = await listBatchRecords(batch.id);
   const totals = totalsFrom(records);
+
+  if (batch.is_dry_run) {
+    notes.push("Dry-run batch: canonical writes were intentionally skipped.");
+    return [];
+  }
 
   const allowed = canWriteCanonicalRecords({
     stage: batch.stage,
@@ -393,7 +466,7 @@ async function stageCanonicalUpsert(
     notes.push(
       `No canonical record was written: ${[...allowed.reasons, ...(gates.canonicalWriteAllowed ? [] : gates.blockedReasons)].join("; ")}.`,
     );
-    return;
+    return [...allowed.reasons, ...(gates.canonicalWriteAllowed ? [] : gates.blockedReasons)];
   }
 
   const ready = records.filter((record) => record.status === "matched");
@@ -463,13 +536,52 @@ async function stageCanonicalUpsert(
   notes.push(
     `Canonical upsert: ${written} written (${created} new), ${failed} failed. Durable Zoho mappings were recorded for every successful row.`,
   );
+  if (failed > 0) throw new Error(`Canonical upsert failed for ${failed} record(s).`);
+  return [];
 }
 
-async function reconcileNotes(batchId: string): Promise<string[]> {
-  const records = await listBatchRecords(batchId);
-  const upserted = records.filter((r) => r.status === "upserted").length;
-  const failed = records.filter((r) => r.status === "failed").length;
-  return [`Reconcile: ${upserted} written, ${failed} failed.`];
+async function reconcileBatch(
+  batch: { id: string; connection_id: string },
+  source: ZohoCandidateSource | null,
+): Promise<string[]> {
+  if (!source) throw new Error("Reconciliation requires the source reader.");
+  const records = (await listBatchRecords(batch.id)).filter(
+    (record) => record.status === "upserted",
+  );
+  let reconciled = 0;
+  for (const record of records) {
+    const sourceRecord = await source.getCandidate(record.zoho_record_id);
+    if (!sourceRecord)
+      throw new Error(`Zoho record ${record.zoho_record_id} disappeared before reconciliation.`);
+    if (!sourceRecord.eligibility.eligible) {
+      throw new Error(`Zoho record ${record.zoho_record_id} no longer has import consent.`);
+    }
+    const countries = COUNTRIES.map((country) => ({ code: country.code, name: country.name }));
+    const current = mapZohoCandidate(sourceRecord.record, { countries, hasConsent: true });
+    if (current.fingerprint !== record.source_fingerprint) {
+      throw new Error(
+        `Zoho record ${record.zoho_record_id} changed after inventory; rerun the batch.`,
+      );
+    }
+    const target = await getReconciliationTarget({
+      connectionId: batch.connection_id,
+      zohoRecordId: record.zoho_record_id,
+    });
+    if (
+      !target ||
+      target.candidateId !== record.matched_candidate_id ||
+      target.mergedIntoCandidateId
+    ) {
+      throw new Error(`Canonical mapping mismatch for Zoho record ${record.zoho_record_id}.`);
+    }
+    if (target.fingerprint !== record.source_fingerprint) {
+      throw new Error(`Canonical fingerprint mismatch for Zoho record ${record.zoho_record_id}.`);
+    }
+    reconciled += 1;
+  }
+  return [
+    `Reconcile verified ${reconciled} canonical record(s) against Zoho and durable mappings.`,
+  ];
 }
 
 /**

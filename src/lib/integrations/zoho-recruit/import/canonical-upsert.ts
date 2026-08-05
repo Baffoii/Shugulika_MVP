@@ -336,13 +336,11 @@ export async function upsertCanonicalCandidate(input: {
   const merged = await mergeDraft(candidateId, input.draft, created);
   if (!merged.ok) return merged;
 
-  const mapped = await recordExternalMapping({
+  await recordExternalMapping({
     connectionId: input.connectionId,
     candidateId,
     zohoRecordId: input.zohoRecordId,
     fingerprint: input.fingerprint,
   });
-  if (!mapped) return { ok: false, error: "The durable Zoho mapping could not be recorded." };
-
   return { ok: true, candidateId, created };
 }

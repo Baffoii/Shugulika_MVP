@@ -376,6 +376,158 @@ describeDb("candidate dedupe and merge", () => {
     expect(reverted.rows[0].reverted_by).toBeTruthy();
   });
 
+  it("moves and reverses consent, assessment, interview, sharing, visibility and provenance data", async () => {
+    const linkId = await seedLink();
+    const applicationOwner = await client.query(
+      `select candidate_id from public.applications where id = $1`,
+      [ids.applicationC1],
+    );
+    const mergedId = applicationOwner.rows[0].candidate_id as string;
+    const primaryId = mergedId === candidateA ? candidateB : candidateA;
+    const consent = await client.query(
+      `insert into public.candidate_consents (candidate_id, purpose, method)
+       values ($1, 'merge-regression', 'imported') returning id`,
+      [mergedId],
+    );
+    const consentId = consent.rows[0].id as string;
+    await client.query(
+      `insert into public.candidate_preferences (candidate_id, desired_roles, salary_private)
+       values ($1, array['Primary role'], true), ($2, array['Duplicate role'], false)
+       on conflict (candidate_id) do update set desired_roles = excluded.desired_roles`,
+      [primaryId, mergedId],
+    );
+    await client.query(
+      `insert into public.candidate_search_visibility (candidate_id, is_searchable, approved_fields)
+       values ($1, true, array['headline','city']), ($2, false, array['headline'])
+       on conflict (candidate_id) do update set is_searchable = excluded.is_searchable, approved_fields = excluded.approved_fields`,
+      [primaryId, mergedId],
+    );
+    await client.query(
+      `insert into public.candidate_work_authorizations (candidate_id, work_country_code, eligibility_status)
+       values ($1, 'TZ', 'unknown'), ($2, 'TZ', 'eligible_without_permit')
+       on conflict (candidate_id) do update set eligibility_status = excluded.eligibility_status`,
+      [primaryId, mergedId],
+    );
+    const provenance = await client.query(
+      `insert into public.candidate_field_provenance
+         (candidate_id, target_entity, field_path, value_text, source, confidence)
+       values ($1, 'profile', 'merge-regression-field', 'value', 'zoho_import', 0.8)
+       returning id`,
+      [mergedId],
+    );
+    const assessment = await client.query(
+      `insert into public.assessment_assignments
+         (application_id, job_order_id, candidate_id, assessment_mode, assessment_seniority, assigned_by)
+       values ($1,$2,$3,'shugulika','junior',$4) returning id`,
+      [ids.applicationC1, ids.jobOrderA, mergedId, ids.recruiterA],
+    );
+    const assessmentId = assessment.rows[0].id as string;
+    const template = await client.query(
+      `insert into public.interview_templates (organization_id, name, created_by)
+       values ($1, 'Merge regression', $2) returning id`,
+      [ids.franchiseA, ids.recruiterA],
+    );
+    const interview = await client.query(
+      `insert into public.interview_assignments
+         (template_id, candidate_id, application_id, job_order_id, organization_id, assigned_by)
+       values ($1,$2,$3,$4,$5,$6) returning id`,
+      [
+        template.rows[0].id,
+        mergedId,
+        ids.applicationC1,
+        ids.jobOrderA,
+        ids.franchiseA,
+        ids.recruiterA,
+      ],
+    );
+    const resultShare = await client.query(
+      `insert into public.result_share_grants
+         (candidate_id, assignment_id, recipient_org_id, purpose, job_order_id, consent_id)
+       values ($1,$2,$3,'merge regression',$4,$5) returning id`,
+      [mergedId, assessmentId, ids.employerA, ids.jobOrderA, consentId],
+    );
+    const visibleEvent = await client.query(
+      `insert into public.candidate_visible_events
+         (candidate_id, application_id, event_type, label, source_type, source_id)
+       values ($1,$2,'help_requested','Merge regression','test',$3) returning id`,
+      [mergedId, ids.applicationC1, crypto.randomUUID()],
+    );
+
+    const applied = await commitAs(
+      client,
+      ids.hqAdmin,
+      `select public.apply_candidate_merge($1,$2,$3,'[]'::jsonb,'{}'::jsonb,'{"requestedBy":"db-test"}'::jsonb) as event_id`,
+      [primaryId, mergedId, linkId],
+    );
+    const eventId = firstRow(applied).event_id as string;
+
+    const moved = await client.query(
+      `select
+         (select candidate_id from public.candidate_consents where id = $2) consent_candidate,
+         (select candidate_id from public.assessment_assignments where id = $3) assessment_candidate,
+         (select candidate_id from public.interview_assignments where id = $4) interview_candidate,
+         (select candidate_id from public.result_share_grants where id = $5) share_candidate,
+         (select candidate_id from public.candidate_visible_events where id = $6) event_candidate,
+         (select candidate_id from public.candidate_field_provenance where id = $7) provenance_candidate,
+         (select is_searchable from public.candidate_search_visibility where candidate_id = $1) is_searchable,
+         (select array_agg(role order by role) from unnest((select desired_roles from public.candidate_preferences where candidate_id = $1)) role) roles`,
+      [
+        primaryId,
+        consentId,
+        assessmentId,
+        interview.rows[0].id,
+        resultShare.rows[0].id,
+        visibleEvent.rows[0].id,
+        provenance.rows[0].id,
+      ],
+    );
+    expect(moved.rows[0]).toMatchObject({
+      consent_candidate: primaryId,
+      assessment_candidate: primaryId,
+      interview_candidate: primaryId,
+      share_candidate: primaryId,
+      event_candidate: primaryId,
+      provenance_candidate: primaryId,
+      is_searchable: false,
+      roles: ["Duplicate role", "Primary role"],
+    });
+
+    await commitAs(
+      client,
+      ids.hqAdmin,
+      `select public.revert_candidate_merge($1, '{}'::jsonb, 'merge regression complete')`,
+      [eventId],
+    );
+    const restored = await client.query(
+      `select
+         (select candidate_id from public.candidate_consents where id = $2) consent_candidate,
+         (select candidate_id from public.assessment_assignments where id = $3) assessment_candidate,
+         (select candidate_id from public.interview_assignments where id = $4) interview_candidate,
+         (select candidate_id from public.result_share_grants where id = $5) share_candidate,
+         (select candidate_id from public.candidate_visible_events where id = $6) event_candidate,
+         (select candidate_id from public.candidate_field_provenance where id = $7) provenance_candidate,
+         (select is_searchable from public.candidate_search_visibility where candidate_id = $1) duplicate_searchable`,
+      [
+        mergedId,
+        consentId,
+        assessmentId,
+        interview.rows[0].id,
+        resultShare.rows[0].id,
+        visibleEvent.rows[0].id,
+        provenance.rows[0].id,
+      ],
+    );
+    expect(restored.rows[0]).toMatchObject({
+      consent_candidate: mergedId,
+      assessment_candidate: mergedId,
+      interview_candidate: mergedId,
+      share_candidate: mergedId,
+      event_candidate: mergedId,
+      provenance_candidate: mergedId,
+      duplicate_searchable: false,
+    });
+  });
+
   it("keeps the merge queue away from employers, recruiters, and candidates", async () => {
     await seedLink();
     for (const table of ["candidate_duplicate_links", "candidate_merge_events"]) {

@@ -84,7 +84,7 @@ export async function searchRecords(
 
 export async function listRecords(
   module: string,
-  options: { page?: number; per_page?: number } = {},
+  options: { page?: number; per_page?: number; fields?: string[] } = {},
 ): Promise<ZohoRequestResult<unknown>> {
   const mod = assertModule(module);
   const page = options.page ?? 1;
@@ -95,6 +95,21 @@ export async function listRecords(
     query: {
       page: z.number().int().positive().parse(page),
       per_page: z.number().int().positive().max(200).parse(perPage),
+      ...(options.fields?.length
+        ? {
+            fields: z
+              .array(
+                z
+                  .string()
+                  .min(1)
+                  .max(100)
+                  .regex(/^[A-Za-z0-9_$]+$/),
+              )
+              .max(100)
+              .parse(options.fields)
+              .join(","),
+          }
+        : {}),
     },
   });
 }

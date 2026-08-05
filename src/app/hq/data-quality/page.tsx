@@ -299,6 +299,11 @@ export default async function HqDataQualityPage() {
               ? `${imports.lastBatchStage} · ${imports.lastBatchStatus} · started ${formatDateTime(imports.lastBatchAt)}`
               : "No candidate import batch has been created yet."}
           </p>
+          <div className="px-4 pb-4">
+            <ButtonLink href="/hq/data-quality/imports" variant="secondary">
+              Manage import batches
+            </ButtonLink>
+          </div>
         </Card>
       </section>
 

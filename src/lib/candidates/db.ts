@@ -2,9 +2,8 @@
  * Row shapes and a typed Supabase fragment for the tables added by the
  * 20260809* ATS migrations.
  *
- * `src/lib/database.types.ts` is hand-maintained and deliberately not
- * regenerated in this workstream, so — following the same pattern as
- * `src/lib/kpi/db-extensions.ts` — these live here as a local schema fragment.
+ * These row types are also referenced by the regenerated shared database map.
+ * The local fragment remains useful for focused ATS clients and domain mappers.
  * Keep them in sync with:
  *   * 20260809090500_ats_parser_provenance.sql
  *   * 20260809091000_candidate_dedupe.sql

@@ -248,11 +248,19 @@ declare
   v_actor uuid := auth.uid();
   v_event_id uuid;
   v_updates jsonb := coalesce(p_profile_updates, '{}'::jsonb);
-  v_skipped_applications uuid[];
   v_primary public.candidate_profiles%rowtype;
   v_merged public.candidate_profiles%rowtype;
   v_reassigned jsonb;
   v_before_snapshot jsonb;
+  v_primary_preferences jsonb;
+  v_merged_preferences jsonb;
+  v_primary_visibility jsonb;
+  v_merged_visibility jsonb;
+  v_primary_work_authorization jsonb;
+  v_merged_work_authorization jsonb;
+  v_deleted_saved_jobs jsonb := '[]'::jsonb;
+  v_deleted_unlocks jsonb := '[]'::jsonb;
+  v_deleted_provenance jsonb := '[]'::jsonb;
 begin
   if not public.auth_is_hq() then
     raise exception 'apply_candidate_merge: HQ role required' using errcode = 'insufficient_privilege';
@@ -306,18 +314,62 @@ begin
       using errcode = 'check_violation';
   end if;
 
-  -- Applications are unique per (candidate, job order). When both records
-  -- applied to the same job, the duplicate's row stays put rather than being
-  -- destroyed. Work this out BEFORE writing the audit row: before_snapshot is
-  -- immutable once stored, so everything it must record has to be known now.
-  select coalesce(array_agg(a.id), '{}') into v_skipped_applications
-    from public.applications a
-   where a.candidate_id = p_merged_candidate_id
-     and exists (
-       select 1 from public.applications b
-        where b.candidate_id = p_primary_candidate_id
-          and b.job_order_id = a.job_order_id
-     );
+  -- Two applications for the same job carry separate assessment/interview
+  -- histories. Guessing which workflow survives would be data loss, while
+  -- leaving one on the archived candidate would split the ATS record. Require
+  -- an operator to resolve that collision before applying the candidate merge.
+  if exists (
+    select 1
+      from public.applications a
+      join public.applications b on b.job_order_id = a.job_order_id
+     where a.candidate_id = p_merged_candidate_id
+       and b.candidate_id = p_primary_candidate_id
+  ) then
+    raise exception 'apply_candidate_merge: both candidates have an application for the same job; resolve the application workflow first'
+      using errcode = 'unique_violation';
+  end if;
+
+  select to_jsonb(p) into v_primary_preferences
+    from public.candidate_preferences p where p.candidate_id = p_primary_candidate_id;
+  select to_jsonb(p) into v_merged_preferences
+    from public.candidate_preferences p where p.candidate_id = p_merged_candidate_id;
+  select to_jsonb(v) into v_primary_visibility
+    from public.candidate_search_visibility v where v.candidate_id = p_primary_candidate_id;
+  select to_jsonb(v) into v_merged_visibility
+    from public.candidate_search_visibility v where v.candidate_id = p_merged_candidate_id;
+  select to_jsonb(w) into v_primary_work_authorization
+    from public.candidate_work_authorizations w where w.candidate_id = p_primary_candidate_id;
+  select to_jsonb(w) into v_merged_work_authorization
+    from public.candidate_work_authorizations w where w.candidate_id = p_merged_candidate_id;
+
+  -- Collapse exact bookmark/unlock/provenance duplicates. Their full rows are
+  -- kept in the immutable snapshot so a revert can recreate them.
+  with deleted as (
+    delete from public.saved_jobs s
+     where s.candidate_id = p_merged_candidate_id
+       and exists (select 1 from public.saved_jobs p where p.candidate_id = p_primary_candidate_id and p.job_id = s.job_id)
+    returning to_jsonb(s) as row
+  ) select coalesce(jsonb_agg(row), '[]'::jsonb) into v_deleted_saved_jobs from deleted;
+
+  with deleted as (
+    delete from public.employer_cv_unlocks u
+     where u.candidate_id = p_merged_candidate_id
+       and exists (select 1 from public.employer_cv_unlocks p where p.candidate_id = p_primary_candidate_id and p.employer_org_id = u.employer_org_id)
+    returning to_jsonb(u) as row
+  ) select coalesce(jsonb_agg(row), '[]'::jsonb) into v_deleted_unlocks from deleted;
+
+  with deleted as (
+    delete from public.candidate_field_provenance f
+     where f.candidate_id = p_merged_candidate_id
+       and exists (
+         select 1 from public.candidate_field_provenance p
+          where p.candidate_id = p_primary_candidate_id
+            and p.target_entity = f.target_entity
+            and p.target_entity_id is not distinct from f.target_entity_id
+            and p.field_path = f.field_path
+       )
+    returning to_jsonb(f) as row
+  ) select coalesce(jsonb_agg(row), '[]'::jsonb) into v_deleted_provenance from deleted;
 
   -- Capture the exact rows this transaction is about to move. Reversal must
   -- never depend on an RLS-filtered browser snapshot assembled earlier.
@@ -328,20 +380,45 @@ begin
     'certifications', coalesce((select jsonb_agg(id) from public.candidate_certifications where candidate_id = p_merged_candidate_id), '[]'::jsonb),
     'languages', coalesce((select jsonb_agg(id) from public.candidate_languages where candidate_id = p_merged_candidate_id), '[]'::jsonb),
     'documents', coalesce((select jsonb_agg(id) from public.candidate_documents where candidate_id = p_merged_candidate_id), '[]'::jsonb),
-    'applications', coalesce((
-      select jsonb_agg(id)
-        from public.applications
-       where candidate_id = p_merged_candidate_id
-         and not (id = any(v_skipped_applications))
-    ), '[]'::jsonb),
-    'externalMappings', '[]'::jsonb
+    'consents', coalesce((select jsonb_agg(id) from public.candidate_consents where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'savedJobs', coalesce((select jsonb_agg(id) from public.saved_jobs where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'applications', coalesce((select jsonb_agg(id) from public.applications where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'tags', coalesce((select jsonb_agg(id) from public.candidate_tags where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'submissions', coalesce((select jsonb_agg(id) from public.employer_submissions where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'parseRuns', coalesce((select jsonb_agg(id) from public.resume_parse_runs where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'parseSuggestions', coalesce((select jsonb_agg(id) from public.resume_field_suggestions where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'interviewAssignments', coalesce((select jsonb_agg(id) from public.interview_assignments where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'interviewAttempts', coalesce((select jsonb_agg(id) from public.interview_response_attempts where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'assessmentAssignments', coalesce((select jsonb_agg(id) from public.assessment_assignments where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'searchAccessEvents', coalesce((select jsonb_agg(id) from public.candidate_search_access_events where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'unlockLedger', coalesce((select jsonb_agg(id) from public.employer_cv_unlock_ledger where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'unlocks', coalesce((select jsonb_agg(id) from public.employer_cv_unlocks where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'resultShares', coalesce((select jsonb_agg(id) from public.result_share_grants where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'visibleEvents', coalesce((select jsonb_agg(id) from public.candidate_visible_events where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'cvShares', coalesce((select jsonb_agg(id) from public.cv_share_events where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'provenance', coalesce((select jsonb_agg(id) from public.candidate_field_provenance where candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'importRecords', coalesce((select jsonb_agg(id) from public.zoho_candidate_import_records where matched_candidate_id = p_merged_candidate_id), '[]'::jsonb),
+    'recruiterNotes', coalesce((select jsonb_agg(id) from public.recruiter_notes where subject_type = 'candidate' and subject_id = p_merged_candidate_id), '[]'::jsonb),
+    'externalMappings', coalesce((select jsonb_agg(id) from public.zoho_recruit_external_mappings where local_entity_type = 'candidate_profile' and local_entity_id = p_merged_candidate_id), '[]'::jsonb)
   );
 
   v_before_snapshot := p_before_snapshot || jsonb_build_object(
     'primary', to_jsonb(v_primary),
     'duplicate', to_jsonb(v_merged),
     'reassigned', v_reassigned,
-    'skippedApplicationIds', to_jsonb(v_skipped_applications),
+    'oneToOne', jsonb_build_object(
+      'primaryPreferences', v_primary_preferences,
+      'duplicatePreferences', v_merged_preferences,
+      'primaryVisibility', v_primary_visibility,
+      'duplicateVisibility', v_merged_visibility,
+      'primaryWorkAuthorization', v_primary_work_authorization,
+      'duplicateWorkAuthorization', v_merged_work_authorization
+    ),
+    'deletedCollisions', jsonb_build_object(
+      'savedJobs', v_deleted_saved_jobs,
+      'unlocks', v_deleted_unlocks,
+      'provenance', v_deleted_provenance
+    ),
     'capturedAt', now()
   );
 
@@ -387,10 +464,111 @@ begin
   update public.candidate_documents set candidate_id = p_primary_candidate_id
     where candidate_id = p_merged_candidate_id;
 
-  -- Everything except the collisions computed above moves across.
+  -- One-to-one records are combined conservatively. Privacy wins for
+  -- visibility, while populated preference/work-authorization fields survive.
+  if v_merged_preferences is not null then
+    if v_primary_preferences is null then
+      update public.candidate_preferences set candidate_id = p_primary_candidate_id
+       where candidate_id = p_merged_candidate_id;
+    else
+      update public.candidate_preferences p set
+        desired_roles = array(select distinct unnest(p.desired_roles || coalesce((select desired_roles from public.candidate_preferences where candidate_id = p_merged_candidate_id), '{}'))),
+        preferred_industries = array(select distinct unnest(p.preferred_industries || coalesce((select preferred_industries from public.candidate_preferences where candidate_id = p_merged_candidate_id), '{}'))),
+        preferred_locations = array(select distinct unnest(p.preferred_locations || coalesce((select preferred_locations from public.candidate_preferences where candidate_id = p_merged_candidate_id), '{}'))),
+        min_salary = coalesce(p.min_salary, (select min_salary from public.candidate_preferences where candidate_id = p_merged_candidate_id)),
+        max_salary = coalesce(p.max_salary, (select max_salary from public.candidate_preferences where candidate_id = p_merged_candidate_id)),
+        salary_currency = coalesce(p.salary_currency, (select salary_currency from public.candidate_preferences where candidate_id = p_merged_candidate_id)),
+        salary_private = p.salary_private or coalesce((select salary_private from public.candidate_preferences where candidate_id = p_merged_candidate_id), true),
+        willing_to_relocate = p.willing_to_relocate or coalesce((select willing_to_relocate from public.candidate_preferences where candidate_id = p_merged_candidate_id), false),
+        remote_preference = coalesce(p.remote_preference, (select remote_preference from public.candidate_preferences where candidate_id = p_merged_candidate_id)),
+        employment_types = array(select distinct unnest(p.employment_types || coalesce((select employment_types from public.candidate_preferences where candidate_id = p_merged_candidate_id), '{}'))),
+        notice_period = coalesce(p.notice_period, (select notice_period from public.candidate_preferences where candidate_id = p_merged_candidate_id)),
+        updated_at = now()
+       where p.candidate_id = p_primary_candidate_id;
+      delete from public.candidate_preferences where candidate_id = p_merged_candidate_id;
+    end if;
+  end if;
+
+  if v_merged_visibility is not null then
+    if v_primary_visibility is null then
+      update public.candidate_search_visibility set candidate_id = p_primary_candidate_id
+       where candidate_id = p_merged_candidate_id;
+    else
+      update public.candidate_search_visibility p set
+        is_searchable = p.is_searchable and coalesce((select is_searchable from public.candidate_search_visibility where candidate_id = p_merged_candidate_id), false),
+        approved_fields = coalesce((
+          select array_agg(field_name)
+            from unnest(p.approved_fields) field_name
+           where field_name = any(coalesce((select approved_fields from public.candidate_search_visibility where candidate_id = p_merged_candidate_id), '{}'))
+        ), '{}'),
+        updated_at = now()
+       where p.candidate_id = p_primary_candidate_id;
+      delete from public.candidate_search_visibility where candidate_id = p_merged_candidate_id;
+    end if;
+  end if;
+
+  if v_merged_work_authorization is not null then
+    if v_primary_work_authorization is null then
+      update public.candidate_work_authorizations set candidate_id = p_primary_candidate_id
+       where candidate_id = p_merged_candidate_id;
+    else
+      update public.candidate_work_authorizations p set
+        work_country_code = case when p.eligibility_status = 'unknown' then coalesce((select work_country_code from public.candidate_work_authorizations where candidate_id = p_merged_candidate_id), p.work_country_code) else p.work_country_code end,
+        eligibility_status = case when p.eligibility_status = 'unknown' then coalesce((select eligibility_status from public.candidate_work_authorizations where candidate_id = p_merged_candidate_id), p.eligibility_status) else p.eligibility_status end,
+        permit_type = coalesce(p.permit_type, (select permit_type from public.candidate_work_authorizations where candidate_id = p_merged_candidate_id)),
+        permit_expires_on = coalesce(p.permit_expires_on, (select permit_expires_on from public.candidate_work_authorizations where candidate_id = p_merged_candidate_id)),
+        note = coalesce(p.note, (select note from public.candidate_work_authorizations where candidate_id = p_merged_candidate_id)),
+        updated_at = now()
+       where p.candidate_id = p_primary_candidate_id;
+      delete from public.candidate_work_authorizations where candidate_id = p_merged_candidate_id;
+    end if;
+  end if;
+
+  update public.candidate_consents set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.saved_jobs set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
   update public.applications set candidate_id = p_primary_candidate_id
-   where candidate_id = p_merged_candidate_id
-     and not (id = any(v_skipped_applications));
+   where candidate_id = p_merged_candidate_id;
+  update public.candidate_tags set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.employer_submissions set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.resume_parse_runs set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.resume_field_suggestions set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  -- Interview ownership is normally immutable. This audited, atomic merge is
+  -- the sole exception; disable only that guard while the linked application
+  -- and candidate are moved together. The table lock prevents concurrent edits.
+  alter table public.interview_assignments disable trigger trg_iva_guard;
+  update public.interview_assignments set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  alter table public.interview_assignments enable trigger trg_iva_guard;
+  update public.interview_response_attempts set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.assessment_assignments set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.candidate_search_access_events set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.employer_cv_unlock_ledger set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.employer_cv_unlocks set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.result_share_grants set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.candidate_visible_events set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.cv_share_events set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.candidate_field_provenance set candidate_id = p_primary_candidate_id
+    where candidate_id = p_merged_candidate_id;
+  update public.zoho_candidate_import_records set matched_candidate_id = p_primary_candidate_id
+    where matched_candidate_id = p_merged_candidate_id;
+  update public.recruiter_notes set subject_id = p_primary_candidate_id
+    where subject_type = 'candidate' and subject_id = p_merged_candidate_id;
+  update public.zoho_recruit_external_mappings set local_entity_id = p_primary_candidate_id
+    where local_entity_type = 'candidate_profile' and local_entity_id = p_merged_candidate_id;
 
   update public.candidate_profiles
      set merged_into_candidate_id = p_primary_candidate_id,
@@ -410,8 +588,7 @@ begin
     v_actor, 'candidate.merge', 'candidate_profile', p_merged_candidate_id,
     v_before_snapshot,
     jsonb_build_object('primaryCandidateId', p_primary_candidate_id, 'profileUpdates', v_updates),
-    jsonb_build_object('mergeEventId', v_event_id, 'duplicateLinkId', p_duplicate_link_id,
-                       'skippedApplicationIds', to_jsonb(v_skipped_applications))
+    jsonb_build_object('mergeEventId', v_event_id, 'duplicateLinkId', p_duplicate_link_id)
   );
 
   return v_event_id;
@@ -428,6 +605,8 @@ declare
   v_event public.candidate_merge_events;
   v_restores jsonb := coalesce(p_profile_restores, '{}'::jsonb);
   v_reassigned jsonb;
+  v_one_to_one jsonb;
+  v_deleted jsonb;
 begin
   if not public.auth_is_hq() then
     raise exception 'revert_candidate_merge: HQ role required' using errcode = 'insufficient_privilege';
@@ -470,8 +649,86 @@ begin
    where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'languages','[]'::jsonb)))::uuid);
   update public.candidate_documents set candidate_id = v_event.merged_candidate_id
    where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'documents','[]'::jsonb)))::uuid);
+  update public.candidate_consents set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'consents','[]'::jsonb)))::uuid);
+  update public.saved_jobs set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'savedJobs','[]'::jsonb)))::uuid);
   update public.applications set candidate_id = v_event.merged_candidate_id
    where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'applications','[]'::jsonb)))::uuid);
+  update public.candidate_tags set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'tags','[]'::jsonb)))::uuid);
+  update public.employer_submissions set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'submissions','[]'::jsonb)))::uuid);
+  update public.resume_parse_runs set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'parseRuns','[]'::jsonb)))::uuid);
+  update public.resume_field_suggestions set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'parseSuggestions','[]'::jsonb)))::uuid);
+  alter table public.interview_assignments disable trigger trg_iva_guard;
+  update public.interview_assignments set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'interviewAssignments','[]'::jsonb)))::uuid);
+  alter table public.interview_assignments enable trigger trg_iva_guard;
+  update public.interview_response_attempts set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'interviewAttempts','[]'::jsonb)))::uuid);
+  update public.assessment_assignments set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'assessmentAssignments','[]'::jsonb)))::uuid);
+  update public.candidate_search_access_events set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'searchAccessEvents','[]'::jsonb)))::bigint);
+  update public.employer_cv_unlock_ledger set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'unlockLedger','[]'::jsonb)))::uuid);
+  update public.employer_cv_unlocks set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'unlocks','[]'::jsonb)))::uuid);
+  update public.result_share_grants set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'resultShares','[]'::jsonb)))::uuid);
+  update public.candidate_visible_events set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'visibleEvents','[]'::jsonb)))::bigint);
+  update public.cv_share_events set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'cvShares','[]'::jsonb)))::uuid);
+  update public.candidate_field_provenance set candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'provenance','[]'::jsonb)))::uuid);
+  update public.zoho_candidate_import_records set matched_candidate_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'importRecords','[]'::jsonb)))::uuid);
+  update public.recruiter_notes set subject_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'recruiterNotes','[]'::jsonb)))::uuid);
+  update public.zoho_recruit_external_mappings set local_entity_id = v_event.merged_candidate_id
+   where id in (select (jsonb_array_elements_text(coalesce(v_reassigned->'externalMappings','[]'::jsonb)))::uuid);
+
+  -- Restore one-to-one rows exactly as they were before the merge.
+  v_one_to_one := coalesce(v_event.before_snapshot->'oneToOne', '{}'::jsonb);
+  delete from public.candidate_preferences where candidate_id in (v_event.primary_candidate_id, v_event.merged_candidate_id);
+  if v_one_to_one->'primaryPreferences' is not null and v_one_to_one->'primaryPreferences' <> 'null'::jsonb then
+    insert into public.candidate_preferences select (jsonb_populate_record(null::public.candidate_preferences, v_one_to_one->'primaryPreferences')).*;
+  end if;
+  if v_one_to_one->'duplicatePreferences' is not null and v_one_to_one->'duplicatePreferences' <> 'null'::jsonb then
+    insert into public.candidate_preferences select (jsonb_populate_record(null::public.candidate_preferences, v_one_to_one->'duplicatePreferences')).*;
+  end if;
+
+  delete from public.candidate_search_visibility where candidate_id in (v_event.primary_candidate_id, v_event.merged_candidate_id);
+  if v_one_to_one->'primaryVisibility' is not null and v_one_to_one->'primaryVisibility' <> 'null'::jsonb then
+    insert into public.candidate_search_visibility select (jsonb_populate_record(null::public.candidate_search_visibility, v_one_to_one->'primaryVisibility')).*;
+  end if;
+  if v_one_to_one->'duplicateVisibility' is not null and v_one_to_one->'duplicateVisibility' <> 'null'::jsonb then
+    insert into public.candidate_search_visibility select (jsonb_populate_record(null::public.candidate_search_visibility, v_one_to_one->'duplicateVisibility')).*;
+  end if;
+
+  delete from public.candidate_work_authorizations where candidate_id in (v_event.primary_candidate_id, v_event.merged_candidate_id);
+  if v_one_to_one->'primaryWorkAuthorization' is not null and v_one_to_one->'primaryWorkAuthorization' <> 'null'::jsonb then
+    insert into public.candidate_work_authorizations select (jsonb_populate_record(null::public.candidate_work_authorizations, v_one_to_one->'primaryWorkAuthorization')).*;
+  end if;
+  if v_one_to_one->'duplicateWorkAuthorization' is not null and v_one_to_one->'duplicateWorkAuthorization' <> 'null'::jsonb then
+    insert into public.candidate_work_authorizations select (jsonb_populate_record(null::public.candidate_work_authorizations, v_one_to_one->'duplicateWorkAuthorization')).*;
+  end if;
+
+  -- Recreate exact duplicates that were collapsed during apply.
+  v_deleted := coalesce(v_event.before_snapshot->'deletedCollisions', '{}'::jsonb);
+  insert into public.saved_jobs
+    select (jsonb_populate_record(null::public.saved_jobs, row_value)).*
+      from jsonb_array_elements(coalesce(v_deleted->'savedJobs', '[]'::jsonb)) row_value;
+  insert into public.employer_cv_unlocks
+    select (jsonb_populate_record(null::public.employer_cv_unlocks, row_value)).*
+      from jsonb_array_elements(coalesce(v_deleted->'unlocks', '[]'::jsonb)) row_value;
+  insert into public.candidate_field_provenance
+    select (jsonb_populate_record(null::public.candidate_field_provenance, row_value)).*
+      from jsonb_array_elements(coalesce(v_deleted->'provenance', '[]'::jsonb)) row_value;
 
   update public.candidate_profiles p set
     given_name    = case when v_restores ? 'given_name'    then v_restores->>'given_name'    else p.given_name end,
