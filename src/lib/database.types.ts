@@ -199,6 +199,36 @@ export type KpiStageAgeThresholdRow = {
   created_at: string;
   updated_at: string;
 };
+export type RecruiterKpiTargetVersionRow = {
+  id: string;
+  target_id: string | null;
+  organization_id: string | null;
+  recruiter_level: RecruiterLevelDb;
+  metrics: Json;
+  effective_from: string;
+  superseded_at: string | null;
+  changed_by: string | null;
+  created_at: string;
+};
+export type KpiResponseSlaRow = {
+  id: string;
+  scope_key: "employer_submission" | "candidate_interview" | "candidate_consent";
+  organization_id: string | null;
+  max_hours: number;
+  created_at: string;
+  updated_at: string;
+};
+export type KpiInterviewScheduleEventRow = {
+  id: number;
+  interview_id: string;
+  application_id: string | null;
+  owning_org_id: string;
+  change_kind: "scheduled" | "rescheduled" | "cancelled";
+  previous_scheduled_at: string | null;
+  new_scheduled_at: string | null;
+  actor_id: string | null;
+  created_at: string;
+};
 export type CandidateProfileRow = {
   id: string;
   user_id: string;
@@ -412,6 +442,50 @@ export type CandidateConsentRow = {
   withdrawn_at: string | null;
   note: string | null;
 };
+export type AssessmentResultSnapshotRow = {
+  assignment_id: string;
+  provider: string;
+  permitted_payload: Json;
+  visibility_tier: "candidate_full" | "candidate_limited" | "completion_only";
+  captured_at: string;
+  verified_at: string;
+};
+export type ResultShareGrantRow = {
+  id: string;
+  candidate_id: string;
+  assignment_id: string;
+  recipient_org_id: string;
+  purpose: string;
+  job_order_id: string;
+  scope: Json;
+  consent_id: string;
+  shared_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  revoked_by: string | null;
+};
+export type CandidateVisibleEventRow = {
+  id: number;
+  candidate_id: string;
+  application_id: string | null;
+  event_type: string;
+  label: string;
+  details: Json;
+  occurred_at: string;
+  source_type: string;
+  source_id: string;
+};
+export type CvShareEventRow = {
+  id: string;
+  candidate_id: string;
+  application_id: string;
+  recipient_org_id: string;
+  document_id: string;
+  consent_id: string;
+  channel: "portal_link";
+  portal_path: string;
+  created_at: string;
+};
 export type JobOrderRow = {
   id: string;
   employer_org_id: string;
@@ -435,6 +509,14 @@ export type JobOrderRow = {
   recruitment_path: "A" | "B";
   is_confidential: boolean;
   status: string;
+  origin: "employer_online" | "shugulika_offline";
+  approved_snapshot: Json | null;
+  approved_snapshot_hash: string | null;
+  employer_approved_by: string | null;
+  employer_approved_at: string | null;
+  shugulika_approved_by: string | null;
+  shugulika_approved_at: string | null;
+  current_owner_user_id: string | null;
   application_deadline: string | null;
   target_start_date: string | null;
   closed_reason: string | null;
@@ -453,6 +535,27 @@ export type JobOrderRow = {
   assessment_file_size: number | null;
   created_at: string;
   updated_at: string;
+};
+export type JobOrderEventRow = {
+  id: string;
+  job_order_id: string;
+  from_status: string | null;
+  to_status: string;
+  event_type: string;
+  actor_user_id: string | null;
+  reason: string | null;
+  metadata: Json;
+  occurred_at: string;
+};
+export type JobOrderChangeRequestRow = {
+  id: string;
+  job_order_id: string;
+  requested_by: string;
+  message: string;
+  requested_changes: Json;
+  status: "open" | "addressed" | "cancelled";
+  created_at: string;
+  resolved_at: string | null;
 };
 export type AssessmentAssignmentRow = {
   id: string;
@@ -482,6 +585,7 @@ export type AssessmentAssignmentRow = {
   ai_confidence: number | null;
   grading_payload: Json;
   responses: Json;
+  paid_by: "candidate" | "employer";
   created_at: string;
   updated_at: string;
 };
@@ -1305,6 +1409,9 @@ export type Database = {
       recruiter_role_assignments: Tbl<RecruiterRoleAssignmentRow>;
       recruiter_kpi_targets: Tbl<RecruiterKpiTargetRow>;
       kpi_stage_age_thresholds: Tbl<KpiStageAgeThresholdRow>;
+      recruiter_kpi_target_versions: Tbl<RecruiterKpiTargetVersionRow>;
+      kpi_response_sla: Tbl<KpiResponseSlaRow>;
+      kpi_interview_schedule_events: Tbl<KpiInterviewScheduleEventRow>;
       candidate_profiles: Tbl<CandidateProfileRow>;
       candidate_experiences: Tbl<CandidateExperienceRow>;
       candidate_education: Tbl<CandidateEducationRow>;
@@ -1316,6 +1423,10 @@ export type Database = {
       candidate_search_access_events: Tbl<CandidateSearchAccessEventRow>;
       candidate_documents: Tbl<CandidateDocumentRow>;
       candidate_consents: Tbl<CandidateConsentRow>;
+      assessment_result_snapshots: Tbl<AssessmentResultSnapshotRow>;
+      result_share_grants: Tbl<ResultShareGrantRow>;
+      candidate_visible_events: Tbl<CandidateVisibleEventRow>;
+      cv_share_events: Tbl<CvShareEventRow>;
       resume_parse_runs: Tbl<ResumeParseRunRow>;
       resume_field_suggestions: Tbl<ResumeFieldSuggestionRow>;
       job_requirements: Tbl<JobRequirementRow>;
@@ -1323,6 +1434,8 @@ export type Database = {
       application_ai_review_items: Tbl<ApplicationAiReviewItemRow>;
       ai_usage_events: Tbl<AiUsageEventRow>;
       job_orders: Tbl<JobOrderRow>;
+      job_order_events: Tbl<JobOrderEventRow>;
+      job_order_change_requests: Tbl<JobOrderChangeRequestRow>;
       assessment_assignments: Tbl<AssessmentAssignmentRow>;
       job_order_assessment_files: Tbl<JobOrderAssessmentFileRow>;
       jobs: Tbl<JobRow>;

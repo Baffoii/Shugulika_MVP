@@ -14,7 +14,6 @@ import {
   canStaffRequestChanges,
   canStaffSubmitOffline,
 } from "@/lib/jobs";
-import { enqueueJobApprovalNotification } from "@/lib/notifications/enqueue-job-approval";
 import type { JobOrderOrigin } from "@/lib/jobs/types";
 
 type RpcClient = {
@@ -246,15 +245,6 @@ export async function submitJobOrderAction(
   } as never);
   if (error) return { ok: false, error: error.message };
 
-  await enqueueJobApprovalNotification({
-    jobOrderId,
-    kind: "submitted_to_shugulika",
-    organizationId: employer.parent_id,
-    title: "New job order submitted",
-    body: `${employer.name} submitted "${values.title}" for approval.`,
-    businessKey: `submitted_to_shugulika:${jobOrderId}`,
-  });
-
   if (assessmentMode === "employer" || assessmentMode === "both") {
     const candidateUpload = await uploadAssessmentFiles({
       supabase,
@@ -405,15 +395,6 @@ export async function approveJobOrderByShugulikaAction(
   });
   if (error) return { ok: false, error: error.message };
 
-  await enqueueJobApprovalNotification({
-    jobOrderId,
-    kind: "approved_by_shugulika",
-    organizationId: order.responsible_org_id,
-    title: "Job order approved by Shugulika",
-    body: `"${order.title}" was approved and is ready to publish.`,
-    businessKey: `approved_by_shugulika:${jobOrderId}`,
-  });
-
   revalidateJobOrderPaths();
   return { ok: true, message: "Job order approved by Shugulika." };
 }
@@ -440,15 +421,6 @@ export async function publishJobOrderAction(jobOrderId: string): Promise<JobOrde
   });
   if (error) return { ok: false, error: error.message };
 
-  await enqueueJobApprovalNotification({
-    jobOrderId,
-    kind: "published",
-    organizationId: order.responsible_org_id,
-    title: "Job order published",
-    body: `"${order.title}" is now live.`,
-    businessKey: `published:${jobOrderId}`,
-  });
-
   revalidateJobOrderPaths();
   return { ok: true, message: "Job published." };
 }
@@ -470,15 +442,6 @@ export async function approveJobOrderByEmployerAction(
     p_job_order_id: jobOrderId,
   });
   if (error) return { ok: false, error: error.message };
-
-  await enqueueJobApprovalNotification({
-    jobOrderId,
-    kind: "approved_by_employer",
-    organizationId: order.responsible_org_id,
-    title: "Employer approved job order",
-    body: `Employer approved "${order.title}".`,
-    businessKey: `approved_by_employer:${jobOrderId}`,
-  });
 
   revalidateJobOrderPaths();
   return { ok: true, message: "Job order approved." };
@@ -521,15 +484,6 @@ export async function requestJobOrderChangesAction(
   });
   if (error) return { ok: false, error: error.message };
 
-  await enqueueJobApprovalNotification({
-    jobOrderId,
-    kind: "changes_requested",
-    organizationId: order.employer_org_id,
-    title: "Changes requested on job order",
-    body: trimmed,
-    businessKey: `changes_requested:${jobOrderId}:${Date.now()}`,
-  });
-
   revalidateJobOrderPaths();
   return { ok: true, message: "Change request sent." };
 }
@@ -561,21 +515,6 @@ export async function submitJobOrderWorkflowAction(
     p_job_order_id: jobOrderId,
   });
   if (error) return { ok: false, error: error.message };
-
-  const kind =
-    origin === "shugulika_offline" ? "awaiting_employer_approval" : "submitted_to_shugulika";
-  await enqueueJobApprovalNotification({
-    jobOrderId,
-    kind,
-    organizationId:
-      origin === "shugulika_offline" ? order.employer_org_id : order.responsible_org_id,
-    title:
-      origin === "shugulika_offline"
-        ? "Job order awaiting your approval"
-        : "Job order submitted to Shugulika",
-    body: `"${order.title}" needs review.`,
-    businessKey: `${kind}:${jobOrderId}`,
-  });
 
   revalidateJobOrderPaths();
   return {
@@ -665,15 +604,6 @@ export async function denyJobOrderAction(
     p_reason: trimmed,
   });
   if (error) return { ok: false, error: error.message };
-
-  await enqueueJobApprovalNotification({
-    jobOrderId,
-    kind: "denied",
-    organizationId: order.employer_org_id,
-    title: "Job order denied",
-    body: trimmed,
-    businessKey: `denied:${jobOrderId}`,
-  });
 
   revalidateJobOrderPaths();
   return { ok: true, message: "Job order denied." };

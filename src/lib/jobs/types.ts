@@ -44,6 +44,31 @@ export type JobOrderMaterialSnapshot = {
   is_confidential: boolean;
   application_deadline: string | null;
   target_start_date: string | null;
+  assessment_mode: "shugulika" | "employer" | "both";
+  assessment_seniority: "junior" | "senior";
+  assessment_pass_threshold: number;
+  assessment_file_bucket: string | null;
+  assessment_file_path: string | null;
+  assessment_file_name: string | null;
+  assessment_file_mime: string | null;
+  assessment_file_size: number | null;
+  assessment_files: Array<{
+    id: string;
+    kind: "candidate_test" | "answer_key";
+    bucket_id: string;
+    object_path: string;
+    file_name: string;
+    mime_type: string | null;
+    byte_size: number | null;
+  }>;
+  screening_questions: Array<{
+    id: string;
+    prompt: string;
+    qtype: string;
+    options: unknown;
+    is_required: boolean;
+    ordinal: number;
+  }>;
 };
 
 export type JobOrderWorkflowRow = {

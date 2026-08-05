@@ -169,7 +169,7 @@ drop policy if exists job_order_change_requests_staff_write on public.job_order_
 create or replace function public.job_order_material_snapshot(p_order public.job_orders)
 returns jsonb
 language sql
-immutable
+stable
 as $$
   select jsonb_build_object(
     'employer_org_id', p_order.employer_org_id,
@@ -194,7 +194,44 @@ as $$
     'recruitment_path', p_order.recruitment_path,
     'is_confidential', p_order.is_confidential,
     'application_deadline', p_order.application_deadline,
-    'target_start_date', p_order.target_start_date
+    'target_start_date', p_order.target_start_date,
+    'assessment_mode', p_order.assessment_mode,
+    'assessment_seniority', p_order.assessment_seniority,
+    'assessment_pass_threshold', p_order.assessment_pass_threshold,
+    'assessment_file_bucket', p_order.assessment_file_bucket,
+    'assessment_file_path', p_order.assessment_file_path,
+    'assessment_file_name', p_order.assessment_file_name,
+    'assessment_file_mime', p_order.assessment_file_mime,
+    'assessment_file_size', p_order.assessment_file_size,
+    'assessment_files', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', f.id,
+          'kind', f.kind,
+          'bucket_id', f.bucket_id,
+          'object_path', f.object_path,
+          'file_name', f.file_name,
+          'mime_type', f.mime_type,
+          'byte_size', f.byte_size
+        ) order by f.kind, f.id
+      )
+      from public.job_order_assessment_files f
+      where f.job_order_id = p_order.id
+    ), '[]'::jsonb),
+    'screening_questions', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', q.id,
+          'prompt', q.prompt,
+          'qtype', q.qtype,
+          'options', q.options,
+          'is_required', q.is_required,
+          'ordinal', q.ordinal
+        ) order by q.ordinal, q.id
+      )
+      from public.job_screening_questions q
+      where q.job_order_id = p_order.id
+    ), '[]'::jsonb)
   );
 $$;
 
@@ -203,7 +240,7 @@ returns text
 language sql
 immutable
 as $$
-  select encode(digest(coalesce(p_snapshot, '{}'::jsonb)::text, 'sha256'), 'hex');
+  select encode(public.digest(coalesce(p_snapshot, '{}'::jsonb)::text, 'sha256'), 'hex');
 $$;
 
 drop function if exists public.job_order_record_event(uuid, text, text, text, text, jsonb);
@@ -332,6 +369,124 @@ drop trigger if exists trg_job_order_material_edit_reapproval on public.job_orde
 create trigger trg_job_order_material_edit_reapproval
 before update on public.job_orders
 for each row execute function public.job_order_material_edit_reapproval();
+
+-- Related assessment files and screening questions are material job-order
+-- content even though they live in child tables. Any change after an approval
+-- path starts invalidates the snapshot in the same transaction.
+create or replace function private.job_order_invalidate_related_approval(
+  p_job_order_id uuid,
+  p_related_table text,
+  p_operation text,
+  p_related_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_order public.job_orders%rowtype;
+  v_reset_to text;
+  v_after_hash text;
+begin
+  select * into v_order
+  from public.job_orders
+  where id = p_job_order_id
+  for update;
+
+  if not found or v_order.status not in (
+    'awaiting_employer_approval',
+    'submitted_to_shugulika',
+    'approved_by_employer',
+    'approved_by_shugulika',
+    'approved',
+    'active',
+    'on_hold',
+    'paused'
+  ) then
+    return;
+  end if;
+
+  v_reset_to := case
+    when v_order.origin = 'shugulika_offline' then 'awaiting_employer_approval'
+    else 'submitted_to_shugulika'
+  end;
+  v_after_hash := public.job_order_snapshot_hash(
+    public.job_order_material_snapshot(v_order)
+  );
+
+  update public.job_orders
+  set status = v_reset_to,
+      approved_snapshot = null,
+      approved_snapshot_hash = null,
+      employer_approved_by = null,
+      employer_approved_at = null,
+      shugulika_approved_by = null,
+      shugulika_approved_at = null,
+      updated_at = now()
+  where id = p_job_order_id;
+
+  perform private.job_order_record_event(
+    p_job_order_id,
+    v_order.status,
+    v_reset_to,
+    'material_edit_reapproval',
+    'Material related records changed; approval required again',
+    jsonb_build_object(
+      'before_hash', v_order.approved_snapshot_hash,
+      'after_hash', v_after_hash,
+      'related_table', p_related_table,
+      'operation', p_operation,
+      'related_id', p_related_id
+    )
+  );
+end;
+$$;
+
+revoke all on function private.job_order_invalidate_related_approval(uuid, text, text, uuid)
+  from public, anon, authenticated;
+
+create or replace function private.job_order_related_material_reapproval()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if tg_op = 'DELETE' then
+    perform private.job_order_invalidate_related_approval(
+      old.job_order_id, tg_table_name, tg_op, old.id
+    );
+    return old;
+  end if;
+
+  if tg_op = 'UPDATE' and old.job_order_id is distinct from new.job_order_id then
+    perform private.job_order_invalidate_related_approval(
+      old.job_order_id, tg_table_name, tg_op, old.id
+    );
+  end if;
+
+  perform private.job_order_invalidate_related_approval(
+    new.job_order_id, tg_table_name, tg_op, new.id
+  );
+  return new;
+end;
+$$;
+
+revoke all on function private.job_order_related_material_reapproval()
+  from public, anon, authenticated;
+
+drop trigger if exists trg_job_screening_question_reapproval
+  on public.job_screening_questions;
+create trigger trg_job_screening_question_reapproval
+after insert or update or delete on public.job_screening_questions
+for each row execute function private.job_order_related_material_reapproval();
+
+drop trigger if exists trg_job_assessment_file_reapproval
+  on public.job_order_assessment_files;
+create trigger trg_job_assessment_file_reapproval
+after insert or update or delete on public.job_order_assessment_files
+for each row execute function private.job_order_related_material_reapproval();
 
 -- ---------------------------------------------------------------------------
 -- RLS: employer submit + employer edit of editable statuses

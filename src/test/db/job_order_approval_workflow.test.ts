@@ -37,6 +37,22 @@ describeDb("job order approval workflow", () => {
     expect(privileges.rows[0]?.anon_execute).toBe(false);
     expect(privileges.rows[0]?.authenticated_execute).toBe(false);
 
+    for (const privateSignature of [
+      "private.job_order_invalidate_related_approval(uuid,text,text,uuid)",
+      "private.job_order_related_material_reapproval()",
+    ]) {
+      const relatedPrivileges = await client.query(
+        `select
+           has_function_privilege('anon', $1, 'execute') as anon_execute,
+           has_function_privilege('authenticated', $1, 'execute') as authenticated_execute`,
+        [privateSignature],
+      );
+      expect(relatedPrivileges.rows[0]).toMatchObject({
+        anon_execute: false,
+        authenticated_execute: false,
+      });
+    }
+
     await expect(
       queryAs(
         client,
@@ -277,6 +293,149 @@ describeDb("job order approval workflow", () => {
       from_status: "approved_by_shugulika",
       to_status: "submitted_to_shugulika",
     });
+  });
+
+  it("snapshots assessment configuration and invalidates approval on related-record edits", async () => {
+    const jobOrderId = (
+      await commitAs(
+        client,
+        ids.employerUserA,
+        `insert into public.job_orders (
+           employer_org_id, responsible_org_id, title, description, country_code,
+           vacancy_count, recruitment_path, status, origin, created_by,
+           assessment_mode, assessment_seniority, assessment_pass_threshold,
+           assessment_file_bucket, assessment_file_path, assessment_file_name,
+           assessment_file_mime, assessment_file_size
+         ) values ($1, $2, 'Assessment Snapshot Role', 'Test the complete snapshot.', 'TZ',
+                   1, 'B', 'submitted_to_shugulika', 'employer_online', $3,
+                   'both', 'senior', 70,
+                   'employer-assessments', 'legacy/test.pdf', 'test.pdf',
+                   'application/pdf', 1234)
+         returning id`,
+        [ids.employerA, ids.franchiseA, ids.employerUserA],
+      )
+    ).rows[0]?.id as string;
+
+    const questionId = (
+      await commitAs(
+        client,
+        ids.recruiterA,
+        `insert into public.job_screening_questions
+           (job_order_id, prompt, qtype, options, is_required, ordinal)
+         values ($1, 'Can you close the monthly books?', 'boolean', '[true,false]'::jsonb, true, 1)
+         returning id`,
+        [jobOrderId],
+      )
+    ).rows[0]?.id as string;
+
+    const assessmentFileId = (
+      await commitAs(
+        client,
+        ids.employerUserA,
+        `insert into public.job_order_assessment_files
+           (job_order_id, kind, bucket_id, object_path, file_name, mime_type, byte_size, uploaded_by)
+         values ($1, 'candidate_test', 'employer-assessments',
+                 'snapshot/candidate-test.pdf', 'candidate-test.pdf',
+                 'application/pdf', 4321, $2)
+         returning id`,
+        [jobOrderId, ids.employerUserA],
+      )
+    ).rows[0]?.id as string;
+
+    await commitAs(client, ids.recruiterA, "select public.approve_job_order_by_shugulika($1)", [
+      jobOrderId,
+    ]);
+
+    const approved = await queryAs(
+      client,
+      ids.recruiterA,
+      `select approved_snapshot from public.job_orders where id = $1`,
+      [jobOrderId],
+    );
+    expect(approved.rows[0]?.approved_snapshot).toMatchObject({
+      assessment_mode: "both",
+      assessment_seniority: "senior",
+      assessment_pass_threshold: 70,
+      assessment_file_bucket: "employer-assessments",
+      assessment_file_path: "legacy/test.pdf",
+      assessment_file_name: "test.pdf",
+      assessment_file_mime: "application/pdf",
+      assessment_file_size: 1234,
+      assessment_files: [
+        {
+          id: assessmentFileId,
+          kind: "candidate_test",
+          object_path: "snapshot/candidate-test.pdf",
+          file_name: "candidate-test.pdf",
+        },
+      ],
+      screening_questions: [
+        {
+          id: questionId,
+          prompt: "Can you close the monthly books?",
+          qtype: "boolean",
+          is_required: true,
+          ordinal: 1,
+        },
+      ],
+    });
+
+    await commitAs(
+      client,
+      ids.recruiterA,
+      `update public.job_screening_questions
+       set prompt = 'Can you independently close the monthly books?'
+       where id = $1`,
+      [questionId],
+    );
+
+    const questionReset = await queryAs(
+      client,
+      ids.recruiterA,
+      `select status, approved_snapshot, approved_snapshot_hash
+       from public.job_orders where id = $1`,
+      [jobOrderId],
+    );
+    expect(questionReset.rows[0]).toMatchObject({
+      status: "submitted_to_shugulika",
+      approved_snapshot: null,
+      approved_snapshot_hash: null,
+    });
+
+    await commitAs(client, ids.recruiterA, "select public.approve_job_order_by_shugulika($1)", [
+      jobOrderId,
+    ]);
+    await commitAs(
+      client,
+      ids.employerUserA,
+      `delete from public.job_order_assessment_files where id = $1`,
+      [assessmentFileId],
+    );
+
+    const fileReset = await queryAs(
+      client,
+      ids.recruiterA,
+      `select status, approved_snapshot_hash from public.job_orders where id = $1`,
+      [jobOrderId],
+    );
+    expect(fileReset.rows[0]).toMatchObject({
+      status: "submitted_to_shugulika",
+      approved_snapshot_hash: null,
+    });
+
+    const relatedEvents = await queryAs(
+      client,
+      ids.recruiterA,
+      `select metadata->>'related_table' as related_table
+       from public.job_order_events
+       where job_order_id = $1
+         and event_type = 'material_edit_reapproval'
+         and metadata ? 'related_table'`,
+      [jobOrderId],
+    );
+    expect(relatedEvents.rows.map((row) => row.related_table)).toEqual(
+      expect.arrayContaining(["job_screening_questions", "job_order_assessment_files"]),
+    );
   });
 
   it("employer cannot call publish_job_order", async () => {
