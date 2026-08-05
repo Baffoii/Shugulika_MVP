@@ -61,6 +61,11 @@ function JobOrderDetailsPanel({ job }: { job: JobOrderRow }) {
         </DetailBlock>
         <DetailBlock label="Assessment level">{titleCase(job.assessment_seniority)}</DetailBlock>
         <DetailBlock label="Pass threshold">{`${job.assessment_pass_threshold}%`}</DetailBlock>
+        <DetailBlock label="Origin">
+          {(job as { origin?: string }).origin === "shugulika_offline"
+            ? "Shugulika offline"
+            : "Employer online"}
+        </DetailBlock>
         {job.status === "denied" ? (
           <DetailBlock label="Denial reason">{job.denial_reason}</DetailBlock>
         ) : null}

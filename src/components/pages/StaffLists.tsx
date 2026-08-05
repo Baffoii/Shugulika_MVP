@@ -11,14 +11,17 @@ import {
   getOrganizations,
 } from "@/lib/data/staff";
 import { formatDate, formatDateTime, formatMoney, titleCase } from "@/lib/format";
-import { PublishJobButton } from "@/components/jobs/PublishJobButton";
-import { DenyJobOrderButton } from "@/components/jobs/DenyJobOrderButton";
 import { WithdrawJobOrderButton } from "@/components/jobs/WithdrawJobOrderButton";
 import { AssignJobRecruiterControl } from "@/components/jobs/AssignJobRecruiterControl";
 import { JobOrderListRow } from "@/components/jobs/JobOrderDetails";
-
-const WITHDRAWABLE_STATUSES = new Set(["submitted", "approved", "active", "on_hold"]);
-const ASSIGNABLE_STATUSES = new Set(["approved", "active", "on_hold"]);
+import { JobOrderWorkflowActions } from "@/components/jobs/JobOrderWorkflowActions";
+import { ApproveJobOrderByEmployerButton } from "@/components/jobs/ApproveJobOrderButton";
+import {
+  JOB_ORDER_ASSIGNABLE_STATUSES,
+  JOB_ORDER_WITHDRAWABLE_STATUSES,
+  canEmployerApprove,
+} from "@/lib/jobs";
+import type { JobOrderOrigin } from "@/lib/jobs/types";
 
 export async function JobOrdersPage({
   title,
@@ -27,6 +30,10 @@ export async function JobOrdersPage({
   canDeny = false,
   canWithdraw = false,
   canAssignRecruiter = false,
+  canApprove = false,
+  canRequestChanges = false,
+  canSubmitOffline = false,
+  canEmployerApproveOrders = false,
   beforeList,
 }: {
   title: string;
@@ -36,6 +43,10 @@ export async function JobOrdersPage({
   canDeny?: boolean;
   canWithdraw?: boolean;
   canAssignRecruiter?: boolean;
+  canApprove?: boolean;
+  canRequestChanges?: boolean;
+  canSubmitOffline?: boolean;
+  canEmployerApproveOrders?: boolean;
   beforeList?: React.ReactNode;
 }) {
   const jobs = await getJobOrders();
@@ -81,29 +92,41 @@ export async function JobOrdersPage({
           <tbody>
             {jobs.map((j) => {
               const owner = ownerByJob.get(j.id);
+              const origin = ((j as { origin?: JobOrderOrigin }).origin ??
+                "employer_online") as JobOrderOrigin;
               return (
                 <JobOrderListRow
                   key={j.id}
                   job={j}
                   workflow={
                     <>
-                      <div className="flex flex-wrap items-start gap-2">
-                        {canPublish && j.status === "submitted" ? (
-                          <PublishJobButton jobOrderId={j.id} />
-                        ) : null}
-                        {canDeny && j.status === "submitted" ? (
-                          <DenyJobOrderButton jobOrderId={j.id} jobTitle={j.title} />
-                        ) : null}
-                        {canWithdraw && WITHDRAWABLE_STATUSES.has(j.status) ? (
+                      <JobOrderWorkflowActions
+                        jobOrderId={j.id}
+                        jobTitle={j.title}
+                        status={j.status}
+                        origin={origin}
+                        canApprove={canApprove}
+                        canPublish={canPublish}
+                        canDeny={canDeny}
+                        canRequestChanges={canRequestChanges}
+                        canSubmitOffline={canSubmitOffline}
+                      />
+                      {canEmployerApproveOrders && canEmployerApprove(j.status, origin) ? (
+                        <div className="mt-2">
+                          <ApproveJobOrderByEmployerButton jobOrderId={j.id} />
+                        </div>
+                      ) : null}
+                      {canWithdraw && JOB_ORDER_WITHDRAWABLE_STATUSES.has(j.status) ? (
+                        <div className="mt-2">
                           <WithdrawJobOrderButton jobOrderId={j.id} jobTitle={j.title} />
-                        ) : null}
-                      </div>
+                        </div>
+                      ) : null}
                       {j.status === "denied" && j.denial_reason ? (
                         <p className="mt-2 max-w-xs text-xs text-status-danger">
                           Denied: {j.denial_reason}
                         </p>
                       ) : null}
-                      {canAssignRecruiter && ASSIGNABLE_STATUSES.has(j.status) ? (
+                      {canAssignRecruiter && JOB_ORDER_ASSIGNABLE_STATUSES.has(j.status) ? (
                         <div className="mt-2">
                           <AssignJobRecruiterControl
                             jobOrderId={j.id}

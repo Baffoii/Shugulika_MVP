@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { approveAndPublishJobOrderAction } from "@/app/job-order-actions";
+import { publishJobOrderAction } from "@/app/job-order-actions";
 import { Button } from "@/components/ui/primitives";
 
 export function PublishJobButton({ jobOrderId }: { jobOrderId: string }) {
@@ -17,13 +17,13 @@ export function PublishJobButton({ jobOrderId }: { jobOrderId: string }) {
         onClick={() => {
           setError(null);
           startTransition(async () => {
-            const result = await approveAndPublishJobOrderAction(jobOrderId);
+            const result = await publishJobOrderAction(jobOrderId);
             if (!result.ok) setError(result.error ?? "Could not publish job.");
             else router.refresh();
           });
         }}
       >
-        {pending ? "Publishing…" : "Approve & publish"}
+        {pending ? "Publishing…" : "Publish"}
       </Button>
       {error ? <p className="max-w-48 text-xs text-status-danger">{error}</p> : null}
     </div>
