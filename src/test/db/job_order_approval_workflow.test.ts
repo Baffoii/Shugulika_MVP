@@ -21,6 +21,97 @@ describeDb("job order approval workflow", () => {
     await client?.end();
   });
 
+  it("keeps the privileged event writer private and non-callable", async () => {
+    const signature = "private.job_order_record_event(uuid,text,text,text,text,jsonb)";
+    const privileges = await client.query(
+      `select
+         to_regprocedure('public.job_order_record_event(uuid,text,text,text,text,jsonb)') as public_fn,
+         to_regprocedure($1) as private_fn,
+         has_function_privilege('anon', $1, 'execute') as anon_execute,
+         has_function_privilege('authenticated', $1, 'execute') as authenticated_execute`,
+      [signature],
+    );
+
+    expect(privileges.rows[0]?.public_fn).toBeNull();
+    expect(privileges.rows[0]?.private_fn).not.toBeNull();
+    expect(privileges.rows[0]?.anon_execute).toBe(false);
+    expect(privileges.rows[0]?.authenticated_execute).toBe(false);
+
+    await expect(
+      queryAs(
+        client,
+        ids.recruiterA,
+        `select private.job_order_record_event(
+           $1, 'draft', 'active', 'forged', null, '{}'::jsonb
+         )`,
+        [ids.jobOrderA],
+      ),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("allows change requests only through the checked workflow RPC", async () => {
+    const jobOrderId = (
+      await commitAs(
+        client,
+        ids.employerUserA,
+        `insert into public.job_orders (
+           employer_org_id, responsible_org_id, title, description, country_code,
+           vacancy_count, recruitment_path, status, origin, created_by
+         ) values ($1, $2, 'Change Request Role', 'Original.', 'TZ', 1, 'B',
+                   'submitted_to_shugulika', 'employer_online', $3)
+         returning id`,
+        [ids.employerA, ids.franchiseA, ids.employerUserA],
+      )
+    ).rows[0]?.id as string;
+
+    const requested = await commitAs(
+      client,
+      ids.recruiterA,
+      `select public.request_job_order_changes(
+         $1, 'Please clarify the benefits package.', '["benefits"]'::jsonb
+       ) as id`,
+      [jobOrderId],
+    );
+    const requestId = requested.rows[0]?.id as string;
+
+    const privileges = await client.query(
+      `select
+         has_table_privilege('authenticated', 'public.job_order_change_requests', 'insert') as can_insert,
+         has_table_privilege('authenticated', 'public.job_order_change_requests', 'update') as can_update`,
+    );
+    expect(privileges.rows[0]).toMatchObject({ can_insert: false, can_update: false });
+
+    await expect(
+      commitAs(
+        client,
+        ids.employerUserA,
+        `update public.job_order_change_requests
+         set status = 'cancelled', resolved_at = now()
+         where id = $1`,
+        [requestId],
+      ),
+    ).rejects.toThrow(/permission denied/i);
+
+    await commitAs(
+      client,
+      ids.employerUserA,
+      `update public.job_orders set benefits = 'Medical cover' where id = $1`,
+      [jobOrderId],
+    );
+    await commitAs(client, ids.employerUserA, "select public.submit_job_order_to_shugulika($1)", [
+      jobOrderId,
+    ]);
+
+    const addressed = await queryAs(
+      client,
+      ids.employerUserA,
+      `select status, resolved_at from public.job_order_change_requests where id = $1`,
+      [requestId],
+    );
+    expect(addressed.rows[0]?.status).toBe("addressed");
+    expect(addressed.rows[0]?.resolved_at).toBeTruthy();
+  });
+
   it("rejects offline publish without employer approval", async () => {
     const draftId = (
       await commitAs(
@@ -109,9 +200,15 @@ describeDb("job order approval workflow", () => {
         client,
         ids.employerUserA,
         `insert into public.job_orders (
-           employer_org_id, responsible_org_id, title, description, country_code,
-           vacancy_count, recruitment_path, status, origin, created_by
-         ) values ($1, $2, 'Material Role', 'Original desc.', 'TZ', 1, 'B',
+           employer_org_id, responsible_org_id, title, department, description,
+           responsibilities, requirements, country_code, employment_type,
+           work_arrangement, experience_level, salary_public, benefits,
+           vacancy_count, recruitment_path, is_confidential, target_start_date,
+           status, origin, created_by
+         ) values ($1, $2, 'Material Role', 'Finance', 'Original desc.',
+                   'Own the close.', 'CPA required.', 'TZ', 'full_time',
+                   'hybrid', 'senior', true, 'Medical cover',
+                   1, 'B', true, '2026-10-01',
                    'submitted_to_shugulika', 'employer_online', $3)
          returning id`,
         [ids.employerA, ids.franchiseA, ids.employerUserA],
@@ -125,16 +222,32 @@ describeDb("job order approval workflow", () => {
     const approved = await queryAs(
       client,
       ids.recruiterA,
-      `select status, approved_snapshot_hash from public.job_orders where id = $1`,
+      `select status, approved_snapshot, approved_snapshot_hash
+       from public.job_orders where id = $1`,
       [jobOrderId],
     );
     expect(approved.rows[0]?.status).toBe("approved_by_shugulika");
     expect(approved.rows[0]?.approved_snapshot_hash).toBeTruthy();
+    expect(approved.rows[0]?.approved_snapshot).toMatchObject({
+      employer_org_id: ids.employerA,
+      responsible_org_id: ids.franchiseA,
+      origin: "employer_online",
+      department: "Finance",
+      responsibilities: "Own the close.",
+      employment_type: "full_time",
+      work_arrangement: "hybrid",
+      experience_level: "senior",
+      salary_public: true,
+      benefits: "Medical cover",
+      is_confidential: true,
+      target_start_date: "2026-10-01",
+    });
 
     await commitAs(
       client,
       ids.recruiterA,
-      `update public.job_orders set title = 'Material Role Revised', updated_at = now() where id = $1`,
+      `update public.job_orders set benefits = 'Medical and dental cover', updated_at = now()
+       where id = $1`,
       [jobOrderId],
     );
 

@@ -1,6 +1,8 @@
 -- Source-aware dual-approval workflow for job_orders + jobs.
 -- Replaces atomic approve_and_publish with explicit approve vs publish gates.
 
+create schema if not exists private;
+
 -- ---------------------------------------------------------------------------
 -- Columns: origin, approval snapshot, approvers
 -- ---------------------------------------------------------------------------
@@ -153,45 +155,13 @@ create policy job_order_change_requests_scoped_read on public.job_order_change_r
   );
 
 grant select on public.job_order_events to authenticated;
-grant select, insert, update on public.job_order_change_requests to authenticated;
+grant select on public.job_order_change_requests to authenticated;
+revoke insert, update, delete on public.job_order_change_requests
+  from public, anon, authenticated;
 
+-- Change requests are workflow records, not client-editable content. Only the
+-- checked RPCs below may create or resolve them.
 drop policy if exists job_order_change_requests_staff_write on public.job_order_change_requests;
-create policy job_order_change_requests_staff_write on public.job_order_change_requests
-  for all to authenticated
-  using (
-    exists (
-      select 1 from public.job_orders jo
-      where jo.id = job_order_change_requests.job_order_id
-        and (
-          public.auth_is_hq()
-          or jo.responsible_org_id in (select public.auth_scoped_org_ids())
-          or jo.employer_org_id in (select public.auth_scoped_org_ids())
-        )
-        and (
-          public.auth_is_hq()
-          or public.auth_has_role('franchise_admin')
-          or public.auth_has_role('recruiter')
-          or public.auth_has_role('employer_user')
-        )
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.job_orders jo
-      where jo.id = job_order_change_requests.job_order_id
-        and (
-          public.auth_is_hq()
-          or jo.responsible_org_id in (select public.auth_scoped_org_ids())
-          or jo.employer_org_id in (select public.auth_scoped_org_ids())
-        )
-        and (
-          public.auth_is_hq()
-          or public.auth_has_role('franchise_admin')
-          or public.auth_has_role('recruiter')
-          or public.auth_has_role('employer_user')
-        )
-    )
-  );
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -202,17 +172,29 @@ language sql
 immutable
 as $$
   select jsonb_build_object(
+    'employer_org_id', p_order.employer_org_id,
+    'responsible_org_id', p_order.responsible_org_id,
+    'origin', p_order.origin,
     'title', p_order.title,
+    'department', coalesce(p_order.department, ''),
     'description', coalesce(p_order.description, ''),
+    'responsibilities', coalesce(p_order.responsibilities, ''),
     'requirements', coalesce(p_order.requirements, ''),
+    'employment_type', coalesce(p_order.employment_type, ''),
+    'work_arrangement', coalesce(p_order.work_arrangement, ''),
+    'experience_level', coalesce(p_order.experience_level, ''),
     'salary_min', p_order.salary_min,
     'salary_max', p_order.salary_max,
     'salary_currency', coalesce(p_order.salary_currency, ''),
+    'salary_public', p_order.salary_public,
+    'benefits', coalesce(p_order.benefits, ''),
     'country_code', p_order.country_code,
     'city', coalesce(p_order.city, ''),
     'vacancy_count', p_order.vacancy_count,
     'recruitment_path', p_order.recruitment_path,
-    'application_deadline', p_order.application_deadline
+    'is_confidential', p_order.is_confidential,
+    'application_deadline', p_order.application_deadline,
+    'target_start_date', p_order.target_start_date
   );
 $$;
 
@@ -224,7 +206,9 @@ as $$
   select encode(digest(coalesce(p_snapshot, '{}'::jsonb)::text, 'sha256'), 'hex');
 $$;
 
-create or replace function public.job_order_record_event(
+drop function if exists public.job_order_record_event(uuid, text, text, text, text, jsonb);
+
+create or replace function private.job_order_record_event(
   p_job_order_id uuid,
   p_from_status text,
   p_to_status text,
@@ -235,7 +219,7 @@ create or replace function public.job_order_record_event(
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   v_id uuid;
@@ -251,8 +235,8 @@ begin
 end;
 $$;
 
-revoke all on function public.job_order_record_event(uuid, text, text, text, text, jsonb) from public;
-grant execute on function public.job_order_record_event(uuid, text, text, text, text, jsonb) to authenticated;
+revoke all on function private.job_order_record_event(uuid, text, text, text, text, jsonb)
+  from public, anon, authenticated;
 
 create or replace function public.job_order_assert_staff_scope(p_order public.job_orders)
 returns void
@@ -277,25 +261,6 @@ begin
 end;
 $$;
 
-create or replace function public.job_order_clear_approvals(p_job_order_id uuid)
-returns void
-language plpgsql
-security invoker
-set search_path = public
-as $$
-begin
-  update public.job_orders
-  set approved_snapshot = null,
-      approved_snapshot_hash = null,
-      employer_approved_by = null,
-      employer_approved_at = null,
-      shugulika_approved_by = null,
-      shugulika_approved_at = null,
-      updated_at = now()
-  where id = p_job_order_id;
-end;
-$$;
-
 -- Material edit after approval returns the role to the required approval step.
 create or replace function public.job_order_material_edit_reapproval()
 returns trigger
@@ -312,28 +277,10 @@ begin
     return new;
   end if;
 
-  -- Ignore pure status/workflow bookkeeping updates.
-  if (
-    new.title is not distinct from old.title
-    and new.description is not distinct from old.description
-    and new.requirements is not distinct from old.requirements
-    and new.salary_min is not distinct from old.salary_min
-    and new.salary_max is not distinct from old.salary_max
-    and new.salary_currency is not distinct from old.salary_currency
-    and new.country_code is not distinct from old.country_code
-    and new.city is not distinct from old.city
-    and new.vacancy_count is not distinct from old.vacancy_count
-    and new.recruitment_path is not distinct from old.recruitment_path
-    and new.application_deadline is not distinct from old.application_deadline
-  ) then
-    return new;
-  end if;
-
   -- Only reset once an approval/publication path has started.
   if old.status not in (
     'awaiting_employer_approval',
     'submitted_to_shugulika',
-    'changes_requested',
     'approved_by_employer',
     'approved_by_shugulika',
     'approved',
@@ -365,7 +312,7 @@ begin
   new.shugulika_approved_at := null;
   new.updated_at := now();
 
-  perform public.job_order_record_event(
+  perform private.job_order_record_event(
     new.id,
     old.status,
     v_reset_to,
@@ -447,7 +394,7 @@ begin
     perform public.notify_staff_of_job_order_submission(new.id);
 
     if tg_op = 'INSERT' then
-      perform public.job_order_record_event(
+      perform private.job_order_record_event(
         new.id, null, new.status, 'submitted', null,
         jsonb_build_object('origin', new.origin)
       );
@@ -579,7 +526,7 @@ begin
   )
   returning id into v_id;
 
-  perform public.job_order_record_event(
+  perform private.job_order_record_event(
     v_id, null, 'draft', 'offline_draft_created', null,
     jsonb_build_object('employer_org_id', v_employer.id)
   );
@@ -603,7 +550,7 @@ $$;
 
 revoke all on function public.create_offline_job_order_draft(
   uuid, text, text, text, text, text, int, text, numeric, numeric, text, date, text, text, text, text
-) from public;
+) from public, anon;
 grant execute on function public.create_offline_job_order_draft(
   uuid, text, text, text, text, text, int, text, numeric, numeric, text, date, text, text, text, text
 ) to authenticated;
@@ -612,7 +559,7 @@ grant execute on function public.create_offline_job_order_draft(
 create or replace function public.submit_job_order_to_shugulika(p_job_order_id uuid)
 returns void
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
@@ -673,7 +620,7 @@ begin
   where job_order_id = p_job_order_id
     and status = 'open';
 
-  perform public.job_order_record_event(
+  perform private.job_order_record_event(
     p_job_order_id, v_order.status, v_to, 'submitted', null,
     jsonb_build_object('origin', v_order.origin)
   );
@@ -707,7 +654,7 @@ begin
 end;
 $$;
 
-revoke all on function public.submit_job_order_to_shugulika(uuid) from public;
+revoke all on function public.submit_job_order_to_shugulika(uuid) from public, anon;
 grant execute on function public.submit_job_order_to_shugulika(uuid) to authenticated;
 
 create or replace function public.request_job_order_changes(
@@ -717,7 +664,7 @@ create or replace function public.request_job_order_changes(
 )
 returns uuid
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
@@ -779,7 +726,7 @@ begin
   )
   returning id into v_id;
 
-  perform public.job_order_record_event(
+  perform private.job_order_record_event(
     p_job_order_id, v_order.status, 'changes_requested', 'changes_requested', v_message,
     jsonb_build_object('change_request_id', v_id, 'changes', v_changes)
   );
@@ -813,7 +760,7 @@ begin
 end;
 $$;
 
-revoke all on function public.request_job_order_changes(uuid, text, jsonb) from public;
+revoke all on function public.request_job_order_changes(uuid, text, jsonb) from public, anon;
 grant execute on function public.request_job_order_changes(uuid, text, jsonb) to authenticated;
 
 create or replace function public.approve_job_order_by_employer(p_job_order_id uuid)
@@ -864,7 +811,7 @@ begin
       updated_at = now()
   where id = p_job_order_id;
 
-  perform public.job_order_record_event(
+  perform private.job_order_record_event(
     p_job_order_id, v_order.status, 'approved_by_employer', 'approved_by_employer', null,
     jsonb_build_object('snapshot_hash', v_hash)
   );
@@ -893,13 +840,13 @@ begin
 end;
 $$;
 
-revoke all on function public.approve_job_order_by_employer(uuid) from public;
+revoke all on function public.approve_job_order_by_employer(uuid) from public, anon;
 grant execute on function public.approve_job_order_by_employer(uuid) to authenticated;
 
 create or replace function public.approve_job_order_by_shugulika(p_job_order_id uuid)
 returns void
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
@@ -944,7 +891,7 @@ begin
       updated_at = now()
   where id = p_job_order_id;
 
-  perform public.job_order_record_event(
+  perform private.job_order_record_event(
     p_job_order_id, v_from, 'approved_by_shugulika', 'approved_by_shugulika', null,
     jsonb_build_object('snapshot_hash', v_hash, 'origin', v_order.origin)
   );
@@ -976,13 +923,13 @@ begin
 end;
 $$;
 
-revoke all on function public.approve_job_order_by_shugulika(uuid) from public;
+revoke all on function public.approve_job_order_by_shugulika(uuid) from public, anon;
 grant execute on function public.approve_job_order_by_shugulika(uuid) to authenticated;
 
 create or replace function public.publish_job_order(p_job_order_id uuid)
 returns uuid
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
@@ -1049,7 +996,7 @@ begin
         updated_at = now()
   returning id into v_job_id;
 
-  perform public.job_order_record_event(
+  perform private.job_order_record_event(
     p_job_order_id, v_order.status, 'active', 'published', null,
     jsonb_build_object('publication_id', v_job_id, 'origin', v_order.origin)
   );
@@ -1087,7 +1034,7 @@ begin
 end;
 $$;
 
-revoke all on function public.publish_job_order(uuid) from public;
+revoke all on function public.publish_job_order(uuid) from public, anon;
 grant execute on function public.publish_job_order(uuid) to authenticated;
 
 -- Retire atomic approve+publish (callers must use split approve / publish).
@@ -1112,7 +1059,7 @@ create or replace function public.deny_job_order(
 )
 returns void
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 declare
@@ -1162,7 +1109,7 @@ begin
       updated_at = now()
   where id = p_job_order_id;
 
-  perform public.job_order_record_event(
+  perform private.job_order_record_event(
     p_job_order_id, v_order.status, 'denied', 'denied', v_reason, '{}'::jsonb
   );
 
@@ -1192,6 +1139,9 @@ begin
   );
 end;
 $$;
+
+revoke all on function public.deny_job_order(uuid, text) from public, anon;
+grant execute on function public.deny_job_order(uuid, text) to authenticated;
 
 create or replace function public.withdraw_job_order(p_job_order_id uuid)
 returns void
@@ -1247,7 +1197,7 @@ begin
   where job_order_id = p_job_order_id
     and status in ('draft', 'pending_approval', 'advertised', 'paused');
 
-  perform public.job_order_record_event(
+  perform private.job_order_record_event(
     p_job_order_id, v_order.status, 'cancelled', 'withdrawn', null,
     jsonb_build_object('employer_org_id', v_order.employer_org_id)
   );

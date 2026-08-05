@@ -21,17 +21,29 @@ export type JobOrderWorkflowStatus =
   | "denied";
 
 export type JobOrderMaterialSnapshot = {
+  employer_org_id: string;
+  responsible_org_id: string;
+  origin: JobOrderOrigin;
   title: string;
+  department: string;
   description: string;
+  responsibilities: string;
   requirements: string;
+  employment_type: string;
+  work_arrangement: string;
+  experience_level: string;
   salary_min: number | null;
   salary_max: number | null;
   salary_currency: string;
+  salary_public: boolean;
+  benefits: string;
   country_code: string;
   city: string;
   vacancy_count: number;
   recruitment_path: "A" | "B";
+  is_confidential: boolean;
   application_deadline: string | null;
+  target_start_date: string | null;
 };
 
 export type JobOrderWorkflowRow = {
@@ -39,16 +51,25 @@ export type JobOrderWorkflowRow = {
   employer_org_id: string;
   responsible_org_id: string;
   title: string;
+  department: string | null;
   description: string | null;
+  responsibilities: string | null;
   requirements: string | null;
+  employment_type: string | null;
+  work_arrangement: string | null;
+  experience_level: string | null;
   country_code: string;
   city: string | null;
   salary_min: number | null;
   salary_max: number | null;
   salary_currency: string | null;
+  salary_public: boolean;
+  benefits: string | null;
   vacancy_count: number;
   recruitment_path: "A" | "B";
+  is_confidential: boolean;
   application_deadline: string | null;
+  target_start_date: string | null;
   status: string;
   origin: JobOrderOrigin;
   approved_snapshot: JobOrderMaterialSnapshot | null;
