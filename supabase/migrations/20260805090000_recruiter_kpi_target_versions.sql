@@ -53,7 +53,6 @@ begin
   end if;
 
   if new.id is distinct from old.id
-     or new.target_id is distinct from old.target_id
      or new.organization_id is distinct from old.organization_id
      or new.recruiter_level is distinct from old.recruiter_level
      or new.metrics is distinct from old.metrics
@@ -63,6 +62,23 @@ begin
   then
     raise exception
       'recruiter_kpi_target_versions is append-only (only superseded_at may be set)';
+  end if;
+
+  -- The source foreign key is ON DELETE SET NULL so history survives target
+  -- deletion. Permit only that database-driven transition, after the version
+  -- has been closed and the referenced target no longer exists.
+  if new.target_id is distinct from old.target_id
+     and not (
+       old.target_id is not null
+       and new.target_id is null
+       and old.superseded_at is not null
+       and not exists (
+         select 1 from public.recruiter_kpi_targets t where t.id = old.target_id
+       )
+     )
+  then
+    raise exception
+      'recruiter_kpi_target_versions is append-only (target_id may only clear after target deletion)';
   end if;
 
   if old.superseded_at is not null and new.superseded_at is distinct from old.superseded_at then
@@ -92,6 +108,16 @@ as $$
 declare
   v_now timestamptz := now();
 begin
+  -- Close the final version while the source target still exists. The foreign
+  -- key subsequently preserves that history by setting target_id to NULL.
+  if tg_op = 'DELETE' then
+    update public.recruiter_kpi_target_versions
+    set superseded_at = v_now
+    where target_id = old.id
+      and superseded_at is null;
+    return old;
+  end if;
+
   -- No-op when nothing metric-bearing actually changed.
   if tg_op = 'UPDATE' and to_jsonb(new) - 'updated_at' = to_jsonb(old) - 'updated_at' then
     return new;
@@ -122,6 +148,12 @@ $$;
 drop trigger if exists trg_snapshot_kpi_target_version on public.recruiter_kpi_targets;
 create trigger trg_snapshot_kpi_target_version
   after insert or update on public.recruiter_kpi_targets
+  for each row execute function public.tg_snapshot_kpi_target_version();
+
+drop trigger if exists trg_close_kpi_target_version_before_delete
+  on public.recruiter_kpi_targets;
+create trigger trg_close_kpi_target_version_before_delete
+  before delete on public.recruiter_kpi_targets
   for each row execute function public.tg_snapshot_kpi_target_version();
 
 -- ---- Backfill: one initial version per existing target ----------------------

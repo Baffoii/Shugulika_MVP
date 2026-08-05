@@ -29,11 +29,11 @@ const DEFAULTS = {
 
 describeDb("recruiter_kpi_target_versions", () => {
   let client: Client;
-  let _ids: SeedIds;
+  let ids: SeedIds;
 
   beforeAll(async () => {
     client = await connect();
-    _ids = await setupDb(client);
+    ids = await setupDb(client);
   }, 120_000);
 
   afterAll(async () => {
@@ -149,5 +149,43 @@ describeDb("recruiter_kpi_target_versions", () => {
         [rows[0].id],
       ),
     ).rejects.toThrow(/immutable/i);
+  });
+
+  it("closes the open version when its current target is deleted", async () => {
+    const inserted = await client.query(
+      `insert into public.recruiter_kpi_targets
+         (recruiter_level, organization_id, target_placement_rate_pct)
+       values ('head_recruiter', $1, 97)
+       returning id`,
+      [ids.franchiseB],
+    );
+    const targetId = inserted.rows[0]?.id as string;
+    const version = await client.query(
+      `select id from public.recruiter_kpi_target_versions
+       where target_id = $1 and superseded_at is null`,
+      [targetId],
+    );
+    const versionId = version.rows[0]?.id as string;
+    expect(versionId).toBeTruthy();
+
+    await client.query(`delete from public.recruiter_kpi_targets where id = $1`, [targetId]);
+
+    const closed = await client.query(
+      `select target_id, superseded_at
+       from public.recruiter_kpi_target_versions where id = $1`,
+      [versionId],
+    );
+    expect(closed.rows[0]?.target_id).toBeNull();
+    expect(closed.rows[0]?.superseded_at).not.toBeNull();
+
+    const future = resolveTargetsAt({
+      versions: await versionsFor("head_recruiter"),
+      recruiterLevel: "head_recruiter",
+      organizationId: ids.franchiseB,
+      atIso: "2099-01-01T00:00:00.000Z",
+      platformDefaults: DEFAULTS,
+    });
+    expect(future.source).toBe("platform");
+    expect(future.targetVersionId).not.toBe(versionId);
   });
 });
