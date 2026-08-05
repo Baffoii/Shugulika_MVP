@@ -27,6 +27,10 @@ export const env = {
   /** Server-only. Model used for AI CV screening (role-fit reviews). */
   openaiScreeningModel: () =>
     process.env.OPENAI_SCREENING_MODEL ?? process.env.OPENAI_RESUME_MODEL ?? "gpt-4.1-mini",
+  /** Server-only. Realtime voice model for live AI interviews. */
+  openaiRealtimeModel: () => process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2.1",
+  /** Server-only. Transcription model for post-interview candidate audio. */
+  openaiTranscribeModel: () => process.env.OPENAI_TRANSCRIBE_MODEL ?? "gpt-4o-transcribe",
 };
 
 /** True when the OpenAI key is configured (used to gracefully disable CV parsing). */

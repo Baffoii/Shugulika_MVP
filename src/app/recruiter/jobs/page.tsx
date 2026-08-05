@@ -18,6 +18,7 @@ export default async function Page() {
       canApprove
       canRequestChanges
       canSubmitOffline
+      canGenerateAiPlan
       beforeList={<OfflineJobOrderDraftForm employers={employers} />}
     />
   );

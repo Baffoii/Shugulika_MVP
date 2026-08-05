@@ -35,6 +35,12 @@ export function normalizeLanguageProficiency(
   return PROFICIENCY_ALIASES[key] ?? null;
 }
 
+/**
+ * Postgres entity ids (any 8-4-4-4-12 hex UUID). Zod 4's `.uuid()` is RFC-strict
+ * and rejects demo seed ids like `d0000003-0000-0000-0000-000000000003`.
+ */
+export const entityIdSchema = z.guid({ error: "Invalid id" });
+
 export const signUpSchema = z.object({
   fullName: z.string().min(2, "Please enter your name").max(120),
   email: z.string().email("Enter a valid email"),
@@ -165,7 +171,7 @@ export const employerContactSectionSchema = z.object({
 export const employerRoutingSectionSchema = z
   .object({
     routing_mode: z.enum(["auto", "franchise", "hq"]),
-    requested_franchise_id: z.string().uuid().optional().or(z.literal("")),
+    requested_franchise_id: entityIdSchema.optional().or(z.literal("")),
   })
   .refine((v) => v.routing_mode !== "franchise" || !!v.requested_franchise_id, {
     message: "Choose a Shugulika office",
@@ -213,7 +219,7 @@ export const jobOrderSchema = z.object({
 /** Recruiter stage change — reason required when rejecting. */
 export const stageChangeSchema = z
   .object({
-    application_id: z.string().uuid(),
+    application_id: entityIdSchema,
     to_stage: z.string().min(1),
     rejection_reason: z.string().optional(),
     note: z.string().max(1000).optional(),
@@ -227,9 +233,9 @@ export const stageChangeSchema = z
   );
 
 export const consentSchema = z.object({
-  candidate_id: z.string().uuid(),
+  candidate_id: entityIdSchema,
   purpose: z.string().min(1),
-  covered_org_id: z.string().uuid().optional(),
+  covered_org_id: entityIdSchema.optional(),
   note: z.string().max(500).optional(),
 });
 
@@ -297,15 +303,15 @@ export const interviewQuestionSchema = z.object({
 export type InterviewQuestionInput = z.infer<typeof interviewQuestionSchema>;
 
 export const interviewAssignmentSchema = z.object({
-  application_id: z.string().uuid(),
-  template_id: z.string().uuid(),
+  application_id: entityIdSchema,
+  template_id: entityIdSchema,
   expires_at: z.string().min(1, "Set a submission deadline"),
   candidate_instructions: z.string().max(2000).optional().or(z.literal("")),
 });
 export type InterviewAssignmentInput = z.infer<typeof interviewAssignmentSchema>;
 
 export const interviewReviewSchema = z.object({
-  assignment_id: z.string().uuid(),
+  assignment_id: entityIdSchema,
   overall_rating: z.union([z.literal(""), z.coerce.number().int().min(1).max(5)]).optional(),
   internal_notes: z.string().max(4000).optional().or(z.literal("")),
 });

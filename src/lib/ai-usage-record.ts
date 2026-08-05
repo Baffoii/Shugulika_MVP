@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { estimateUsd, type AiFeature, type TokenUsage, aiWarn } from "@/lib/ai-cost-log";
 import type { AiUsageFeature } from "@/lib/database.types";
 
-const PERSISTABLE_FEATURES = new Set<AiFeature>(["resume", "screening", "assessment"]);
+const PERSISTABLE_FEATURES = new Set<AiFeature>(["resume", "screening", "assessment", "interview"]);
 
 export async function recordAiUsageEvent(opts: {
   feature: AiFeature;
@@ -15,6 +15,13 @@ export async function recordAiUsageEvent(opts: {
   model: string;
   durationMs: number;
   usage?: TokenUsage | null;
+  assignmentId?: string | null;
+  jobOrderId?: string | null;
+  sessionId?: string | null;
+  audioInputTokens?: number | null;
+  audioOutputTokens?: number | null;
+  cachedInputTokens?: number | null;
+  estimatedUsdOverride?: number | null;
 }): Promise<void> {
   if (!PERSISTABLE_FEATURES.has(opts.feature)) return;
   const feature = opts.feature as AiUsageFeature;
@@ -23,7 +30,10 @@ export async function recordAiUsageEvent(opts: {
     const supabase = createClient();
     const { data: userData } = await supabase.auth.getUser();
     const actorId = userData.user?.id ?? null;
-    const usd = estimateUsd(opts.usage ?? null);
+    const usd =
+      opts.estimatedUsdOverride != null
+        ? opts.estimatedUsdOverride
+        : estimateUsd(opts.usage ?? null);
     const { error } = await supabase.from("ai_usage_events").insert({
       feature,
       purpose: opts.purpose,
@@ -34,6 +44,12 @@ export async function recordAiUsageEvent(opts: {
       estimated_usd: usd,
       duration_ms: opts.durationMs,
       actor_id: actorId,
+      assignment_id: opts.assignmentId ?? null,
+      job_order_id: opts.jobOrderId ?? null,
+      session_id: opts.sessionId ?? null,
+      audio_input_tokens: opts.audioInputTokens ?? null,
+      audio_output_tokens: opts.audioOutputTokens ?? null,
+      cached_input_tokens: opts.cachedInputTokens ?? null,
     });
     if (error) {
       aiWarn("openai", "USAGE_PERSIST_FAILED", {

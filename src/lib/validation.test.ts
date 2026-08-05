@@ -476,6 +476,15 @@ describe("asynchronous interview validation", () => {
         candidate_instructions: "",
       }).success,
     ).toBe(true);
+    // Demo seed ids are UUID-shaped but not RFC version/variant — still valid Postgres ids.
+    expect(
+      interviewAssignmentSchema.safeParse({
+        application_id: "d0000003-0000-0000-0000-000000000003",
+        template_id: "a0000004-0000-0000-0000-000000000004",
+        expires_at: "2026-08-01",
+        candidate_instructions: "",
+      }).success,
+    ).toBe(true);
     expect(
       interviewAssignmentSchema.safeParse({
         application_id: "not-a-uuid",

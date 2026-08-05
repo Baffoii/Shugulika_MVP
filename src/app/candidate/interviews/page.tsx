@@ -89,7 +89,7 @@ export default async function CandidateInterviewsPage() {
           <EmptyState
             icon={<Video className="h-7 w-7" aria-hidden />}
             title="No open video interviews"
-            description="A recruiter invitation will appear here when a video interview is ready."
+            description="Your application may already be in the interview stage, but you can only start once a recruiter sends a video or AI voice invitation. Check back here after that invite arrives."
           />
         ) : (
           <div className="space-y-3">

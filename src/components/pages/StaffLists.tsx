@@ -10,6 +10,7 @@ import {
   getPlacements,
   getOrganizations,
 } from "@/lib/data/staff";
+import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatDateTime, formatMoney, titleCase } from "@/lib/format";
 import { WithdrawJobOrderButton } from "@/components/jobs/WithdrawJobOrderButton";
 import { AssignJobRecruiterControl } from "@/components/jobs/AssignJobRecruiterControl";
@@ -22,6 +23,7 @@ import {
   canEmployerApprove,
 } from "@/lib/jobs";
 import type { JobOrderOrigin } from "@/lib/jobs/types";
+import type { JobInterviewBriefRow } from "@/lib/database.types";
 
 export async function JobOrdersPage({
   title,
@@ -34,6 +36,7 @@ export async function JobOrdersPage({
   canRequestChanges = false,
   canSubmitOffline = false,
   canEmployerApproveOrders = false,
+  canGenerateAiPlan = false,
   beforeList,
 }: {
   title: string;
@@ -47,17 +50,57 @@ export async function JobOrdersPage({
   canRequestChanges?: boolean;
   canSubmitOffline?: boolean;
   canEmployerApproveOrders?: boolean;
+  /** Show AI plan drafting controls on the AI brief editor (staff). */
+  canGenerateAiPlan?: boolean;
   beforeList?: React.ReactNode;
 }) {
   const jobs = await getJobOrders();
   const jobIds = jobs.map((job) => job.id);
-  const [audits, owners, recruiters] = await Promise.all([
+  const supabase = createClient();
+  const [audits, owners, recruiters, briefResult, frozenTemplateResult] = await Promise.all([
     getJobOrderAudits(jobIds),
     canAssignRecruiter ? getJobOwnerAssignments(jobIds) : Promise.resolve([]),
     canAssignRecruiter
       ? listRecruitersForOrgs([...new Set(jobs.map((job) => job.responsible_org_id))])
       : Promise.resolve([]),
+    jobIds.length
+      ? supabase
+          .from("job_interview_briefs")
+          .select("*")
+          .in("job_order_id", jobIds)
+          .order("version", { ascending: false })
+      : Promise.resolve({ data: [] as JobInterviewBriefRow[] }),
+    jobIds.length
+      ? supabase
+          .from("interview_templates")
+          .select("id, name, job_interview_brief_id")
+          .eq("interview_mode", "live_ai_voice")
+          .eq("plan_status", "frozen")
+          .eq("is_active", true)
+          .not("job_interview_brief_id", "is", null)
+      : Promise.resolve({ data: [] }),
   ]);
+  const briefByJob = new Map<string, JobInterviewBriefRow>();
+  for (const brief of (briefResult.data as JobInterviewBriefRow[] | null) ?? []) {
+    if (!briefByJob.has(brief.job_order_id)) {
+      briefByJob.set(brief.job_order_id, brief);
+    }
+  }
+  const frozenByBriefId = new Map<string, { id: string; name: string }>();
+  for (const template of (frozenTemplateResult.data as
+    { id: string; name: string; job_interview_brief_id: string | null }[] | null) ?? []) {
+    if (template.job_interview_brief_id && !frozenByBriefId.has(template.job_interview_brief_id)) {
+      frozenByBriefId.set(template.job_interview_brief_id, {
+        id: template.id,
+        name: template.name,
+      });
+    }
+  }
+  const frozenByJob = new Map<string, { id: string; name: string }>();
+  for (const [jobId, brief] of briefByJob) {
+    const frozen = frozenByBriefId.get(brief.id);
+    if (frozen) frozenByJob.set(jobId, frozen);
+  }
   const auditsByOrder = new Map<string, typeof audits>();
   for (const audit of audits) {
     if (!audit.entity_id) continue;
@@ -98,6 +141,9 @@ export async function JobOrdersPage({
                 <JobOrderListRow
                   key={j.id}
                   job={j}
+                  aiBrief={briefByJob.get(j.id) ?? null}
+                  frozenAiTemplate={frozenByJob.get(j.id) ?? null}
+                  canGenerateAiPlan={canGenerateAiPlan}
                   workflow={
                     <>
                       <JobOrderWorkflowActions

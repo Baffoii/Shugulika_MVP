@@ -5,14 +5,17 @@
  */
 import { createClient } from "@/lib/supabase/server";
 import type {
+  InterviewAiEvaluationRow,
   InterviewAssignmentAnalyticsRow,
   InterviewAssignmentQuestionRow,
   InterviewAssignmentRow,
+  InterviewLiveSessionRow,
   InterviewQuestionAnalyticsRow,
   InterviewResponseAttemptRow,
   InterviewReviewRow,
   InterviewTemplateQuestionRow,
   InterviewTemplateRow,
+  InterviewTurnRow,
   JobOrderRow,
   CandidateProfileRow,
 } from "@/lib/database.types";
@@ -146,6 +149,7 @@ export async function listInterviewTemplates(): Promise<InterviewTemplateRow[]> 
   const { data, error } = await supabase
     .from("interview_templates")
     .select("*")
+    .eq("is_active", true)
     .order("created_at", { ascending: false });
   if (error) {
     console.error("[listInterviewTemplates]", error.message);
@@ -239,6 +243,9 @@ export interface InterviewResults {
   review: InterviewReviewRow | null;
   questionAnalytics: InterviewQuestionAnalyticsRow[];
   assignmentAnalytics: InterviewAssignmentAnalyticsRow | null;
+  liveSession: InterviewLiveSessionRow | null;
+  turns: InterviewTurnRow[];
+  aiEvaluation: InterviewAiEvaluationRow | null;
 }
 
 /** Everything the recruiter results page needs (RLS org-scoped). */
@@ -252,23 +259,55 @@ export async function getInterviewResults(assignmentId: string): Promise<Intervi
   const assignment = assignmentData as InterviewAssignmentRow | null;
   if (!assignment) return null;
 
-  const [candidate, job, questions, attempts, review, qAnalytics, aAnalytics] = await Promise.all([
-    supabase.from("candidate_profiles").select("*").eq("id", assignment.candidate_id).maybeSingle(),
-    supabase.from("job_orders").select("*").eq("id", assignment.job_order_id).maybeSingle(),
+  const [candidate, job, questions, attempts, review, qAnalytics, aAnalytics, liveSessionRes] =
+    await Promise.all([
+      supabase
+        .from("candidate_profiles")
+        .select("*")
+        .eq("id", assignment.candidate_id)
+        .maybeSingle(),
+      supabase.from("job_orders").select("*").eq("id", assignment.job_order_id).maybeSingle(),
+      supabase
+        .from("interview_assignment_questions")
+        .select("*")
+        .eq("assignment_id", assignmentId)
+        .order("display_order", { ascending: true }),
+      supabase
+        .from("interview_response_attempts")
+        .select("*")
+        .eq("assignment_id", assignmentId)
+        .order("attempt_number", { ascending: true }),
+      supabase
+        .from("interview_reviews")
+        .select("*")
+        .eq("assignment_id", assignmentId)
+        .maybeSingle(),
+      supabase.from("interview_question_analytics").select("*").eq("assignment_id", assignmentId),
+      supabase
+        .from("interview_assignment_analytics")
+        .select("*")
+        .eq("assignment_id", assignmentId)
+        .maybeSingle(),
+      supabase
+        .from("interview_live_sessions")
+        .select("*")
+        .eq("assignment_id", assignmentId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  const liveSession = (liveSessionRes.data as InterviewLiveSessionRow | null) ?? null;
+  const [{ data: turnsData }, { data: evaluationData }] = await Promise.all([
+    liveSession
+      ? supabase
+          .from("interview_turns")
+          .select("*")
+          .eq("session_id", liveSession.id)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] as InterviewTurnRow[] }),
     supabase
-      .from("interview_assignment_questions")
-      .select("*")
-      .eq("assignment_id", assignmentId)
-      .order("display_order", { ascending: true }),
-    supabase
-      .from("interview_response_attempts")
-      .select("*")
-      .eq("assignment_id", assignmentId)
-      .order("attempt_number", { ascending: true }),
-    supabase.from("interview_reviews").select("*").eq("assignment_id", assignmentId).maybeSingle(),
-    supabase.from("interview_question_analytics").select("*").eq("assignment_id", assignmentId),
-    supabase
-      .from("interview_assignment_analytics")
+      .from("interview_ai_evaluations")
       .select("*")
       .eq("assignment_id", assignmentId)
       .maybeSingle(),
@@ -283,5 +322,8 @@ export async function getInterviewResults(assignmentId: string): Promise<Intervi
     review: (review.data as InterviewReviewRow | null) ?? null,
     questionAnalytics: (qAnalytics.data as InterviewQuestionAnalyticsRow[] | null) ?? [],
     assignmentAnalytics: (aAnalytics.data as InterviewAssignmentAnalyticsRow | null) ?? null,
+    liveSession,
+    turns: (turnsData as InterviewTurnRow[] | null) ?? [],
+    aiEvaluation: (evaluationData as InterviewAiEvaluationRow | null) ?? null,
   };
 }

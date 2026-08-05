@@ -13,6 +13,7 @@ const TAG = {
   screening: "[ai:screening]",
   resume: "[ai:resume-parse]",
   assessment: "[ai:assessment]",
+  interview: "[ai:interview]",
   openai: "[ai:openai]",
 } as const;
 

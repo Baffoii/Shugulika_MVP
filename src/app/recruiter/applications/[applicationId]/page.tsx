@@ -13,9 +13,10 @@ import {
 } from "@/components/ui/primitives";
 import { StageBadge, StatusBadge } from "@/components/StatusBadge";
 import { getApplicationDetail } from "@/lib/data/recruiter";
-import { StageControl, NoteForm, ViewCvButton } from "./Workspace";
+import { StageControl, NoteForm, VideoInterviewCard, ViewCvButton } from "./Workspace";
 import { AiScreeningPanel } from "./AiScreening";
-import { stageByKey } from "@/lib/constants";
+import { hasInterviewSpotlight, stageByKey } from "@/lib/constants";
+import { getAssignmentsForApplication, listInterviewTemplates } from "@/lib/data/video-interviews";
 import { formatDate, formatDateTime, titleCase, initials } from "@/lib/format";
 import { FileText, MapPin } from "lucide-react";
 import { AssessmentWorkflowPanel } from "@/components/assessments/AssessmentWorkflowPanel";
@@ -33,7 +34,11 @@ export default async function ApplicationWorkspace({
   params: Promise<{ applicationId: string }>;
 }) {
   const { applicationId } = await params;
-  const detail = await getApplicationDetail(applicationId);
+  const [detail, templates, interviewAssignments] = await Promise.all([
+    getApplicationDetail(applicationId),
+    listInterviewTemplates(),
+    getAssignmentsForApplication(applicationId),
+  ]);
   if (!detail) notFound();
   const session = await requireSession();
   const canExportOriginal = isHqAdmin(session.roles);
@@ -54,6 +59,14 @@ export default async function ApplicationWorkspace({
   } = detail;
   const primaryCv = documents.find((d) => d.is_primary) ?? documents[0] ?? null;
   const name = `${candidate?.given_name ?? "Candidate"} ${candidate?.family_name ?? ""}`.trim();
+  const orgTemplates = templates.filter(
+    (template) => template.is_active && template.organization_id === application.owning_org_id,
+  );
+  /** Main-column interview card: assigned invites, or Interview Screening awaiting assign. */
+  const showInterviewInMain =
+    interviewAssignments.length > 0 ||
+    application.current_stage === "interview_screening" ||
+    hasInterviewSpotlight(interviewAssignments);
 
   return (
     <div>
@@ -123,6 +136,15 @@ export default async function ApplicationWorkspace({
               ) : null}
             </CardBody>
           </Card>
+
+          {showInterviewInMain ? (
+            <VideoInterviewCard
+              applicationId={application.id}
+              templates={orgTemplates}
+              assignments={interviewAssignments}
+              layout="spotlight"
+            />
+          ) : null}
 
           <Card>
             <CardHeader>
@@ -238,6 +260,15 @@ export default async function ApplicationWorkspace({
             hasEmployerConsent={Boolean(employerSubmissionConsentId)}
             hasAcceptedOffer={Boolean(acceptedOfferId)}
           />
+
+          {!showInterviewInMain ? (
+            <VideoInterviewCard
+              applicationId={application.id}
+              templates={orgTemplates}
+              assignments={interviewAssignments}
+              layout="sidebar"
+            />
+          ) : null}
 
           {!application.is_direct_application ||
           application.entry_source === "recruiter_sourced" ? (

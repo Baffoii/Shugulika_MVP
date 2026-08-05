@@ -280,7 +280,7 @@ export const CANDIDATE_FACING_STATUS: Record<string, string> = {
   cv_review: "Resume under review",
   testing: "Skills assessment",
   test_review: "Assessment under review",
-  interview_screening: "Interview scheduled",
+  interview_screening: "Awaiting interview invitation",
   interview_review: "Interview under review",
   reference_checks: "Reference checks",
   client_submission: "Submitted to employer",

@@ -79,6 +79,17 @@ export default async function CandidateApplicationsPage() {
                           {label}
                         </Badge>
                       </Link>
+                    ) : (a.current_stage === "interview_screening" ||
+                        a.current_stage === "interview_review") &&
+                      !a.withdrawn_at ? (
+                      <Link
+                        href="/candidate/interviews"
+                        className="inline-flex rounded-badge focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                      >
+                        <Badge tone={statusTone(a.current_stage)} className="hover:opacity-80">
+                          {label}
+                        </Badge>
+                      </Link>
                     ) : (
                       <Badge tone={a.withdrawn_at ? "neutral" : statusTone(a.current_stage)}>
                         {label}

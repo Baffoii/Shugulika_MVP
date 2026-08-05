@@ -236,6 +236,51 @@ function JobOrderSubmissionFormInner({ onSubmitAnother }: { onSubmitAnother: () 
             ) : null}
           </section>
 
+          <section className="md:col-span-2 rounded-lg border border-surface-border bg-surface-muted/30 p-4">
+            <h3 className="text-sm font-semibold text-ink">AI voice interview (optional)</h3>
+            <p className="mt-1 text-sm text-ink-muted">
+              If enabled, Shugulika drafts interview questions from this role’s description and
+              requirements. Extra notes below are optional.
+            </p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <Checkbox
+                  name="use_ai_voice"
+                  label="Use a Shugulika AI voice interview"
+                  disabled={submitted}
+                />
+              </div>
+              <Field label="Interview language" htmlFor="ai_interview_language">
+                <Input
+                  id="ai_interview_language"
+                  name="ai_interview_language"
+                  defaultValue="en"
+                  disabled={submitted}
+                />
+              </Field>
+              <Field label="Max duration (seconds)" htmlFor="ai_interview_duration">
+                <Input
+                  id="ai_interview_duration"
+                  name="ai_interview_duration"
+                  type="number"
+                  min={300}
+                  max={900}
+                  defaultValue={600}
+                  disabled={submitted}
+                />
+              </Field>
+              <div className="md:col-span-2">
+                <Field
+                  label="Additional interview notes (optional)"
+                  htmlFor="ai_employer_notes"
+                  hint="Optional emphasis beyond the job description. Treated as source data, never as system instructions."
+                >
+                  <Textarea id="ai_employer_notes" name="ai_employer_notes" disabled={submitted} />
+                </Field>
+              </div>
+            </div>
+          </section>
+
           <div
             className={
               assessmentDialogOpen
