@@ -81,7 +81,10 @@ begin
     if new.status in ('approved', 'rejected', 'withdrawn', 'draft') then
       new.sla_due_at := null;
       if v_recompute_next_action then
-        new.next_action := case when new.status = 'draft' then 'none' else 'close_out' end;
+        new.next_action := case
+          when new.status in ('approved', 'rejected') then 'close_out'
+          else 'none'
+        end;
       end if;
     end if;
   end if;

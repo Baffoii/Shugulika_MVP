@@ -409,4 +409,29 @@ d("Employer onboarding applications", () => {
     expect(draft?.previous_application_id).toBe(app2);
     expect(draft?.legal_name).toBe("Kilima Farms Ltd");
   });
+
+  it("clears SLA work instead of creating a close-out action when an application is withdrawn", async () => {
+    const inserted = await client.query(
+      `insert into public.employer_applications
+         (applicant_user_id, status, legal_name, assigned_org_id, submitted_at)
+       values ($1, 'submitted', 'Withdrawn Queue Test Ltd', $2, now())
+       returning id, next_action, sla_due_at`,
+      [applicant1, ids.franchiseA],
+    );
+    const applicationId = inserted.rows[0]?.id as string;
+    expect(inserted.rows[0]?.next_action).toBe("open_review");
+    expect(inserted.rows[0]?.sla_due_at).not.toBeNull();
+
+    const withdrawn = await client.query(
+      `update public.employer_applications
+       set status = 'withdrawn'
+       where id = $1
+       returning next_action, sla_due_at`,
+      [applicationId],
+    );
+    expect(withdrawn.rows[0]).toMatchObject({
+      next_action: "none",
+      sla_due_at: null,
+    });
+  });
 });
