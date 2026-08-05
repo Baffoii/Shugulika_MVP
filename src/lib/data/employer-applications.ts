@@ -65,11 +65,22 @@ export interface EmployerApplicationListItem extends EmployerApplicationRow {
   applicant_name: string;
   applicant_email: string;
   assigned_org_name: string;
+  owner_user_id?: string | null;
+  owner_name?: string | null;
+  sla_due_at?: string | null;
+  next_action?: string | null;
+  age_hours?: number | null;
+  sla_overdue?: boolean;
 }
 
 export interface EmployerApplicationFilters {
   status?: string;
   country?: string;
+  ownerUserId?: string;
+  nextAction?: string;
+  slaOnly?: boolean;
+  /** alpha_asc | alpha_desc | newest | oldest | sla_first */
+  sort?: string;
 }
 
 /**
@@ -88,9 +99,55 @@ export async function listEmployerApplicationsForReview(
   if (filters.status)
     query = query.eq("status", filters.status as NonNullable<EmployerApplicationRow["status"]>);
   if (filters.country) query = query.eq("country_code", filters.country);
+  // Additive ops columns (migration 20260806*) are not yet in frozen database.types.ts.
+  const opsQuery = query as unknown as {
+    eq: (col: string, val: string) => typeof query;
+    is: (col: string, val: null) => typeof query;
+  };
+  if (filters.ownerUserId === "unassigned") query = opsQuery.is("owner_user_id", null);
+  else if (filters.ownerUserId) query = opsQuery.eq("owner_user_id", filters.ownerUserId);
+  if (filters.nextAction) query = opsQuery.eq("next_action", filters.nextAction);
   const { data } = await query;
   const rows = (data as EmployerApplicationRow[] | null) ?? [];
-  return enrichApplications(rows);
+  let enriched = await enrichApplications(rows);
+  if (filters.slaOnly) {
+    enriched = enriched.filter((r) => r.sla_overdue);
+  }
+  return sortEmployerApplicationList(enriched, filters.sort);
+}
+
+function sortEmployerApplicationList(
+  rows: EmployerApplicationListItem[],
+  sort?: string,
+): EmployerApplicationListItem[] {
+  const copy = [...rows];
+  switch (sort) {
+    case "alpha_asc":
+      copy.sort((a, b) =>
+        (a.legal_name ?? "").localeCompare(b.legal_name ?? "", undefined, { sensitivity: "base" }),
+      );
+      break;
+    case "alpha_desc":
+      copy.sort((a, b) =>
+        (b.legal_name ?? "").localeCompare(a.legal_name ?? "", undefined, { sensitivity: "base" }),
+      );
+      break;
+    case "oldest":
+      copy.sort((a, b) => (a.submitted_at ?? "").localeCompare(b.submitted_at ?? ""));
+      break;
+    case "newest":
+      copy.sort((a, b) => (b.submitted_at ?? "").localeCompare(a.submitted_at ?? ""));
+      break;
+    case "sla_first":
+      copy.sort((a, b) => {
+        if (Boolean(a.sla_overdue) !== Boolean(b.sla_overdue)) return a.sla_overdue ? -1 : 1;
+        return (a.sla_due_at ?? "9999").localeCompare(b.sla_due_at ?? "9999");
+      });
+      break;
+    default:
+      break;
+  }
+  return copy;
 }
 
 export interface EmployerApplicationDetail {
@@ -129,7 +186,24 @@ async function enrichApplications(
 ): Promise<EmployerApplicationListItem[]> {
   if (rows.length === 0) return [];
   const supabase = createClient();
-  const userIds = [...new Set(rows.map((r) => r.applicant_user_id))];
+  const opsOf = (row: EmployerApplicationRow) => {
+    const r = row as EmployerApplicationRow & {
+      owner_user_id?: string | null;
+      sla_due_at?: string | null;
+      next_action?: string | null;
+    };
+    return {
+      owner_user_id: r.owner_user_id ?? null,
+      sla_due_at: r.sla_due_at ?? null,
+      next_action: r.next_action ?? null,
+    };
+  };
+  const userIds = [
+    ...new Set([
+      ...rows.map((r) => r.applicant_user_id),
+      ...rows.map((r) => opsOf(r).owner_user_id).filter((v): v is string => !!v),
+    ]),
+  ];
   const orgIds = [...new Set(rows.map((r) => r.assigned_org_id).filter((v): v is string => !!v))];
   const [{ data: profiles }, { data: orgs }] = await Promise.all([
     supabase.from("profiles").select("id,full_name,email").in("id", userIds),
@@ -146,12 +220,20 @@ async function enrichApplications(
   const orgById = new Map(
     ((orgs as Pick<OrganizationRow, "id" | "name">[] | null) ?? []).map((o) => [o.id, o.name]),
   );
-  return rows.map((row) => ({
-    ...row,
-    applicant_name: profileById.get(row.applicant_user_id)?.full_name ?? "—",
-    applicant_email: profileById.get(row.applicant_user_id)?.email ?? "",
-    assigned_org_name: row.assigned_org_id
-      ? (orgById.get(row.assigned_org_id) ?? "Assigned office")
-      : "Shugulika HQ",
-  }));
+  const { applicationAgeHours, isSlaOverdue } = await import("@/lib/franchise/employer-app-ops");
+  return rows.map((row) => {
+    const ops = opsOf(row);
+    return {
+      ...row,
+      ...ops,
+      applicant_name: profileById.get(row.applicant_user_id)?.full_name ?? "—",
+      applicant_email: profileById.get(row.applicant_user_id)?.email ?? "",
+      assigned_org_name: row.assigned_org_id
+        ? (orgById.get(row.assigned_org_id) ?? "Assigned office")
+        : "Shugulika HQ",
+      owner_name: ops.owner_user_id ? (profileById.get(ops.owner_user_id)?.full_name ?? "—") : null,
+      age_hours: applicationAgeHours(row.submitted_at),
+      sla_overdue: isSlaOverdue(ops.sla_due_at, row.status),
+    };
+  });
 }

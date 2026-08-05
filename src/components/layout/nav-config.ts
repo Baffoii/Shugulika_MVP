@@ -22,6 +22,7 @@ import {
   Target,
   Cpu,
   Search,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 
@@ -85,10 +86,13 @@ export const PORTAL_NAV: Record<Portal, NavItem[]> = {
       icon: ClipboardList,
     },
     { href: "/franchise/employers", label: "Employers", icon: Store },
+    { href: "/franchise/employers/health", label: "Employer health", icon: Activity },
     { href: "/franchise/jobs", label: "Jobs", icon: Briefcase },
     { href: "/franchise/candidates", label: "Candidates", icon: User },
     { href: "/franchise/placements", label: "Placements", icon: BadgeDollarSign },
+    { href: "/franchise/capacity", label: "Capacity", icon: Target },
     { href: "/franchise/billing", label: "Billing", icon: ScrollText },
+    { href: "/franchise/finance", label: "Finance", icon: BadgeDollarSign },
     { href: "/franchise/reports", label: "Reports", icon: BarChart3 },
     { href: "/franchise/settings", label: "Settings", icon: Settings },
   ],
