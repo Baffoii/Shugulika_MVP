@@ -177,7 +177,7 @@ describe("in-memory outbox", () => {
     const reclaimed = repo.claimNext({
       workerId: "w2",
       leaseMs: 60_000,
-      now: new Date(CLAIM_AT.getTime() + 5_000),
+      now: new Date("2026-08-04T10:00:05.000Z"),
     });
     expect(reclaimed?.claimToken).toBe("w2");
     expect(reclaimed?.attemptCount).toBe(2);
