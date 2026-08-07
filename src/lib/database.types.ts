@@ -250,6 +250,10 @@ export type CandidateProfileRow = {
   city: string | null;
   date_of_birth: string | null;
   availability: string | null;
+  /** Migrated from the source ATS. Never a screening, scoring or KPI input. */
+  nationality: string | null;
+  ethnicity: string | null;
+  religion: string | null;
   open_to_work: boolean;
   profile_status: string;
   completion_pct: number;
@@ -660,6 +664,12 @@ export type ApplicationRow = {
   rejection_reason: string | null;
   test_name: string | null;
   test_score: string | null;
+  /**
+   * True for applications imported from an external ATS. Read-only history:
+   * UPDATE/DELETE are blocked for every role except service_role by
+   * trg_applications_migrated_readonly.
+   */
+  is_migrated_readonly: boolean;
   created_at: string;
   updated_at: string;
 };

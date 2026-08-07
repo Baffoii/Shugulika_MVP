@@ -12,7 +12,11 @@
  *   2. No screening or ATS module may read a protected characteristic off a
  *      record.
  *   3. The Zoho import must refuse — not silently strip — a source record that
- *      carries one.
+ *      carries one of the characteristics that remain prohibited. Nationality,
+ *      ethnicity and religion are exempt from that refusal since
+ *      20260813090000_candidate_source_demographics: the ATS migration carries
+ *      them. They stay banned as screening/scoring/KPI inputs, which is what
+ *      surfaces 1 and 2 above enforce.
  *
  * The tests read the source tree directly, so a future contributor cannot
  * reintroduce the field by adding a new module.
@@ -110,17 +114,25 @@ describe("ATS candidate modules", () => {
     }
   });
 
-  it("treat nationality and its synonyms as prohibited on import", () => {
-    for (const term of ["nationality", "nationalities", "citizenship", "national_origin"]) {
+  it("keeps the remaining protected characteristics prohibited on import", () => {
+    // Nationality, ethnicity and religion moved off this list when columns were
+    // added for them (20260813090000). These have no column and no consumer.
+    for (const term of ["marital_status", "gender", "sex", "race", "disability_status"]) {
       expect(PROHIBITED_IMPORT_FIELDS as readonly string[]).toContain(term);
       expect(isProhibitedImportField(term)).toBe(true);
     }
   });
 
+  it("no longer refuses the three characteristics the migration carries", () => {
+    for (const term of ["nationality", "ethnicity", "religion"]) {
+      expect(isProhibitedImportField(term)).toBe(false);
+    }
+  });
+
   it("normalize casing and spacing before checking the ban list", () => {
-    expect(isProhibitedImportField("Nationality")).toBe(true);
     expect(isProhibitedImportField("  MARITAL STATUS ")).toBe(true);
     expect(isProhibitedImportField("Marital Status")).toBe(true);
+    expect(isProhibitedImportField("Disability Status")).toBe(true);
     expect(isProhibitedImportField("skills")).toBe(false);
   });
 });
@@ -128,7 +140,15 @@ describe("ATS candidate modules", () => {
 describe("Zoho import", () => {
   const countries = [{ code: "TZ", name: "Tanzania" }];
 
-  it("quarantines a source record carrying nationality instead of stripping it", () => {
+  /**
+   * 20260813090000_candidate_source_demographics changed what the import does
+   * with nationality, ethnicity and religion: an ATS migration has to carry what
+   * the source system held, so these are now mapped rather than quarantined.
+   *
+   * The ban that matters is unchanged and asserted above — these values are
+   * never a screening, scoring, matching, ranking or KPI input.
+   */
+  it("carries nationality, ethnicity and religion for migration fidelity", () => {
     const result = mapZohoCandidate(
       {
         id: "z-1",
@@ -136,39 +156,58 @@ describe("Zoho import", () => {
         Last_Name: "Mwakalinga",
         Email: "asha@example.com",
         Nationality: "Tanzanian",
+        Ethnicity: "Chagga",
+        Religion: "Christian",
       },
       { countries },
     );
 
-    expect(result.problems).toContain("prohibited_field_present");
-    expect(result.prohibitedFields).toEqual(["Nationality"]);
-    // Silently dropping it would hide a compliance problem upstream.
-    expect(result.prohibitedFields.length).toBeGreaterThan(0);
+    expect(result.problems).not.toContain("prohibited_field_present");
+    expect(result.draft.nationality).toBe("Tanzanian");
+    expect(result.draft.ethnicity).toBe("Chagga");
+    expect(result.draft.religion).toBe("Christian");
   });
 
-  it("never lets a prohibited-field quarantine be waived through", () => {
-    expect(isWaivable(["prohibited_field_present"])).toBe(false);
-  });
-
-  it("keeps the value out of the canonical draft entirely", () => {
+  it("still quarantines the characteristics that remain prohibited", () => {
+    // These have no column, no consumer, and no reason to enter the system.
     const result = mapZohoCandidate(
       {
         id: "z-2",
         First_Name: "Juma",
         Last_Name: "Nyerere",
         Email: "juma@example.com",
-        Nationality: "Kenyan",
-        Citizenship: "Kenya",
-        Ethnicity: "Luo",
+        Marital_Status: "Married",
+        Gender: "Male",
+      },
+      { countries },
+    );
+
+    expect(result.problems).toContain("prohibited_field_present");
+    expect(result.prohibitedFields).toEqual(["Marital_Status", "Gender"]);
+  });
+
+  it("never lets a prohibited-field quarantine be waived through", () => {
+    expect(isWaivable(["prohibited_field_present"])).toBe(false);
+  });
+
+  it("keeps a still-prohibited value out of the canonical draft entirely", () => {
+    const result = mapZohoCandidate(
+      {
+        id: "z-3",
+        First_Name: "Juma",
+        Last_Name: "Nyerere",
+        Email: "juma@example.com",
+        Marital_Status: "Widowed",
+        Disability_Status: "None declared",
       },
       { countries },
     );
 
     const serialized = JSON.stringify(result.draft).toLowerCase();
-    for (const value of ["kenyan", "luo"]) {
+    for (const value of ["widowed", "none declared"]) {
       expect(serialized).not.toContain(value);
     }
-    for (const key of PROTECTED_TERMS) {
+    for (const key of ["marital_status", "gender", "disability_status"]) {
       expect(serialized).not.toContain(key);
     }
   });

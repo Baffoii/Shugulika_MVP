@@ -37,6 +37,13 @@ export interface CandidateDraft {
   headline: string | null;
   summary: string | null;
   availability: string | null;
+  /**
+   * Carried from the source ATS for migration fidelity only. Never a screening,
+   * scoring, matching or KPI input — see nationality-ban.test.ts.
+   */
+  nationality: string | null;
+  ethnicity: string | null;
+  religion: string | null;
   skills: string[];
   experiences: Array<{
     title: string;
@@ -79,8 +86,25 @@ const FIELD_ALIASES: Record<string, string[]> = {
   availability: ["Availability", "Notice_Period", "Available_From"],
   skills: ["Skill_Set", "Skills", "skills"],
   currentEmployer: ["Current_Employer", "Employer", "Company"],
-  highestQualification: ["Highest_Qualification_Held", "Qualification", "Degree"],
-  institution: ["Institute_Name", "Institution", "University"],
+  highestQualification: [
+    "Highest_Qualification_Held",
+    "Qualification",
+    "Degree",
+    // Present on this org's Recruit records alongside the stock field.
+    "Professional_Qualification",
+    "Title_of_Training",
+  ],
+  nationality: ["Nationality", "Citizenship"],
+  ethnicity: ["Ethnicity"],
+  religion: ["Religion"],
+  institution: [
+    "Institute_Name",
+    "Institution",
+    "University",
+    // The field this Zoho org actually populates; without it every education
+    // row was silently dropped.
+    "Training_Institution",
+  ],
 };
 
 function readString(record: ZohoCandidateRecord, aliases: readonly string[]): string | null {
@@ -220,6 +244,9 @@ export function mapZohoCandidate(
             },
           ]
         : [],
+    nationality: readString(record, FIELD_ALIASES.nationality ?? []),
+    ethnicity: readString(record, FIELD_ALIASES.ethnicity ?? []),
+    religion: readString(record, FIELD_ALIASES.religion ?? []),
     education: institution ? [{ institution, qualification, endDate: null }] : [],
   };
 

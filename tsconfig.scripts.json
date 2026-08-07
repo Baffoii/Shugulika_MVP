@@ -1,0 +1,17 @@
+{
+  // tsx runs the rehearsal script outside Next, where the `server-only` package
+  // does not resolve. Vitest already aliases it to a stub (see vitest.config.ts);
+  // this does the same for the script runner, without touching the app's
+  // tsconfig — the real build must keep resolving `server-only` for real, since
+  // that import is what keeps OPENAI_API_KEY and friends out of client bundles.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "paths": {
+      "@/*": ["./src/*"],
+      "server-only": ["./src/test/stubs/server-only.ts"]
+    }
+  },
+  "include": ["scripts/**/*.ts", "src/**/*.ts"]
+}

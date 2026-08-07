@@ -748,7 +748,13 @@ describeDb("work authorization", () => {
     }
   });
 
-  it("has no nationality, citizenship, or ethnicity column anywhere in the schema", async () => {
+  it("confines nationality, ethnicity and religion to candidate_profiles", async () => {
+    // 20260813090000_candidate_source_demographics added these three columns to
+    // candidate_profiles so an ATS migration can carry what the source system
+    // held. The ban still applies everywhere else: no other table may acquire a
+    // protected characteristic, and citizenship / national_origin remain absent
+    // entirely. Using these values to screen, score, rank or report is still
+    // prohibited — see nationality-ban.test.ts and no-nationality.test.ts.
     const { rows } = await client.query(
       `select table_name, column_name
          from information_schema.columns
@@ -757,8 +763,13 @@ describeDb("work authorization", () => {
             or column_name ilike '%citizenship%'
             or column_name ilike '%national_origin%'
             or column_name ilike '%ethnicit%'
-            or column_name ilike '%religion%')`,
+            or column_name ilike '%religion%')
+        order by table_name, column_name`,
     );
-    expect(rows).toEqual([]);
+    expect(rows).toEqual([
+      { table_name: "candidate_profiles", column_name: "ethnicity" },
+      { table_name: "candidate_profiles", column_name: "nationality" },
+      { table_name: "candidate_profiles", column_name: "religion" },
+    ]);
   });
 });

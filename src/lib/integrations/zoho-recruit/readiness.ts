@@ -1,6 +1,11 @@
 import "server-only";
 
-import { scopesMissing, ZOHO_RECRUIT_SYNC_SCOPES } from "@/lib/integrations/zoho-recruit/config";
+import {
+  scopesMissing,
+  isZohoTestMigration,
+  ZOHO_RECRUIT_READONLY_SCOPES,
+  ZOHO_RECRUIT_SYNC_SCOPES,
+} from "@/lib/integrations/zoho-recruit/config";
 import { getZohoRecruitGateStatus } from "@/lib/integrations/zoho-recruit/gates";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -59,15 +64,28 @@ export async function getZohoSandboxReadiness(): Promise<SandboxReadinessCheck> 
   });
 
   const granted = (connection?.granted_scopes as string[] | undefined) ?? [];
-  const missing = scopesMissing(granted, ZOHO_RECRUIT_SYNC_SCOPES);
+  // A rehearsal connection consents to read-only scopes deliberately, so
+  // grading it against the write-capable projection set would report a false
+  // failure. It is also worth saying out loud when a rehearsal token turns out
+  // to still carry write scopes from an earlier consent.
+  const rehearsal = isZohoTestMigration();
+  const requiredScopes = rehearsal ? ZOHO_RECRUIT_READONLY_SCOPES : ZOHO_RECRUIT_SYNC_SCOPES;
+  const missing = scopesMissing(granted, requiredScopes);
+  const writeScopesGranted = granted.some((scope) =>
+    /\.(CREATE|UPDATE|DELETE)$/.test(scope.trim()),
+  );
   checks.push({
     id: "scopes",
-    ok: connected && missing.length === 0,
+    ok: connected && missing.length === 0 && !(rehearsal && writeScopesGranted),
     detail: !connected
       ? "Connect first, then reconnect if scopes are missing."
-      : missing.length === 0
-        ? "Granted scopes cover sandbox projection."
-        : `Missing scopes: ${missing.join(", ")}. Disconnect and reconnect to re-consent.`,
+      : missing.length > 0
+        ? `Missing scopes: ${missing.join(", ")}. Disconnect and reconnect to re-consent.`
+        : rehearsal
+          ? writeScopesGranted
+            ? "Rehearsal mode, but this token still carries write scopes. Disconnect and reconnect to drop them."
+            : "Read-only rehearsal scopes granted; this token cannot write to Zoho."
+          : "Granted scopes cover sandbox projection.",
   });
 
   checks.push({

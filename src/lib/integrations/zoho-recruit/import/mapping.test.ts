@@ -106,21 +106,21 @@ describe("mapZohoCandidate", () => {
   });
 
   it("refuses a record carrying a protected characteristic", () => {
-    const result = mapZohoCandidate(record({ Nationality: "Tanzanian" }), options);
+    const result = mapZohoCandidate(record({ Marital_Status: "Married" }), options);
     expect(result.problems).toContain("prohibited_field_present");
-    expect(result.prohibitedFields).toEqual(["Nationality"]);
+    expect(result.prohibitedFields).toEqual(["Marital_Status"]);
     // And the value never reaches the canonical draft.
     expect(JSON.stringify(result.draft)).not.toContain("Tanzanian");
   });
 
   it("ignores a prohibited field that is present but empty", () => {
-    const result = mapZohoCandidate(record({ Nationality: "", Ethnicity: [] }), options);
+    const result = mapZohoCandidate(record({ Marital_Status: "", Gender: [] }), options);
     expect(result.problems).not.toContain("prohibited_field_present");
   });
 
   it("catches prohibited fields whatever the casing or spacing", () => {
     expect(findProhibitedFields({ "Marital Status": "Single" })).toEqual(["Marital Status"]);
-    expect(findProhibitedFields({ CITIZENSHIP: "x" })).toEqual(["CITIZENSHIP"]);
+    expect(findProhibitedFields({ DISABILITY_STATUS: "x" })).toEqual(["DISABILITY_STATUS"]);
   });
 
   it("quarantines an oversized payload", () => {
@@ -223,7 +223,7 @@ describe("quarantine decisions", () => {
   it("summarizes a batch by reason", () => {
     const summary = summarizeQuarantine([
       decideQuarantine(mapZohoCandidate({ id: "a" }, options)),
-      decideQuarantine(mapZohoCandidate(record({ Nationality: "X" }), options)),
+      decideQuarantine(mapZohoCandidate(record({ Marital_Status: "X" }), options)),
       decideQuarantine(mapZohoCandidate(record(), options)),
     ]);
     expect(summary.total).toBe(2);
@@ -247,9 +247,65 @@ describe("draftIdentityInput", () => {
   it("exposes only matching fields — no protected characteristic", () => {
     const input = draftIdentityInput(mapZohoCandidate(record(), options).draft);
     const serialized = JSON.stringify(input).toLowerCase();
-    for (const term of ["nationality", "citizenship", "ethnicity", "religion", "gender"]) {
+    for (const term of ["marital_status", "gender", "sex", "race", "disability_status"]) {
       expect(serialized).not.toContain(term);
     }
     expect(input.employers).toEqual(["Acme Ltd"]);
+  });
+});
+
+describe("education field coverage against the real Zoho org", () => {
+  const OPTS = { countries: [{ code: "TZ", name: "Tanzania" }], hasConsent: true };
+
+  it("reads the Training_Institution field this org actually populates", () => {
+    // Stock Recruit uses Institute_Name; this org uses Training_Institution.
+    // Without the alias every education row was dropped silently.
+    const { draft } = mapZohoCandidate(
+      {
+        First_Name: "Ada",
+        Last_Name: "Lovelace",
+        Email: "ada@example.com",
+        Training_Institution: "Dar Technical College",
+        Highest_Qualification_Held: "Diploma",
+      },
+      OPTS,
+    );
+    expect(draft.education).toHaveLength(1);
+    expect(draft.education[0]).toMatchObject({
+      institution: "Dar Technical College",
+      qualification: "Diploma",
+    });
+  });
+
+  it("still prefers the stock field when both are present", () => {
+    const { draft } = mapZohoCandidate(
+      {
+        Email: "a@b.com",
+        Institute_Name: "Stock Field University",
+        Training_Institution: "Fallback College",
+      },
+      OPTS,
+    );
+    expect(draft.education[0]?.institution).toBe("Stock Field University");
+  });
+
+  it("falls back to Professional_Qualification for the qualification", () => {
+    const { draft } = mapZohoCandidate(
+      {
+        Email: "a@b.com",
+        Training_Institution: "Somewhere",
+        Professional_Qualification: "CPA",
+      },
+      OPTS,
+    );
+    expect(draft.education[0]?.qualification).toBe("CPA");
+  });
+
+  it("records no education when the org supplied no institution at all", () => {
+    const { draft } = mapZohoCandidate(
+      { Email: "a@b.com", Highest_Qualification_Held: "Degree" },
+      OPTS,
+    );
+    expect(draft.education).toEqual([]);
   });
 });
