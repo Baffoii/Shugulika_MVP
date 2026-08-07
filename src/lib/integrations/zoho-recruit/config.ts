@@ -14,6 +14,38 @@ export const ZOHO_RECRUIT_SYNC_SCOPES = [
   "ZohoRecruit.modules.jobopening.UPDATE",
   "ZohoRecruit.modules.jobopening.READ",
 ] as const;
+/**
+ * Read-only scopes for the rehearsal migration.
+ *
+ * The import path only ever issues GETs, but a token minted with CREATE/UPDATE
+ * is *capable* of writing — which leaves code discipline as the only thing
+ * standing between a rehearsal and live Zoho data. Consenting to read-only
+ * moves that guarantee to Zoho's authorization server: a stray write is
+ * rejected by Zoho instead of mutating the production workspace.
+ *
+ * `settings.ALL` is retained because the importer reads field metadata to build
+ * the consent field mapping; it confers no record-write capability.
+ */
+export const ZOHO_RECRUIT_READONLY_SCOPES = [
+  ZOHO_RECRUIT_ORG_SCOPE,
+  "ZohoRecruit.settings.ALL",
+  "ZohoRecruit.modules.candidates.READ",
+  "ZohoRecruit.modules.jobopening.READ",
+] as const;
+
+/**
+ * True when this process is an explicitly acknowledged rehearsal migration.
+ * Mirrors the guard in import/test-source.ts.
+ */
+export function isZohoTestMigration(): boolean {
+  return process.env.ZOHO_TEST_MIGRATION === "true" && process.env.NODE_ENV !== "production";
+}
+
+/** Scopes requested at consent time — read-only during a rehearsal. */
+export function activeZohoRecruitScopes(): readonly string[] {
+  return isZohoTestMigration() ? ZOHO_RECRUIT_READONLY_SCOPES : ZOHO_RECRUIT_SYNC_SCOPES;
+}
+
 /** Org-only scopes used by the current connected foundation until HQ reconnects. */
 export const ZOHO_RECRUIT_SCOPES = ZOHO_RECRUIT_SYNC_SCOPES;
 export const ZOHO_RECRUIT_CALLBACK_PATH = "/api/integrations/zoho-recruit/callback";
@@ -272,7 +304,7 @@ export function getZohoRecruitSetupState(): ZohoRecruitSetupState {
     ready: enabled && missing.length === 0,
     redirectUri: redirect.uri,
     initialAccountsDomain,
-    scopes: ZOHO_RECRUIT_SCOPES,
+    scopes: activeZohoRecruitScopes(),
     missing,
   };
 }
