@@ -99,22 +99,46 @@ type Client = NonNullable<ReturnType<typeof createServiceRoleClient>>;
 // External-mapping helpers (idempotency)
 // ---------------------------------------------------------------------------
 
-async function findMappedLocalId(
-  client: Client,
-  connectionId: string,
-  entityType: string,
-  zohoModule: string,
-  zohoRecordId: string,
-): Promise<string | null> {
-  const { data } = await client
-    .from("zoho_recruit_external_mappings")
-    .select("local_entity_id")
-    .eq("connection_id", connectionId)
-    .eq("local_entity_type", entityType)
-    .eq("zoho_module", zohoModule)
-    .eq("zoho_record_id", zohoRecordId)
-    .maybeSingle();
-  return (data as { local_entity_id: string } | null)?.local_entity_id ?? null;
+/**
+ * Every existing inbound mapping for this connection, keyed
+ * `entityType|zohoModule|zohoRecordId`.
+ *
+ * Loaded once instead of one query per record. A per-record lookup made the
+ * import network-bound on Supabase round-trips rather than on Zoho: with a few
+ * thousand clients and jobs that is thousands of sequential queries, and it
+ * dominated the run.
+ */
+type MappingIndex = Map<string, string>;
+
+const mappingKey = (entityType: string, zohoModule: string, zohoRecordId: string) =>
+  `${entityType}|${zohoModule}|${zohoRecordId}`;
+
+async function loadMappingIndex(client: Client, connectionId: string): Promise<MappingIndex> {
+  const index: MappingIndex = new Map();
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await client
+      .from("zoho_recruit_external_mappings")
+      .select("local_entity_type,zoho_module,zoho_record_id,local_entity_id")
+      .eq("connection_id", connectionId)
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`Could not load existing mappings: ${error.message}`);
+    const rows =
+      (data as Array<{
+        local_entity_type: string;
+        zoho_module: string;
+        zoho_record_id: string;
+        local_entity_id: string;
+      }> | null) ?? [];
+    for (const row of rows) {
+      index.set(
+        mappingKey(row.local_entity_type, row.zoho_module, row.zoho_record_id),
+        row.local_entity_id,
+      );
+    }
+    if (rows.length < PAGE) break;
+  }
+  return index;
 }
 
 async function recordMapping(
@@ -124,6 +148,7 @@ async function recordMapping(
   localId: string,
   zohoModule: string,
   zohoRecordId: string,
+  index?: MappingIndex,
 ): Promise<void> {
   const { error } = await client.from("zoho_recruit_external_mappings").insert({
     connection_id: connectionId,
@@ -139,6 +164,7 @@ async function recordMapping(
   if (error && !/duplicate|unique/i.test(error.message)) {
     throw new Error(`Could not record mapping for ${entityType} ${localId}: ${error.message}`);
   }
+  index?.set(mappingKey(entityType, zohoModule, zohoRecordId), localId);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +210,26 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
     throw new Error(`responsibleOrgId ${options.responsibleOrgId} does not exist.`);
   }
 
+  // Two one-shot prefetches. Doing these per record turned the import into
+  // thousands of sequential Supabase round-trips, which dominated the run time
+  // — the Zoho reads were never the bottleneck.
+  log("Loading existing mappings…");
+  const mappings = await loadMappingIndex(client, connectionId);
+
+  const existingEmployerOrgs = new Map<string, string>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await client
+      .from("organizations")
+      .select("id,name")
+      .eq("org_type", "employer")
+      .range(from, from + 999);
+    if (error) throw new Error(`Could not load existing employers: ${error.message}`);
+    const rows = (data as Array<{ id: string; name: string }> | null) ?? [];
+    for (const row of rows) existingEmployerOrgs.set(row.name.trim().toLowerCase(), row.id);
+    if (rows.length < 1000) break;
+  }
+  log(`Existing: ${mappings.size} mappings, ${existingEmployerOrgs.size} employer orgs.`);
+
   const countries = COUNTRIES.map((c) => ({ code: c.code, name: c.name }));
   const fallbackCountry = countries[0]?.code ?? "TZ";
   const mapperOpts = { countries, fallbackCountry };
@@ -212,13 +258,7 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
       continue;
     }
 
-    const existing = await findMappedLocalId(
-      client,
-      connectionId,
-      "organization",
-      "Clients",
-      zohoId,
-    );
+    const existing = mappings.get(mappingKey("organization", "Clients", zohoId)) ?? null;
     if (existing) {
       report.organizations.linked += 1;
       orgByName.set(draft.name.toLowerCase(), existing);
@@ -227,16 +267,14 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
     }
 
     // Reuse an employer org that already exists under the same name rather than
-    // creating a near-duplicate next to the 9 orgs already in this project.
-    const { data: byName } = await client
-      .from("organizations")
-      .select("id")
-      .eq("org_type", "employer")
-      .ilike("name", draft.name)
-      .maybeSingle();
+    // creating a near-duplicate next to the orgs already in this project.
+    // Served from the prefetched map — this was a per-record query.
+    const byName = existingEmployerOrgs.has(draft.name.trim().toLowerCase())
+      ? { id: existingEmployerOrgs.get(draft.name.trim().toLowerCase())! }
+      : null;
 
     if (options.dryRun) {
-      const existingId = (byName as { id: string } | null)?.id ?? null;
+      const existingId = byName?.id ?? null;
       report.organizations.created += existingId ? 0 : 1;
       report.organizations.linked += existingId ? 1 : 0;
       // Register a placeholder for orgs we would have created, so the job pass
@@ -265,7 +303,7 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
       orgId = (created as { id: string }).id;
       report.organizations.created += 1;
     }
-    await recordMapping(client, connectionId, "organization", orgId, "Clients", zohoId);
+    await recordMapping(client, connectionId, "organization", orgId, "Clients", zohoId, mappings);
     orgByName.set(draft.name.toLowerCase(), orgId);
     orgByZohoId.set(zohoId, orgId);
   }
@@ -295,13 +333,7 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
       continue;
     }
 
-    const existing = await findMappedLocalId(
-      client,
-      connectionId,
-      "job_order",
-      "Job_Openings",
-      zohoId,
-    );
+    const existing = mappings.get(mappingKey("job_order", "Job_Openings", zohoId)) ?? null;
     if (existing) {
       report.jobOrders.linked += 1;
       jobOrderByZohoId.set(zohoId, existing);
@@ -348,7 +380,15 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
     }
     const jobOrderId = (created as { id: string }).id;
     report.jobOrders.created += 1;
-    await recordMapping(client, connectionId, "job_order", jobOrderId, "Job_Openings", zohoId);
+    await recordMapping(
+      client,
+      connectionId,
+      "job_order",
+      jobOrderId,
+      "Job_Openings",
+      zohoId,
+      mappings,
+    );
     jobOrderByZohoId.set(zohoId, jobOrderId);
   }
   log(
@@ -382,13 +422,7 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
       // -- candidate --------------------------------------------------------
       let candidateId = candidateByZohoId.get(zohoCandidateId) ?? null;
       if (!candidateId) {
-        candidateId = await findMappedLocalId(
-          client,
-          connectionId,
-          "candidate",
-          "Candidates",
-          zohoCandidateId,
-        );
+        candidateId = mappings.get(mappingKey("candidate", "Candidates", zohoCandidateId)) ?? null;
       }
       if (!candidateId) {
         report.candidates.seen += 1;
@@ -506,6 +540,7 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
         applicationId,
         "Job_Openings",
         `${zohoJobId}:${zohoCandidateId}`,
+        mappings,
       );
     }
   }
@@ -543,12 +578,8 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
           continue;
         }
 
-        const already = await findMappedLocalId(
-          client,
-          connectionId,
-          "candidate_document",
-          "Attachments",
-          attachment.id,
+        const already = mappings.get(
+          mappingKey("candidate_document", "Attachments", attachment.id),
         );
         if (already) {
           report.cvs.skipped += 1;
@@ -606,6 +637,7 @@ export async function runFullRehearsal(options: RehearsalOptions): Promise<Rehea
           (doc as { id: string }).id,
           "Attachments",
           attachment.id,
+          mappings,
         );
       }
     }
