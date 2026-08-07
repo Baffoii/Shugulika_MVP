@@ -102,6 +102,7 @@ execute function public.tg_block_migrated_stage_history_writes();
 -- deliberately absent here.
 insert into public.pipeline_stages (key, label, ordinal, stage_class) values
   ('zoho_new','Zoho: New',120,'candidate'),
+  ('zoho_associated','Zoho: Associated to Job',119,'candidate'),
   ('zoho_waiting_evaluation','Zoho: Waiting for Evaluation',121,'candidate'),
   ('zoho_contacted','Zoho: Contacted',122,'candidate'),
   ('zoho_unqualified','Zoho: Unqualified',123,'candidate'),

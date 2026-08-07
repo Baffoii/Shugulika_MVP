@@ -62,6 +62,15 @@ describe("mapZohoStatusToStage", () => {
     expect(mapZohoStatusToStage("Attempted to Contact").stage).toBe("zoho_contacted");
   });
 
+  it("treats Zoho's default 'Associated' as attachment, not screening", () => {
+    // The dominant status in a real Recruit org. Mapping it to cv_review would
+    // claim 168 candidates had been screened when none had.
+    const result = mapZohoStatusToStage("Associated");
+    expect(result.stage).toBe("zoho_associated");
+    expect(result.isUnmapped).toBe(false);
+    expect(result.isTerminal).toBe(false);
+  });
+
   it("flags an unrecognised status instead of flattening it into cv_review", () => {
     const unknown = mapZohoStatusToStage("Bespoke Client Status 47");
     expect(unknown.stage).toBe("zoho_unmapped");
@@ -91,6 +100,7 @@ describe("mapZohoStatusToStage", () => {
       "hired",
       "rejected",
       "zoho_new",
+      "zoho_associated",
       "zoho_waiting_evaluation",
       "zoho_contacted",
       "zoho_unqualified",

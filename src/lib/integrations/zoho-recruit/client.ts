@@ -33,6 +33,12 @@ export interface ZohoRequestOptions {
   maxAttempts?: number;
   /** Skip automatic 401→refresh→retry once. */
   skipAuthRetry?: boolean;
+  /**
+   * How to read the response body. Defaults to JSON. `arrayBuffer` exists for
+   * attachment downloads (candidate CVs), which are binary — reading those as
+   * JSON silently yields `{}` and loses the file.
+   */
+  responseType?: "json" | "arrayBuffer";
 }
 
 export interface ZohoRequestResult<T> {
@@ -41,6 +47,8 @@ export interface ZohoRequestResult<T> {
   rateLimit: ZohoRateLimitInfo;
   correlationId: string;
   apiDomain: string;
+  /** Response Content-Type, needed to store a downloaded attachment correctly. */
+  contentType: string | null;
 }
 
 type TokenBundle = {
@@ -255,7 +263,15 @@ export async function zohoRecruitRequest<T = unknown>(
         cache: "no-store",
       });
       const rateLimit = parseZohoRateLimitHeaders(response.headers);
-      const payload: unknown = await response.json().catch(() => ({}));
+      const contentType = response.headers.get("content-type");
+      // Binary responses must not go through .json(): it would swallow the file
+      // and hand back {}. Errors still arrive as JSON, so only read bytes on a
+      // successful binary request.
+      const wantsBinary = options.responseType === "arrayBuffer";
+      const payload: unknown =
+        wantsBinary && response.ok
+          ? await response.arrayBuffer().catch(() => null)
+          : await response.json().catch(() => ({}));
 
       if (response.status === 401 && !options.skipAuthRetry && attempt === 0) {
         await refreshZohoAccessToken(fetchImpl);
@@ -288,6 +304,7 @@ export async function zohoRecruitRequest<T = unknown>(
         rateLimit,
         correlationId,
         apiDomain: tokens.apiDomain,
+        contentType,
       };
     } catch (error) {
       lastError = error;

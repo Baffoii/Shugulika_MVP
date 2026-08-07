@@ -22,7 +22,8 @@
     "db:verify": "node scripts/db-verify.mjs",
     "audit:ci": "node scripts/audit-ci.mjs",
     "ci": "npm run format:check && npm run lint && npm run typecheck && npm run validate:env && npm run test:coverage && npm run build",
-    "seed:users": "node scripts/seed-users.mjs"
+    "seed:users": "node scripts/seed-users.mjs",
+    "zoho:rehearsal": "tsx --tsconfig tsconfig.scripts.json scripts/zoho-rehearsal.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
@@ -59,6 +60,7 @@
     "postcss": "^8.5.10",
     "prettier": "^3.9.6",
     "tailwindcss": "^4.3.3",
+    "tsx": "4.23.10",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"
   },

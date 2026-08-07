@@ -660,6 +660,12 @@ export type ApplicationRow = {
   rejection_reason: string | null;
   test_name: string | null;
   test_score: string | null;
+  /**
+   * True for applications imported from an external ATS. Read-only history:
+   * UPDATE/DELETE are blocked for every role except service_role by
+   * trg_applications_migrated_readonly.
+   */
+  is_migrated_readonly: boolean;
   created_at: string;
   updated_at: string;
 };

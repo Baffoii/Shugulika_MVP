@@ -30,6 +30,7 @@ export type PipelineStageKey =
   | "hired"
   | "rejected"
   | "zoho_new"
+  | "zoho_associated"
   | "zoho_waiting_evaluation"
   | "zoho_contacted"
   | "zoho_unqualified"
@@ -58,6 +59,10 @@ export interface StageMapping {
 const DIRECT: Record<string, { stage: PipelineStageKey; terminal?: boolean; onHold?: boolean }> = {
   // --- Pre-screening -------------------------------------------------------
   new: { stage: "zoho_new" },
+  // Zoho's default when a candidate is attached to a job opening and nothing
+  // more has happened. It is NOT evidence of screening, so it must not be
+  // promoted into cv_review.
+  associated: { stage: "zoho_associated" },
   "waiting for evaluation": { stage: "zoho_waiting_evaluation" },
   contacted: { stage: "zoho_contacted" },
   "attempted to contact": { stage: "zoho_contacted" },
