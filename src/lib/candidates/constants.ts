@@ -159,15 +159,20 @@ export const QUARANTINE_REASON_LABELS: Record<QuarantineReason, string> = {
  * silently stripped, so the operator sees that the source system holds data we
  * refuse to ingest.
  */
+/**
+ * Fields an import must refuse rather than silently strip.
+ *
+ * Nationality, ethnicity and religion left this list when
+ * 20260813090000_candidate_source_demographics added columns for them: an ATS
+ * migration has to carry what the source system already held. They remain
+ * banned as screening, scoring, matching and KPI inputs — nationality-ban.test.ts
+ * and no-nationality.test.ts still enforce that and are unchanged.
+ *
+ * Everything still listed here has no column, no consumer, and no reason to
+ * enter the system at all.
+ */
 export const PROHIBITED_IMPORT_FIELDS = [
-  "nationality",
-  "nationalities",
-  "citizenship",
-  "citizen",
-  "national_origin",
-  "ethnicity",
   "race",
-  "religion",
   "marital_status",
   "gender",
   "sex",

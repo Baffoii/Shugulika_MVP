@@ -16,6 +16,9 @@ const current = {
   city: "Dar es Salaam",
   date_of_birth: null,
   availability: null,
+  nationality: null,
+  ethnicity: null,
+  religion: null,
   open_to_work: true,
   profile_status: "active",
   completion_pct: 50,
@@ -34,6 +37,9 @@ const draft: CandidateDraft = {
   headline: "Imported headline",
   summary: "Imported summary",
   availability: "2026-09-01",
+  nationality: null,
+  ethnicity: null,
+  religion: null,
   skills: [],
   experiences: [],
   education: [],
@@ -60,5 +66,35 @@ describe("canonical candidate import patch", () => {
       country_code: "TZ",
       availability: "2026-09-01",
     });
+  });
+
+  it("carries the migrated source demographics when the source supplied them", () => {
+    // Stored for ATS migration fidelity only; never a screening, scoring or KPI
+    // input — see nationality-ban.test.ts.
+    const withDemographics: CandidateDraft = {
+      ...draft,
+      nationality: "Tanzanian",
+      ethnicity: "Chagga",
+      religion: "Christian",
+    };
+    expect(buildConservativeCandidatePatch(current, withDemographics, true)).toMatchObject({
+      nationality: "Tanzanian",
+      ethnicity: "Chagga",
+      religion: "Christian",
+    });
+  });
+
+  it("does not overwrite demographics a candidate already has on file", () => {
+    const established = { ...current, nationality: "Kenyan" };
+    const incoming: CandidateDraft = { ...draft, nationality: "Tanzanian" };
+    const patch = buildConservativeCandidatePatch(established, incoming, false);
+    expect(patch.nationality).toBeUndefined();
+  });
+
+  it("omits demographics entirely when the source had none", () => {
+    const patch = buildConservativeCandidatePatch(current, draft, true);
+    expect(patch).not.toHaveProperty("nationality");
+    expect(patch).not.toHaveProperty("ethnicity");
+    expect(patch).not.toHaveProperty("religion");
   });
 });

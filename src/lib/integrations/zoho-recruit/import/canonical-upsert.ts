@@ -32,6 +32,9 @@ type CandidatePatch = Partial<
     | "country_code"
     | "city"
     | "availability"
+    | "nationality"
+    | "ethnicity"
+    | "religion"
   >
 >;
 
@@ -53,6 +56,12 @@ export function buildConservativeCandidatePatch(
     country_code: draft.countryCode,
     city: draft.city,
     availability: draft.availability,
+    // Migration fidelity only. Same conservative rule as every other field:
+    // a value is written on create, or to fill a blank — never to overwrite
+    // what a candidate has already stated about themselves.
+    nationality: draft.nationality,
+    ethnicity: draft.ethnicity,
+    religion: draft.religion,
   };
   const patch: CandidatePatch = {};
   for (const [field, value] of Object.entries(incoming) as Array<

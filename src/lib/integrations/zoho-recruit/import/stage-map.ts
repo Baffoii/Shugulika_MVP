@@ -59,10 +59,10 @@ export interface StageMapping {
 const DIRECT: Record<string, { stage: PipelineStageKey; terminal?: boolean; onHold?: boolean }> = {
   // --- Pre-screening -------------------------------------------------------
   new: { stage: "zoho_new" },
-  // Zoho's default when a candidate is attached to a job opening and nothing
-  // more has happened. It is NOT evidence of screening, so it must not be
-  // promoted into cv_review.
-  associated: { stage: "zoho_associated" },
+  // Zoho's default when a candidate is attached to a job opening. In this org
+  // it means "applied, not yet moved on" — which is exactly where the Shugulika
+  // pipeline starts, so it belongs in cv_review rather than a parked side stage.
+  associated: { stage: "cv_review" },
   "waiting for evaluation": { stage: "zoho_waiting_evaluation" },
   contacted: { stage: "zoho_contacted" },
   "attempted to contact": { stage: "zoho_contacted" },
